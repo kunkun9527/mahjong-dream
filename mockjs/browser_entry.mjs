@@ -6,6 +6,7 @@ import * as shop from './shop.mjs';
 import * as oneRound from './one_round.mjs';
 import { SichuanTable, SICHUAN_PLAYABLE_GAME_TYPES, sichuanRoom } from './sichuan_table.mjs';
 import { MaJiangMsg } from './majiang_pb.mjs';
+import { buildRiichiReloadScene } from './riichi_reload.mjs';
 
 var MSG_NAME = {
   1: "ReqPrepare",
@@ -178,6 +179,17 @@ var RiichiSession = class {
         break;
       default:
         this.log("[riichi] \u672A\u5904\u7406\u7684\u5BA2\u6237\u7AEF\u6D88\u606F mt=" + msgType);
+    }
+  }
+  /** 断线重连快照：本手缓存帧 [ev, bytes][] 折叠成 Offline2OnlineGameScene 字节；不能安全恢复时返回 null。 */
+  reloadScene(frames) {
+    if (!this.engine || this.matchOver) return null;
+    try {
+      const scene = buildRiichiReloadScene(frames, this.engine, 0);
+      return scene ? encodeMsg("Offline2OnlineGameScene", scene) : null;
+    } catch (e) {
+      this.log("[riichi] 重连快照构造失败，改用整手重放: " + (e && e.message || e));
+      return null;
     }
   }
   /** 连接断开：让引擎自然停下并不再回推 */

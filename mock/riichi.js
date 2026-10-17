@@ -26661,6 +26661,199 @@
     return handleSichuanRequest(__privateGet(this, _session3), bytes, { connectionId: view.connectionId, windowId: view.windowId });
   };
 
+  // mockjs/riichi_reload.mjs
+  var NAMES = {
+    [RiichiMsg.ENtfGameStart]: "NtfGameStart",
+    [RiichiMsg.ENtfSendCard]: "NtfSendCard",
+    [RiichiMsg.ENtfPlayCard]: "NtfPlayCard",
+    [RiichiMsg.ENtfQiangCardEnd]: "NtfQiangCardEnd"
+  };
+  var DISCARDS = /* @__PURE__ */ new Set([PlayAction.Normal, PlayAction.Riichi]);
+  var CLAIMS = /* @__PURE__ */ new Set([PlayAction.Chi, PlayAction.Peng, PlayAction.MingGang]);
+  var kindOf4 = (tile) => Math.floor(tile / 10);
+  var removeTiles = (hand, tiles) => {
+    for (const tile of tiles) {
+      const index = hand.indexOf(tile);
+      if (index < 0) throw new Error(`\u91CD\u8FDE\u5FEB\u7167\uFF1A\u624B\u724C\u7F3A\u5C11 ${tile}`);
+      hand.splice(index, 1);
+    }
+  };
+  function foldRiichiFrames(frames, mySeat) {
+    let state = null;
+    for (const [ev, bytes] of frames) {
+      if (ev === RiichiMsg.ENtfGameStop) return null;
+      const name = NAMES[ev];
+      if (!name) continue;
+      const msg = decodeMsg(name, bytes);
+      if (ev === RiichiMsg.ENtfGameStart) {
+        state = {
+          changWind: msg.changWind,
+          juNum: msg.juNum,
+          benChangNum: msg.benChangNum,
+          zhuangSeat: msg.zhuangSeat,
+          dora: [msg.baoPreCard],
+          remain: msg.remainDuiCardNum,
+          gameID: msg.gameID,
+          defaultMinTimeout: msg.defaultMinTimeout,
+          redundant: msg.ServerRedundantTimeOut,
+          players: msg.userInfos.map((info) => ({
+            seat: info.seat,
+            initScore: Number(info.initScore),
+            count: info.seat === msg.zhuangSeat ? 14 : 13,
+            hand: info.seat === mySeat ? info.handCards.slice() : null,
+            played: [],
+            otherTake: [],
+            moQie: {},
+            riichiTag: 0,
+            babei: [],
+            melds: []
+          })),
+          cur: { seat: msg.zhuangSeat, card: 0, action: PlayAction.Normal, qiang: [] },
+          pre: null,
+          lastDiscard: null
+        };
+        continue;
+      }
+      if (!state) continue;
+      const step = (next) => {
+        state.pre = state.cur;
+        state.cur = next;
+      };
+      if (ev === RiichiMsg.ENtfSendCard) {
+        const player = state.players[msg.seat];
+        const card = msg.userInfos.find((info) => info.seat === msg.seat)?.card ?? 0;
+        player.count += 1;
+        if (player.hand) player.hand.push(card);
+        state.remain -= 1;
+        if (msg.baoPreCard) state.dora.push(msg.baoPreCard);
+        state.cur = { ...state.cur, seat: msg.seat };
+      } else if (ev === RiichiMsg.ENtfPlayCard) {
+        const player = state.players[msg.seat];
+        if (DISCARDS.has(msg.action)) {
+          player.played.push(msg.card);
+          player.moQie[msg.card] = msg.isMoQie;
+          if (msg.action === PlayAction.Riichi) player.riichiTag = msg.card;
+          player.count -= 1;
+          if (player.hand) removeTiles(player.hand, [msg.card]);
+          state.lastDiscard = { seat: msg.seat, card: msg.card };
+        } else if (msg.action === PlayAction.BaBei) {
+          player.babei.push(msg.card);
+          player.count -= 1;
+          if (player.hand) removeTiles(player.hand, [msg.card]);
+        } else if (msg.action === PlayAction.AnGang) {
+          player.melds.push({ action: PlayAction.AnGang, card: msg.card, cards: null, qiangSeat: msg.seat });
+          player.count -= 4;
+          if (player.hand) removeTiles(player.hand, player.hand.filter((tile) => kindOf4(tile) === kindOf4(msg.card)));
+        } else if (msg.action === PlayAction.PengGang) {
+          const pon = player.melds.find((meld) => meld.action === PlayAction.Peng && kindOf4(meld.cards[0]) === kindOf4(msg.card));
+          if (!pon) throw new Error("\u91CD\u8FDE\u5FEB\u7167\uFF1A\u52A0\u6760\u627E\u4E0D\u5230\u5BF9\u5E94\u7684\u78B0");
+          pon.action = PlayAction.PengGang;
+          pon.cards = [msg.card, ...pon.cards];
+          player.count -= 1;
+          if (player.hand) removeTiles(player.hand, [msg.card]);
+        }
+        step({ seat: msg.seat, card: msg.card, action: msg.action, qiang: [] });
+      } else if (ev === RiichiMsg.ENtfQiangCardEnd) {
+        if (!CLAIMS.has(msg.action) || !state.lastDiscard) continue;
+        const seat = msg.seats[0];
+        const { seat: from, card } = state.lastDiscard;
+        const player = state.players[seat];
+        state.players[from].otherTake.push(card);
+        player.melds.push({ action: msg.action, card, cards: [...msg.otherCards, card], qiangSeat: from });
+        player.count -= msg.otherCards.length;
+        if (player.hand) removeTiles(player.hand, msg.otherCards);
+        state.lastDiscard = null;
+        step({ seat, card, action: msg.action, qiang: [{ seat, action: msg.action, otherCards: msg.otherCards.slice() }] });
+      }
+    }
+    return state;
+  }
+  function buildRiichiReloadScene(frames, engine, mySeat = 0, now = Date.now()) {
+    const state = foldRiichiFrames(frames, mySeat);
+    if (!state || state.remain <= 0 || engine.handEnded) return null;
+    const me = engine.players[mySeat];
+    if (!me || state.players[mySeat].hand.length !== me.hand.length) return null;
+    const draw2 = engine._expectedDraw?.seat === mySeat ? engine._expectedDraw : null;
+    const claim = engine._expectedClaim?.seat === mySeat ? engine._expectedClaim : null;
+    if (claim && claim.card !== state.lastDiscard?.card) return null;
+    const hand = state.players[mySeat].hand;
+    if (me.drawnTile != null && hand.includes(me.drawnTile) && state.cur.seat === mySeat) {
+      hand.splice(hand.indexOf(me.drawnTile), 1);
+      hand.push(me.drawnTile);
+    }
+    const pending = engine._pending;
+    const elapsed = pending ? Math.max(0, (now - pending.startedAt) / 1e3) : 0;
+    const baseLeft = Math.max(0, engine.baseTime - elapsed);
+    const bankLeft = Math.max(0, me.timeBank - Math.max(0, elapsed - engine.baseTime));
+    const internalState = {};
+    for (const [key, value] of Object.entries(engine.internalState)) internalState[key] = value ? 1 : 0;
+    const users = state.players.map((folded) => {
+      const p = engine.players[folded.seat];
+      const own = folded.seat === mySeat;
+      const melds = folded.melds.map((meld) => {
+        if (meld.cards) return { cards: meld.cards, action: meld.action, qiangSeat: meld.qiangSeat };
+        const ankan = p.melds.find((item) => item.type === "ankan" && kindOf4(item.tiles[0]) === kindOf4(meld.card));
+        return { cards: ankan.tiles.slice(), action: meld.action, qiangSeat: meld.qiangSeat };
+      });
+      return {
+        seat: folded.seat,
+        handCardsNum: folded.count,
+        doorCardsInfos: melds,
+        handCards: own ? hand.slice() : [],
+        playedCards: folded.played,
+        PlayedCardsOtherTake: folded.otherTake,
+        riichiTagCard: folded.riichiTag,
+        alreadyRiichi: !!p.riichi,
+        tingInfos: own ? engine.buildTingInfos(p) : [],
+        score: p.score,
+        canPlayActions: own && draw2 ? draw2.actions.slice() : [],
+        isZhenTing: engine.isFuriten(p),
+        moQieMap: folded.moQie,
+        leftTimer: own ? Math.ceil(bankLeft) : 0,
+        cantPlays: own && draw2 ? draw2.cantPlays.slice() : [],
+        changeScore: p.score - folded.initScore,
+        baBeiCards: folded.babei,
+        internalState: own ? internalState : {},
+        initScore: folded.initScore,
+        canAnGangNoNumCardsAfterRiichi: engine.riichiFutureAnkanKinds(p),
+        DefaultMinTimeout: own && pending ? Math.ceil(baseLeft) : state.defaultMinTimeout,
+        ServerRedundantTimeOut: state.redundant,
+        zhenTingTypes: engine.furitenTypes(p),
+        zhenTingTypesGuo: []
+      };
+    });
+    const pre = state.pre;
+    return {
+      seat: mySeat,
+      changWind: state.changWind,
+      juNum: state.juNum,
+      benChangNum: state.benChangNum,
+      zhuangSeat: state.zhuangSeat,
+      openBaoPreCards: state.dora,
+      remainDuiCardNum: state.remain,
+      currentSeat: state.cur.seat,
+      currentPlayCard: state.cur.card,
+      currentAction: state.cur.action,
+      canQiangActions: claim ? claim.actions.slice() : [],
+      qiangInfos: state.cur.qiang,
+      offline2OnlineUserInfos: users,
+      currentPlayEndTime: 0,
+      currentQiangEndTime: 0,
+      defaultMinTimeout: state.defaultMinTimeout,
+      ServerRedundantTimeOut: state.redundant,
+      riichiBangNum: engine.riichiSticks,
+      gameID: state.gameID,
+      preSeat: pre ? pre.seat : 0,
+      prePlayCard: pre ? pre.card : 0,
+      preAction: pre ? pre.action : 0,
+      preQiangInfos: pre ? pre.qiang : [],
+      duiCardsStrEncode: "",
+      duiCardsStrSaltEncode: "",
+      MapFriendPoll: {},
+      FriendOutTime: 0
+    };
+  }
+
   // mockjs/browser_entry.mjs
   var MSG_NAME = {
     1: "ReqPrepare",
@@ -26831,6 +27024,17 @@
           break;
         default:
           this.log("[riichi] \u672A\u5904\u7406\u7684\u5BA2\u6237\u7AEF\u6D88\u606F mt=" + msgType);
+      }
+    }
+    /** 断线重连快照：本手缓存帧 [ev, bytes][] 折叠成 Offline2OnlineGameScene 字节；不能安全恢复时返回 null。 */
+    reloadScene(frames) {
+      if (!this.engine || this.matchOver) return null;
+      try {
+        const scene = buildRiichiReloadScene(frames, this.engine, 0);
+        return scene ? encodeMsg("Offline2OnlineGameScene", scene) : null;
+      } catch (e) {
+        this.log("[riichi] \u91CD\u8FDE\u5FEB\u7167\u6784\u9020\u5931\u8D25\uFF0C\u6539\u7528\u6574\u624B\u91CD\u653E: " + (e && e.message || e));
+        return null;
       }
     }
     /** 连接断开：让引擎自然停下并不再回推 */

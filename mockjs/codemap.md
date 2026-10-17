@@ -5,6 +5,7 @@
 
 ## Key files
 - `browser_entry.mjs` — bundle 入口；定义 `RiichiSession`（计时、AI 调度、消息桥接），把各模块导出到 `globalThis.__mj`。
+- `riichi_reload.mjs` — 重连快照：把本手已下发通知帧折叠为客户端可见局面，构造 `Offline2OnlineGameScene`（20163 `f100`）；不安全切点返回 `null` 退回整手重放。
 - `engine.mjs` — 立直 `GameEngine`：牌山、动作窗口、鸣牌/立直/杠/拔北、和了与流局、计分、局序（东风/半庄/一局）。牌局唯一真相。
 - `ai.mjs`、`shanten.mjs` — AI 决策与向听；`yaku_map.mjs` 役种映射（计分依赖 `riichi` 包）。
 - `tiles.mjs` — 实体牌 ID ↔ 牌种转换，红宝依赖它。

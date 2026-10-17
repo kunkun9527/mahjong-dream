@@ -846,13 +846,24 @@
       w.v(5, sess.table.room.id);
       if (sess.table.roomType) w.v(9, sess.table.roomType);
     } else {
-      w.v(5, 3);                                  // 游戏状态（日麻抓包原值）
+      w.v(5, 3);                                  // roomID（日麻抓包原值）
+    }
+
+    // 立直：能在当前切点安全恢复时，按原协议把局面快照放进 f100，客户端走 Reload，
+    // 之后只补发切点之后的新帧；准备阶段、余牌为0、抢杠窗口等切点仍走整手重放。
+    var cut = -1;
+    if (live && !sichuan && !sess._replayStarted && sess.riichi && sess.riichi.reloadScene) {
+      var scene = sess.riichi.reloadScene(sess.handFrames);
+      if (scene) {
+        w.s(100, scene);
+        cut = sess.handFrames.length;
+      }
     }
 
     if (live && !sess._replayStarted) {
       sess._replayStarted = true;
-      log('  [resync] 有进行中对局，回 TableInfo 并准备重放本局 %d 帧',
-        sess.handFrames.length);
+      log('  [resync] 有进行中对局，回 TableInfo，%s', cut >= 0
+        ? '附局面快照，只补发其后的新帧' : '准备重放本局 ' + sess.handFrames.length + ' 帧');
       // 真实服在 20163 之后主动推 NtfPrepare/NtfGameStart 把牌局同步回来。
       // 我们没有「任意局面快照」，改用等价做法：把本局从 NtfToPrepare 起的所有
       // 通知帧按序重放一遍，客户端顺着这串帧自己走回当前局面。
@@ -863,7 +874,8 @@
       // 客户端就会先看到「当前这一巡」再看到「本局开头」，牌局直接错乱。
       sess.replaying = true;
       if (sess._resyncTimer) { clearTimeout(sess._resyncTimer); sess._resyncTimer = null; }
-      setTimeout(function () { replayHand(sess); }, 150);
+      var cutFrames = sess.handFrames;
+      setTimeout(function () { replayHand(sess, sess.handFrames === cutFrames ? cut : 0); }, 150);
     } else if (!live) {
       log('  [resync] 无进行中对局');
     }
@@ -884,7 +896,7 @@
       encode: function (f) { return encodeKRiichi(f[0], f[1]); } };
   }
 
-  function replayHand(sess) {
+  function replayHand(sess, from) {
     var frames = sess.handFrames || [];
     if (!frames.length || !sess.socket || sess.socket.readyState !== OPEN) {
       sess.replaying = false; sess._replayStarted = false;
@@ -905,7 +917,8 @@
     // 排队消费，单 tick 只处理几帧不会卡到再次超时（Bye!）；同时批处理把整局重放耗时
     // 从「逐帧 8ms」压到接近真实服（真实服发的是 20163 里的局面快照 f100，几乎瞬时）。
     var BATCH = 6, BATCH_GAP = 6;
-    var i = 0;
+    // 已随 20163.f100 下发快照时，从快照切点开始补发；若期间已换手（缓存被 NtfToPrepare 重置）则从头补。
+    var i = from > 0 && from <= frames.length ? from : 0;
     (function next() {
       if (!sess.socket || sess.socket.readyState !== OPEN) { sess.replaying = false; sess._replayStarted = false; return; }
       var sent = 0;

@@ -169,6 +169,10 @@ const server = http.createServer((request, response) => {
 
 const websocketServer = new WebSocketServer({ noServer: true, maxPayload: 2 * 1024 * 1024 });
 let activeSocket = null;
+// 断线后先由 AI 按正常速度代打一段时间，给同进程重连留出窗口（20163.f100 快照恢复）；
+// 超时仍未回来才加速打完当前比赛。
+const RECONNECT_GRACE_MS = 60_000;
+let fastForwardTimer = null;
 
 function applyGameOptions(requestUrl) {
   const url = new URL(requestUrl, 'http://127.0.0.1');
@@ -216,6 +220,8 @@ websocketServer.on('connection', (websocket) => {
     },
   };
   session.resume(adapter);
+  clearTimeout(fastForwardTimer);
+  fastForwardTimer = null;
   if (session.riichi?.engine) {
     session.riichi.engine.speed = mock.config.speed;
     session.riichi.engine.setHumanAutoplay(false);
@@ -257,9 +263,14 @@ websocketServer.on('connection', (websocket) => {
       session.detachMatch();
       console.log('[local] 页面断开，AI 已接管四川牌桌真人席');
     } else if (session.riichi?.engine && !session.riichi.matchOver) {
-      session.riichi.engine.speed = 0;
-      session.riichi.engine.setHumanAutoplay(true);
-      console.log('[local] 页面断开，AI 已接管真人席并快速完成当前比赛');
+      const engine = session.riichi.engine;
+      engine.setHumanAutoplay(true);
+      clearTimeout(fastForwardTimer);
+      fastForwardTimer = setTimeout(() => {
+        fastForwardTimer = null;
+        if (session.riichi?.engine === engine && !activeSocket) engine.speed = 0;
+      }, RECONNECT_GRACE_MS);
+      console.log('[local] 页面断开，AI 已接管真人席；%d 秒内未重连则快速完成当前比赛', RECONNECT_GRACE_MS / 1000);
     } else {
       console.log('[local] 游戏页面已断开');
     }
