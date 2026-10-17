@@ -157,7 +157,7 @@ test('最终乘积统一封顶，原将三龙七对126保持原值而不改成12
   assert.equal(score(clearKongs).capped, false);
   // 血流单次和牌同样按房间128/256封顶；5120/10240是整局累计输分上限，由局序执行。
   assert.equal(score(fixture, { gameType: 5021, winType: 'tsumo', topBei: 128 }).bei, 128);
-  for (const context of [{ topBei: undefined }, { topBei: 100 }, { gameType: 5023 }, { gameType: 5021, topBei: 10240 }]) {
+  for (const context of [{ topBei: undefined }, { topBei: 100 }, { gameType: 5024 }, { gameType: 5021, topBei: 10240 }]) {
     assert.throws(() => score(fixture, context), RangeError);
   }
 });

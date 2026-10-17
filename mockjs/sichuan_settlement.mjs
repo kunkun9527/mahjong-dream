@@ -1,4 +1,4 @@
-import { analyzeSichuanHand, sichuanKind } from './sichuan_hand.mjs';
+import { analyzeSichuanHand, isRedZhong, sichuanKind } from './sichuan_hand.mjs';
 import { maxSichuanReadyScore } from './sichuan_score.mjs';
 
 // 只接收权威局序记录；不读钱包。已胡者保留既有所得，不参加查叫/退税。
@@ -12,14 +12,15 @@ export function settleSichuanDraw(players, kongs, { gameType = 5022, topBei, bas
   const status = Array.from(players, (player) => {
     if (!player || typeof player.won !== 'boolean' || typeof player.allDiscardsMissing !== 'boolean'
         || !Number.isSafeInteger(player.discardCount) || player.discardCount < 0) throw new RangeError('无效的玩家清算记录');
-    analyzeSichuanHand(player.hand, player);
+    analyzeSichuanHand(player.hand, { melds: player.melds, missingSuit: player.missingSuit, wild: gameType === 5023 });
     for (const tile of [...player.hand, ...player.melds.flatMap((meld) => meld.tiles)]) {
       if (used.has(tile)) throw new RangeError('玩家之间重复实体牌');
       used.add(tile);
     }
     if (player.won) return { type: 'won', bei: 0 };
     if (player.hand.length !== 13 - 3 * player.melds.length) throw new RangeError('荒牌时手牌张数不符');
-    const flower = player.hand.some((tile) => Math.floor(sichuanKind(tile) / 9) + 1 === player.missingSuit);
+    // 红中赖子没有花色，不构成花猪。
+    const flower = player.hand.some((tile) => !isRedZhong(tile) && Math.floor(sichuanKind(tile) / 9) + 1 === player.missingSuit);
     if (flower) return { type: 'flower', bei: 0, exempt: player.discardCount > 0 && player.allDiscardsMissing };
     const score = maxSichuanReadyScore(player.hand, { melds: player.melds, missingSuit: player.missingSuit, gameType, topBei });
     return { type: score ? 'ready' : 'notReady', bei: score?.bei ?? 0 };
@@ -37,6 +38,7 @@ export function settleSichuanDraw(players, kongs, { gameType = 5022, topBei, bas
   for (const [index, kong] of kongs.entries()) {
     if (!kong || !Number.isInteger(kong.seat) || !status[kong.seat] || typeof kong.transferred !== 'boolean'
         || !Array.isArray(kong.transfers)) throw new RangeError('无效的杠费记录');
+    // 红中杠不收底分，没有可退的税（ADR 0005）。
     const payers = new Set();
     for (const transfer of kong.transfers) {
       if (!transfer || transfer.to !== kong.seat || !Number.isInteger(transfer.from) || !status[transfer.from]

@@ -1,10 +1,11 @@
 import { SichuanSession } from './sichuan_session.mjs';
 import { chooseSichuanExchange, chooseSichuanMissingSuit } from './sichuan_ai.mjs';
 import { MaJiangAction, MaJiangMsg, encodeMaJiangEnvelope } from './majiang_pb.mjs';
+import { RED_ZHONG_DISPLAY } from './sichuan_hand.mjs';
 
 const seats = [0, 1, 2, 3];
 const seconds = (milliseconds) => Math.ceil(milliseconds / 1000);
-const playActions = { discard: MaJiangAction.Normal, ankan: MaJiangAction.AnGang,
+const playActions = { discard: MaJiangAction.Normal, redKong: MaJiangAction.Normal, ankan: MaJiangAction.AnGang,
   kakan: MaJiangAction.PengGang, hu: MaJiangAction.Hu };
 // 客户端桌面座位按本人、右、对、左排列；+1为逆时针，+2对换，+3顺时针。
 // 原 ChangeCardType 是 Shun=1 / Ni=2 / Dui=3，不能直接发送引擎 offset。
@@ -53,7 +54,9 @@ export class SichuanOpeningNotifications {
       changWind: 0, juNum: 0, zhuangSeat: state.dealer, totalJuNum: 1,
       remainDuiCardNum: view.remaining, gameID, baseScore: state.rules.baseScore,
       topBei: state.rules.topBei, scoreType, hasDingQue: true, isMingPai: false,
-      changeCardRule: state.rules.exchange ? 1 : 0,
+      // 红中血流：原客户端按 gameType=5023 放开任意三张；规则字段用 RenYiHuan=2，赖子为 guiCards=[450]。
+      changeCardRule: state.rules.exchange ? state.rules.wild ? 2 : 1 : 0,
+      guiCards: state.rules.wild ? [RED_ZHONG_DISPLAY] : [],
       changeCardType: state.rules.exchange ? exchangeTypes[state.exchangeOffset] : 0,
       huanZhangTimeout: seconds(timeouts.exchange), dingQueTimeout: seconds(timeouts.missing),
       chuPai1Timeout: seconds(timeouts.turn), qiangPaiTimeout: seconds(timeouts.claim),
@@ -61,8 +64,8 @@ export class SichuanOpeningNotifications {
       touzi1: (state.seed >>> 0) % 6 + 1, touzi2: (state.seed >>> 3) % 6 + 1,
       userInfos: seats.map((seat) => ({ seat, score: initialScores[seat],
         handCards: seat === view.seat ? view.hand : Array(view.handCounts[seat]).fill(0),
-        changeCardSuggest: seat === view.seat && state.rules.exchange ? chooseSichuanExchange(view.hand) : [],
-        dingQueSuggest: seat === view.seat && !state.rules.exchange ? chooseSichuanMissingSuit(view.hand) : 0,
+        changeCardSuggest: seat === view.seat && state.rules.exchange ? chooseSichuanExchange(view.hand, view.wild) : [],
+        dingQueSuggest: seat === view.seat && !state.rules.exchange ? chooseSichuanMissingSuit(view.hand, view.wild) : 0,
         canPlayActions: [], chuPai2Timeout: 0,
       })),
     });
@@ -104,7 +107,7 @@ export class SichuanOpeningNotifications {
           // 原34283按数组下标取玩家，再逐张移出/加入手牌；他家用等量背牌维持手牌数。
           cards: entry === view.seat ? state.exchanges[entry] : [0, 0, 0],
           getCards: entry === view.seat ? state.exchanges[(entry - state.exchangeOffset + 4) % 4] : [0, 0, 0],
-          dingQueSuggest: entry === view.seat ? chooseSichuanMissingSuit(view.hand) : 0,
+          dingQueSuggest: entry === view.seat ? chooseSichuanMissingSuit(view.hand, view.wild) : 0,
           canPlayActions: [], chuPai2Timeout: 0,
         })) }));
       }

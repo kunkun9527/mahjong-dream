@@ -5,8 +5,8 @@ import { SICHUAN_CATALOG } from './sichuan_catalog.mjs';
 import { MaJiangMsg as Msg, MaJiangResult as Result, decodeMaJiangEnvelope,
   encodeMaJiangEnvelope } from './majiang_pb.mjs';
 
-// 血战（5022）与普通血流（5021）共用权威局序，按 gameType 区分胡后离场/继续；红中血流仍未实现。
-export const SICHUAN_PLAYABLE_GAME_TYPES = Object.freeze([5021, 5022]);
+// 血战（5022）、普通血流（5021）与红中血流（5023）共用权威局序，按 gameType 区分胡后离场/继续与赖子规则。
+export const SICHUAN_PLAYABLE_GAME_TYPES = Object.freeze([5021, 5022, 5023]);
 const SCORE_TYPE_MONEY = 1; // 原 ScoreType_Score / ScoreType_Money 的第二项。
 const REPLY_CACHE = 64;
 
@@ -24,10 +24,14 @@ export function defaultSichuanRoom(gameType) {
   return room ? structuredClone(room) : null;
 }
 
-/** 房间标签1是“不换三张”；原表中不换牌房间均为256倍封顶。 */
+/**
+ * 房间标签1是“不换三张”；原表中不换牌房间均为256倍封顶。
+ * 红中血流免费场原表 topBei=0，语义未知，按其他玩法免费场的128倍执行（ADR 0005）。
+ */
 export function sichuanRoomRules(room) {
   const exchange = !room.ruleTags.includes(1);
-  return { gameType: room.gameType, exchange, topBei: room.topBei === 128 && exchange ? 128 : 256, baseScore: room.moneyBase };
+  const topBei = room.topBei === 0 && room.gameType === 5023 ? 128 : room.topBei;
+  return { gameType: room.gameType, exchange, topBei: topBei === 128 && exchange ? 128 : 256, baseScore: room.moneyBase };
 }
 
 /**

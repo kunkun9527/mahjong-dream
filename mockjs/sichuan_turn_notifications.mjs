@@ -2,18 +2,20 @@ import { MaJiangAction as Action, MaJiangMsg, encodeMaJiangEnvelope } from './ma
 import { sichuanKind } from './sichuan_hand.mjs';
 
 const seats = [0, 1, 2, 3];
-const turnActions = { discard: Action.Normal, ankan: Action.AnGang, kakan: Action.PengGang, hu: Action.Hu };
+// 红中杠在原协议中就是用 Normal 打出红中，候选与普通出牌共用 Normal。
+const turnActions = { discard: Action.Normal, redKong: Action.Normal, ankan: Action.AnGang, kakan: Action.PengGang,
+  hu: Action.Hu };
 const claimActions = { pass: Action.Guo, pon: Action.Peng, kan: Action.MingGang, hu: Action.Hu };
 
 function checkSeat(seat) {
   if (!Number.isInteger(seat) || !seats.includes(seat)) throw new RangeError('无效的通知座位');
 }
 
-function checkEvent(event, type) {
+function checkEvent(event, type, wild = false) {
   if (!event || event.type !== type || !Number.isSafeInteger(event.index) || event.index < 0) {
     throw new TypeError(`需要有效的四川${type}事件`);
   }
-  sichuanKind(event.tile);
+  sichuanKind(event.tile, wild);
 }
 
 function actions(types, mapping) {
@@ -21,7 +23,7 @@ function actions(types, mapping) {
       || types.some((type) => typeof type !== 'string' || !Object.hasOwn(mapping, type))) {
     throw new TypeError('无效的四川事件动作候选');
   }
-  return types.map((type) => mapping[type]);
+  return [...new Set(types.map((type) => mapping[type]))];
 }
 
 function frame(eventIndex, name, payload) {
@@ -35,14 +37,14 @@ function frame(eventIndex, name, payload) {
  * 输入只能来自服务端权威事件；humanSeat由认证会话指定，不能来自客户端报文。
  * 不读取当前手牌/候选补造历史；事件内各席位候选仅供服务端，输出逐字段白名单投影。
  */
-export function buildSichuanDrawNotification(event, humanSeat) {
-  checkEvent(event, 'draw');
+export function buildSichuanDrawNotification(event, humanSeat, { wild = false } = {}) {
+  checkEvent(event, 'draw', wild);
   checkSeat(event.seat);
   checkSeat(humanSeat);
   if (!['draw', 'kong'].includes(event.source) || !Number.isInteger(event.remaining)
-      || event.remaining < 0 || event.remaining > 54) throw new RangeError('无效的四川摸牌事件');
+      || event.remaining < 0 || event.remaining > (wild ? 60 : 54)) throw new RangeError('无效的四川摸牌事件');
   const canPlayActions = actions(event.actionTypes, turnActions);
-  if (!event.actionTypes.includes('discard')) throw new TypeError('摸牌事件缺少出牌候选');
+  if (!event.actionTypes.some((type) => ['discard', 'redKong'].includes(type))) throw new TypeError('摸牌事件缺少出牌候选');
   return frame(event.index, 'NtfSendCard', {
     seat: event.seat, remainDuiCardNum: event.remaining,
     // 原34255按数组下标处理四座位，仅为NtfSendCard.seat增加一张牌。
@@ -55,9 +57,9 @@ export function buildSichuanDrawNotification(event, humanSeat) {
   });
 }
 
-export function buildSichuanDiscardNotification(event, claimWindow, humanSeat) {
-  checkEvent(event, 'discard');
-  checkEvent(claimWindow, 'claimWindow');
+export function buildSichuanDiscardNotification(event, claimWindow, humanSeat, { wild = false } = {}) {
+  checkEvent(event, 'discard', wild);
+  checkEvent(claimWindow, 'claimWindow', wild);
   checkSeat(event.seat);
   checkSeat(humanSeat);
   if (typeof event.isMoQie !== 'boolean' || claimWindow.kind !== 'discard'

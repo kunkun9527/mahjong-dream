@@ -192,7 +192,9 @@ export class SichuanSession {
     if (view.phase === 'claim') return { type: 'pass', tiles: [] };
     if (view.phase === 'turn') {
       const drawnTile = this.#engine.snapshot().drawnTile;
-      const drawnDiscard = view.options.find((option) => option.type === 'discard' && option.tiles[0] === drawnTile);
+      // 胡后锁牌摸到红中时，摸切就是红中杠。
+      const drawnDiscard = view.options.find((option) => ['discard', 'redKong'].includes(option.type)
+        && option.tiles[0] === drawnTile);
       // 超时不会默许胡/杠；缺门限制优先于摸切。
       return drawnDiscard ?? { type: 'discard', tiles: [chooseSichuanDiscard(view).tile] };
     }

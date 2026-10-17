@@ -31,13 +31,17 @@ function selectAction(view, name, payload) {
   if (name === 'ReqPlayCard') {
     if (view.phase !== 'turn') return { result: Result.Fail_InvalidSequence };
     const type = { [Action.Normal]: 'discard', [Action.PengGang]: 'kakan', [Action.AnGang]: 'ankan', [Action.Hu]: 'hu' }[payload.action];
-    if (!type || !options.some((option) => option.type === type)) return { result: Result.Fail_ActionNotInCanPlayActions };
+    const offered = (entry) => entry === type || (type === 'discard' && entry === 'redKong');
+    if (!type || !options.some((option) => offered(option.type))) return { result: Result.Fail_ActionNotInCanPlayActions };
     if (type === 'hu') {
       // 自摸请求的 card 可省略；非零实体必须属于本人，不能信任客户端自报和牌。
       return { chosen: (payload.card === 0 || view.hand.includes(payload.card)) && find('hu', []),
         result: Result.Fail_CardNotInHand };
     }
     if (!view.hand.includes(payload.card)) return { result: Result.Fail_CardNotInHand };
+    // 红中血流：原客户端用 Normal 出牌打出红中赖子，服务端裁决为红中杠（ADR 0005）。
+    const redKong = type === 'discard' && options.find((option) => option.type === 'redKong' && option.tiles[0] === payload.card);
+    if (redKong) return { chosen: redKong };
     // 原 ReqPlayCard 只有单张 card：暗杠只能从权威候选补齐，不能自行凑同种牌。
     const chosen = options.find((option) => option.type === type && option.tiles.includes(payload.card));
     return { chosen, result: type === 'discard' ? Result.Fail_CardInCantPlays : Result.Fail_CardNotMatchAction };

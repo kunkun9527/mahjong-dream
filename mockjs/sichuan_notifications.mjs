@@ -3,7 +3,8 @@ import { buildSichuanDiscardNotification, buildSichuanDrawNotification } from '.
 import { MaJiangAction as Action, MaJiangMsg, encodeMaJiangEnvelope } from './majiang_pb.mjs';
 
 const seats = [0, 1, 2, 3];
-const turnActions = { discard: Action.Normal, hu: Action.Hu, ankan: Action.AnGang, kakan: Action.PengGang };
+const turnActions = { discard: Action.Normal, redKong: Action.Normal, hu: Action.Hu, ankan: Action.AnGang,
+  kakan: Action.PengGang };
 const claimActions = { pass: Action.Guo, hu: Action.Hu, pon: Action.Peng, kan: Action.MingGang };
 const kongTypes = { exposed: 1, added: 2, concealed: 3 };
 const settlementTypes = { flower: 8, ready: 9, refund: 10, callTransfer: 11 };
@@ -41,7 +42,7 @@ function transferDelta(transfer) {
 
 function endUsers(humanSeat, caller = null, event = null) {
   return seats.map((seat) => ({ seat, tingInfos: [],
-    canPlayActions: seat === humanSeat && seat === caller ? event.actionTypes.map((type) => turnActions[type]) : [],
+    canPlayActions: seat === humanSeat && seat === caller ? [...new Set(event.actionTypes.map((type) => turnActions[type]))] : [],
     cantPlays: seat === humanSeat && seat === caller ? [...event.cantPlays] : [],
     chuPai2Timeout: 0, canGangNoNumCardsAfterRiichiHu: [],
   }));
@@ -100,6 +101,7 @@ export class SichuanNotifications {
     let scores = [...this.#scores];
     let ended = false;
     const humanSeat = this.#humanSeat;
+    const wild = { wild: state.rules.wild };
     for (let index = this.#cursor; index < state.events.length; index += 1) {
       const event = state.events[index];
       if (event.index !== index || ended) throw new Error('四川事件索引或终局顺序错误');
@@ -107,7 +109,7 @@ export class SichuanNotifications {
         case 'discard': {
           if (pending) throw new Error('抢牌裁决尚未完成，不能继续出牌');
           pending = state.events[++index];
-          frames.push(buildSichuanDiscardNotification(event, pending, humanSeat));
+          frames.push(buildSichuanDiscardNotification(event, pending, humanSeat, wild));
           break;
         }
         case 'claimWindow': {
@@ -177,6 +179,13 @@ export class SichuanNotifications {
           pending = null;
           break;
         }
+        case 'redKong': {
+          // 原客户端把打出的红中按 Normal 放进牌河并标记赖子；不开抢牌窗口，随后同席从牌尾补牌。
+          if (pending) throw new Error('抢牌裁决尚未完成，不能红中杠');
+          frames.push(play(event, humanSeat, { seat: event.seat, card: event.tile, action: Action.Normal }));
+          frames.push(claimEnd(event, humanSeat));
+          break;
+        }
         case 'win': {
           const tsumo = event.winType === 'tsumo';
           // 血战胡牌即离场；血流胡后继续摸打，不能标记为已完成。
@@ -203,7 +212,7 @@ export class SichuanNotifications {
         }
         case 'draw': {
           if (pending) throw new Error('抢牌裁决尚未完成，不能继续摸牌');
-          frames.push(buildSichuanDrawNotification(event, humanSeat));
+          frames.push(buildSichuanDrawNotification(event, humanSeat, wild));
           break;
         }
         case 'end': {

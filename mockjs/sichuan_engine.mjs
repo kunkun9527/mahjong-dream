@@ -1,12 +1,15 @@
 import { shuffle } from './tiles.mjs';
-import { buildSichuanWall, legalSichuanDiscards, sichuanKind, sichuanWaitKinds } from './sichuan_hand.mjs';
+import { buildSichuanWall, isRedZhong, legalSichuanDiscards, sichuanKind, sichuanWaitKinds } from './sichuan_hand.mjs';
 import { scoreSichuanHand, sichuanKongPayments, sichuanWinPayments } from './sichuan_score.mjs';
 import { settleSichuanDraw } from './sichuan_settlement.mjs';
-import { chooseSichuanClaim, chooseSichuanDiscard, chooseSichuanExchange, chooseSichuanMissingSuit } from './sichuan_ai.mjs';
+import { chooseSichuanClaim, chooseSichuanDiscard, chooseSichuanExchange, chooseSichuanMissingSuit,
+  chooseSichuanRedKong } from './sichuan_ai.mjs';
 
 const clone = (value) => structuredClone(value);
-const suitOf = (tile) => Math.floor(sichuanKind(tile) / 9) + 1;
-// 血战胡牌即离场；血流胡牌后继续摸打，仍承担后续付款（ADR 0004）。
+// 牌山已按玩法校验，局内实体可统一按含红中解析；红中牌种27对应花色4，永远不是定缺花色。
+const kindOf = (tile) => sichuanKind(tile, true);
+const suitOf = (tile) => Math.floor(kindOf(tile) / 9) + 1;
+// 血战胡牌即离场；血流/红中血流胡牌后继续摸打，仍承担后续付款（ADR 0004/0005）。
 const exited = (state, seat) => state.rules.gameType === 5022 && state.players[seat].won;
 const activeSeats = (state) => [0, 1, 2, 3].filter((seat) => !exited(state, seat));
 const action = (type, tiles = []) => ({ type, tiles });
@@ -39,11 +42,11 @@ function setPhase(state, phase, turn = null) {
 
 function turnInfo(state, seat) {
   const options = ownOptions(state, seat);
-  const legal = new Set(options.filter((option) => option.type === 'discard').map((option) => option.tiles[0]));
+  const legal = new Set(options.filter((option) => ['discard', 'redKong'].includes(option.type)).map((option) => option.tiles[0]));
   return { actionTypes: actionTypes(options), cantPlays: state.players[seat].hand.filter((tile) => !legal.has(tile)) };
 }
 
-function score(state, seat, tile = null, winType = 'ron') {
+function score(state, seat, tile = null, winType = 'ron', kongDiscard = false) {
   const player = state.players[seat];
   let opening = null;
   if (winType === 'tsumo' && !state.interrupted && player.discardCount === 0 && !player.melds.length) {
@@ -53,44 +56,54 @@ function score(state, seat, tile = null, winType = 'ron') {
   return scoreSichuanHand(tile === null ? player.hand : [...player.hand, tile], {
     melds: player.melds, missingSuit: player.missingSuit, gameType: state.rules.gameType, topBei: state.rules.topBei,
     winType, opening, afterKong: winType === 'tsumo' && state.turnSource === 'kong',
-    lastTile: winType === 'tsumo' && state.wall.length === 0,
+    lastTile: winType === 'tsumo' && state.wall.length === 0, winTile: tile ?? state.drawnTile,
+    ...state.rules.wild ? { kongDiscard, redKongs: player.redKongs.length } : {},
   });
 }
 
 // 血流胡后锁牌（原文缺项，本地约定见ADR 0004）：不得改变胡牌牌形，只能摸切、再胡，或杠后听牌种类不变。
-const locked = (state, seat) => state.rules.gameType === 5021 && state.players[seat].won;
+const locked = (state, seat) => state.rules.gameType !== 5022 && state.players[seat].won;
 
-function waitKey(hand, player, melds = player.melds) {
-  return sichuanWaitKinds(hand, { melds, missingSuit: player.missingSuit }).join(',');
+function waitKey(state, hand, player, melds = player.melds) {
+  return sichuanWaitKinds(hand, { melds, missingSuit: player.missingSuit, wild: state.rules.wild }).join(',');
 }
 
-function lockedKongKeepsWaits(player, before, remove, meld) {
-  const after = waitKey(player.hand.filter((tile) => !remove.includes(tile)), player, meld);
+function lockedKongKeepsWaits(state, player, before, remove, meld) {
+  const after = waitKey(state, player.hand.filter((tile) => !remove.includes(tile)), player, meld);
   return after !== '' && after === before;
 }
+
+// 红中杠：打出一张红中算杠（不收底分、不能被碰/胡），从牌尾补牌；牌墙无牌时不可杠（ADR 0005）。
+const redKongOption = (state, tile) => state.rules.wild && isRedZhong(tile) && state.wall.length > 0;
 
 function ownOptions(state, seat) {
   const player = state.players[seat];
   const isLocked = locked(state, seat);
-  const options = isLocked ? [action('discard', [state.drawnTile])]
-    : legalSichuanDiscards(player.hand, player.missingSuit).map((tile) => action('discard', [tile]));
+  const options = isLocked ? [action(redKongOption(state, state.drawnTile) ? 'redKong' : 'discard', [state.drawnTile])]
+    : legalSichuanDiscards(player.hand, player.missingSuit, state.rules.wild)
+      .filter((tile) => !redKongOption(state, tile)).map((tile) => action('discard', [tile]));
+  // 打缺优先：手里还有定缺花色时只能先打缺牌，不能红中杠。
+  const holdsMissing = player.hand.some((tile) => !isRedZhong(tile) && suitOf(tile) === player.missingSuit);
+  if (!isLocked && !holdsMissing) {
+    for (const tile of player.hand) if (redKongOption(state, tile)) options.push(action('redKong', [tile]));
+  }
   if (state.turnSource !== 'pon' && score(state, seat, null, 'tsumo')) options.push(action('hu'));
   if (state.turnSource === 'pon' || !state.wall.length) return options;
   const groups = new Map();
   for (const tile of player.hand) {
-    if (suitOf(tile) === player.missingSuit) continue;
-    const kind = sichuanKind(tile);
+    if (suitOf(tile) === player.missingSuit || isRedZhong(tile)) continue;
+    const kind = kindOf(tile);
     if (!groups.has(kind)) groups.set(kind, []);
     groups.get(kind).push(tile);
   }
-  const before = isLocked ? waitKey(player.hand.filter((tile) => tile !== state.drawnTile), player) : null;
+  const before = isLocked ? waitKey(state, player.hand.filter((tile) => tile !== state.drawnTile), player) : null;
   const allowed = (tiles, melds) => !isLocked
-    || (tiles.includes(state.drawnTile) && lockedKongKeepsWaits(player, before, tiles, melds));
+    || (tiles.includes(state.drawnTile) && lockedKongKeepsWaits(state, player, before, tiles, melds));
   for (const tiles of groups.values()) {
     if (tiles.length === 4 && allowed(tiles, [...player.melds, { type: 'ankan', tiles }])) options.push(action('ankan', tiles));
   }
   for (const meld of player.melds.filter((item) => item.type === 'pon')) {
-    const tiles = groups.get(sichuanKind(meld.tiles[0]));
+    const tiles = groups.get(kindOf(meld.tiles[0]));
     if (tiles?.length === 1 && allowed(tiles, player.melds.map((item) => item === meld
       ? { ...item, type: 'kan', tiles: [...item.tiles, ...tiles] } : item))) options.push(action('kakan', tiles));
   }
@@ -104,6 +117,16 @@ function optionsFor(state, seat) {
   if (state.phase === 'exchange') {
     if (state.exchanges[seat] !== null) return [];
     const options = [];
+    if (state.rules.wild) {
+      // 红中血流换三张为任意三张（含红中），不要求同花色。
+      const tiles = player.hand;
+      for (let a = 0; a < tiles.length - 2; a += 1) {
+        for (let b = a + 1; b < tiles.length - 1; b += 1) {
+          for (let c = b + 1; c < tiles.length; c += 1) options.push(action('exchange', [tiles[a], tiles[b], tiles[c]]));
+        }
+      }
+      return options;
+    }
     for (let suit = 1; suit <= 3; suit += 1) {
       const tiles = player.hand.filter((tile) => suitOf(tile) === suit);
       for (let a = 0; a < tiles.length - 2; a += 1) {
@@ -207,6 +230,17 @@ function commitKong(state, seat, kind, tiles, from = null, meldIndex = null) {
   draw(state, seat, 'kong', state.kongs.length - 1);
 }
 
+function commitRedKong(state, seat, tile) {
+  const player = state.players[seat];
+  player.hand = player.hand.filter((id) => id !== tile);
+  player.redKongs.push(tile);
+  state.kongs.push({ seat, kind: 'red', transfers: [], transferred: false });
+  state.pending = null;
+  state.interrupted = true;
+  emit(state, 'redKong', { seat, tile, count: player.redKongs.length });
+  draw(state, seat, 'kong', state.kongs.length - 1);
+}
+
 function win(state, winners, from = null) {
   const pending = state.pending;
   const active = activeSeats(state);
@@ -224,7 +258,7 @@ function win(state, winners, from = null) {
     const payment = sichuanWinPayments({ winner: seat, loser: from, activeSeats: active, bei: result.bei, baseScore: state.rules.baseScore });
     const transfers = applyTransfers(state, payment.transfers, 'win');
     // 血流胡后继续打：自摸牌移入胡牌区，暗手回到13张。血战终局前保留在手中展示。
-    if (from === null && state.rules.gameType === 5021) player.hand = player.hand.filter((id) => id !== tile);
+    if (from === null && state.rules.gameType !== 5022) player.hand = player.hand.filter((id) => id !== tile);
     player.won = true;
     player.win = { tile, from, score: result };
     player.wins.push({ tile, from, score: result });
@@ -288,14 +322,17 @@ function openClaims(state, pending) {
     if (seat === pending.from) continue;
     const player = state.players[seat];
     const options = [action('pass')];
-    const result = score(state, seat, pending.tile, pending.kind === 'added' ? 'robKong' : 'ron');
+    // 红中只在无可补牌的极端情况下作为普通弃牌，不能被碰杠胡。
+    if (isRedZhong(pending.tile)) continue;
+    const result = score(state, seat, pending.tile, pending.kind === 'added' ? 'robKong' : 'ron',
+      pending.kind === 'discard' && pending.kongIndex !== null);
     if (result && result.bei > player.passBei) options.push(action('hu'));
-    const matching = player.hand.filter((tile) => sichuanKind(tile) === sichuanKind(pending.tile));
+    const matching = player.hand.filter((tile) => !isRedZhong(tile) && kindOf(tile) === kindOf(pending.tile));
     if (pending.kind === 'discard' && state.wall.length && suitOf(pending.tile) !== player.missingSuit) {
       if (locked(state, seat)) {
         // 胡后锁牌不能碰；点杠只在听牌种类不变时允许。
         const tiles = [...matching, pending.tile];
-        if (matching.length === 3 && lockedKongKeepsWaits(player, waitKey(player.hand, player), matching,
+        if (matching.length === 3 && lockedKongKeepsWaits(state, player, waitKey(state, player.hand, player), matching,
           [...player.melds, { type: 'kan', tiles }])) options.push(action('kan', matching));
       } else {
         // 所有实体组合都是合法候选，不能要求客户端选中服务器偏好的副本。
@@ -348,10 +385,11 @@ function applyAction(state, seat, chosen) {
     return;
   }
   if (chosen.type === 'hu') return win(state, [seat]);
+  if (chosen.type === 'redKong') return commitRedKong(state, seat, chosen.tiles[0]);
   if (chosen.type === 'ankan') return commitKong(state, seat, 'concealed', chosen.tiles);
   if (chosen.type === 'kakan') {
     const tile = chosen.tiles[0];
-    const meldIndex = player.melds.findIndex((meld) => meld.type === 'pon' && sichuanKind(meld.tiles[0]) === sichuanKind(tile));
+    const meldIndex = player.melds.findIndex((meld) => meld.type === 'pon' && kindOf(meld.tiles[0]) === kindOf(tile));
     // 只开抢杠窗口，暗手、副露与款项在无人抢和后才提交。
     openClaims(state, { kind: 'added', from: seat, tile, meldIndex });
     return;
@@ -375,21 +413,24 @@ export class SichuanEngine {
   #state;
 
   constructor({ gameType = 5022, seed = 1, dealer = 0, exchange = true, topBei = 128, baseScore = 1, wall = null } = {}) {
-    if (![5021, 5022].includes(gameType) || !Number.isSafeInteger(seed) || !Number.isInteger(dealer) || dealer < 0 || dealer > 3
+    if (![5021, 5022, 5023].includes(gameType) || !Number.isSafeInteger(seed) || !Number.isInteger(dealer) || dealer < 0 || dealer > 3
         || typeof exchange !== 'boolean' || ![128, 256].includes(topBei)
         || (!exchange && topBei !== 256) || !Number.isSafeInteger(baseScore) || baseScore <= 0
         || baseScore > Math.floor(Number.MAX_SAFE_INTEGER / (256 * 1024))) throw new RangeError('无效的四川房间规则');
     const rng = seededRandom(seed);
-    const source = wall === null ? shuffle(buildSichuanWall(), rng) : [...wall];
-    if (source.length !== 108 || new Set(source).size !== 108) throw new RangeError('牌山必须包含108张唯一实体牌');
-    source.forEach(sichuanKind);
+    const wild = gameType === 5023;
+    const size = wild ? 114 : 108;
+    const source = wall === null ? shuffle(buildSichuanWall({ wild }), rng) : [...wall];
+    if (source.length !== size || new Set(source).size !== size) throw new RangeError(`牌山必须包含${size}张唯一实体牌`);
+    source.forEach((tile) => sichuanKind(tile, wild));
     const players = Array.from({ length: 4 }, () => ({ hand: source.splice(0, 13), melds: [], river: [],
-      missingSuit: null, won: false, win: null, wins: [], passBei: 0, drawCount: 0, discardCount: 0, allDiscardsMissing: true }));
+      missingSuit: null, won: false, win: null, wins: [], passBei: 0, drawCount: 0, discardCount: 0, allDiscardsMissing: true,
+      redKongs: [] }));
     const drawnTile = source.shift();
     players[dealer].hand.push(drawnTile);
     // 原文「血流封顶：免费场5120倍、其它场10240倍」恰为房间单次封顶128/256的40倍，按每家整局累计输分上限执行。
     const lossCap = gameType === 5021 ? 40 * topBei * baseScore : null;
-    this.#state = { rules: { gameType, topBei, baseScore, exchange, lossCap }, seed, dealer, players, wall: source,
+    this.#state = { rules: { gameType, topBei, baseScore, exchange, lossCap, wild }, seed, dealer, players, wall: source,
       phase: exchange ? 'exchange' : 'missing', windowId: 1, turn: null, turnSource: 'initial', drawnTile,
       exchanges: [null, null, null, null], exchangeOffset: 1 + Math.floor(rng() * 3), interrupted: false,
       pending: null, lastKong: null, kongs: [], robbedTiles: [], scores: [0, 0, 0, 0], transfers: [],
@@ -430,13 +471,14 @@ export class SichuanEngine {
       for (const discard of entry.river) if (!discard.claimed) visible.add(discard.tile);
       // 中途胡牌通知只公开胡牌张（含血流本人已移出暗手的自摸牌），不含整副暗手。
       for (const record of entry.wins) visible.add(record.tile);
+      for (const tile of entry.redKongs) visible.add(tile);
       if (other !== seat) {
         for (const meld of entry.melds) if (meld.type !== 'ankan' || state.phase === 'ended') for (const tile of meld.tiles) visible.add(tile);
         // 终局摊牌前不能让AI读取已胡者暗牌。
         if (state.phase === 'ended') for (const tile of entry.hand) visible.add(tile);
       }
     }
-    return clone({ seat, phase: state.phase, windowId: state.windowId, turn: state.turn, hand: player.hand,
+    return clone({ seat, phase: state.phase, windowId: state.windowId, turn: state.turn, wild: state.rules.wild, hand: player.hand,
       melds: player.melds, missingSuit: player.missingSuit,
       visibleTiles: [...visible].filter((tile) => !own.has(tile)), remaining: state.wall.length,
       scores: state.scores, winners: state.winners, endReason: state.endReason,
@@ -448,8 +490,8 @@ export class SichuanEngine {
   chooseAction(seat) {
     const view = this.view(seat);
     if (!view.options.length) return null;
-    if (view.phase === 'exchange') return action('exchange', chooseSichuanExchange(view.hand));
-    if (view.phase === 'missing') return action('missing', [chooseSichuanMissingSuit(view.hand)]);
+    if (view.phase === 'exchange') return action('exchange', chooseSichuanExchange(view.hand, view.wild));
+    if (view.phase === 'missing') return action('missing', [chooseSichuanMissingSuit(view.hand, view.wild)]);
     if (view.phase === 'claim') {
       const has = (type) => view.options.some((option) => option.type === type);
       return chooseSichuanClaim(view, { tile: view.claimTile, canHu: has('hu'), canPon: has('pon'), canKong: has('kan') });
@@ -459,6 +501,9 @@ export class SichuanEngine {
     const kong = view.options.find((option) => ['ankan', 'kakan'].includes(option.type));
     if (kong) return kong;
     const discards = view.options.filter((option) => option.type === 'discard');
+    const redKong = view.options.find((option) => option.type === 'redKong');
+    // 胡后锁牌摸到红中时只能红中杠；其余情况只在红中对牌形无用时才打出。
+    if (redKong && (!discards.length || chooseSichuanRedKong(view, redKong.tiles[0]))) return redKong;
     return discards.length === 1 ? discards[0] : action('discard', [chooseSichuanDiscard(view).tile]);
   }
 }

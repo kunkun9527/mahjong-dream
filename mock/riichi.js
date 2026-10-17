@@ -17709,24 +17709,29 @@
   }
 
   // mockjs/sichuan_hand.mjs
-  function buildSichuanWall() {
+  var RED_ZHONG_KIND = 27;
+  var RED_ZHONG_DISPLAY = 450;
+  var isRedZhong = (id) => Number.isSafeInteger(id) && id >= 451 && id <= 456;
+  function buildSichuanWall({ wild = false } = {}) {
     const tiles = [];
     for (let suit = 1; suit <= 3; suit += 1) {
       for (let rank = 1; rank <= 9; rank += 1) {
         for (let copy = 1; copy <= 4; copy += 1) tiles.push(tileId(suit, rank, copy));
       }
     }
+    if (wild) for (let copy = 1; copy <= 6; copy += 1) tiles.push(tileId(4, 5, copy));
     return tiles;
   }
-  function sichuanKind(id) {
+  function sichuanKind(id, wild = false) {
     if (!Number.isSafeInteger(id)) throw new RangeError("\u56DB\u5DDD\u5B9E\u4F53\u724C ID \u5FC5\u987B\u662F\u6574\u6570");
+    if (wild && isRedZhong(id)) return RED_ZHONG_KIND;
     const { suit, rank, copy } = decodeId(id);
     if (suit < 1 || suit > 3 || rank < 1 || rank > 9 || copy < 1 || copy > 4) {
       throw new RangeError(`\u65E0\u6548\u7684\u666E\u901A\u56DB\u5DDD\u5B9E\u4F53\u724C\uFF1A${id}`);
     }
     return (suit - 1) * 9 + rank - 1;
   }
-  function inspectHolding(hand, melds, missingSuit) {
+  function inspectHolding(hand, melds, missingSuit, wild) {
     if (![1, 2, 3].includes(missingSuit)) throw new RangeError("\u5FC5\u987B\u660E\u786E\u6307\u5B9A\u4E07/\u7B52/\u6761\u4E2D\u7684\u5B9A\u7F3A\u82B1\u8272");
     if (!Array.isArray(hand) || !Array.isArray(melds) || melds.length > 4 || hand.length > 14) {
       throw new RangeError("\u56DB\u5DDD\u624B\u724C\u6216\u526F\u9732\u7ED3\u6784\u65E0\u6548");
@@ -17734,16 +17739,22 @@
     const used = /* @__PURE__ */ new Set();
     const counts = Array(27).fill(0);
     const allCounts = Array(27).fill(0);
+    let wilds = 0;
     let hasMissing = false;
-    function add2(id) {
-      const kind = sichuanKind(id);
+    function add2(id, allowWild) {
+      const kind = sichuanKind(id, wild && allowWild);
       if (used.has(id)) throw new RangeError(`\u91CD\u590D\u5B9E\u4F53\u724C\uFF1A${id}`);
       used.add(id);
+      if (kind === RED_ZHONG_KIND) return kind;
       allCounts[kind] += 1;
       if (Math.floor(kind / 9) + 1 === missingSuit) hasMissing = true;
       return kind;
     }
-    for (const id of hand) counts[add2(id)] += 1;
+    for (const id of hand) {
+      const kind = add2(id, true);
+      if (kind === RED_ZHONG_KIND) wilds += 1;
+      else counts[kind] += 1;
+    }
     const fixedGroups = [];
     for (const meld of melds) {
       const length = meld?.type === "pon" ? 3 : ["kan", "ankan"].includes(meld?.type) ? 4 : 0;
@@ -17751,82 +17762,183 @@
         throw new RangeError("\u56DB\u5DDD\u4EC5\u652F\u6301\u4E09\u5F20\u78B0\u6216\u56DB\u5F20\u6760\uFF0C\u4E0D\u80FD\u5403");
       }
       const kinds = [];
-      for (const id of meld.tiles) kinds.push(add2(id));
+      for (const id of meld.tiles) kinds.push(add2(id, false));
       if (!kinds.every((kind) => kind === kinds[0])) throw new RangeError("\u78B0\u6760\u5FC5\u987B\u662F\u540C\u4E00\u79CD\u724C");
-      fixedGroups.push({ type: length === 4 ? "quad" : "triplet", kind: kinds[0], open: meld.type !== "ankan" });
+      fixedGroups.push({ type: length === 4 ? "quad" : "triplet", kind: kinds[0], open: meld.type !== "ankan", wild: 0 });
     }
-    return { counts, allCounts, used, hasMissing, fixedGroups };
+    return { counts, allCounts, used, wilds, hasMissing, fixedGroups };
   }
-  function analyzeSichuanHand(hand, { melds = [], missingSuit } = {}) {
-    const { counts, hasMissing, fixedGroups } = inspectHolding(hand, melds, missingSuit);
+  var suitKinds = (missingSuit) => Array.from({ length: 27 }, (_, kind) => kind).filter((kind) => Math.floor(kind / 9) + 1 !== missingSuit);
+  function wildGroups(missingSuit) {
+    const groups = [];
+    for (const kind of suitKinds(missingSuit)) {
+      groups.push({ type: "triplet", kind, open: false, wild: 3 });
+      if (kind % 9 <= 6) groups.push({ type: "sequence", kind, open: false, wild: 3 });
+    }
+    return groups;
+  }
+  function analyzeSichuanHand(hand, { melds = [], missingSuit, wild = false, winTile = null, limit = Infinity } = {}) {
+    const { counts, hasMissing, fixedGroups, wilds: totalWilds } = inspectHolding(hand, melds, missingSuit, wild);
     if (hasMissing || hand.length !== 14 - 3 * melds.length) return [];
+    const winKind = winTile !== null && wild && !isRedZhong(winTile) ? sichuanKind(winTile) : null;
+    const original = counts.slice();
+    const forbiddenPair = (kind, pairWild) => winKind !== null && kind === winKind && pairWild === 1 && original[kind] === 1;
+    const allowed = suitKinds(missingSuit);
     const shapes = [];
-    if (!melds.length && counts.every((count) => count % 2 === 0)) {
-      const pairs = [];
-      const quadKinds = [];
-      for (let kind = 0; kind < counts.length; kind += 1) {
-        for (let pair = 0; pair < counts[kind] / 2; pair += 1) pairs.push(kind);
-        if (counts[kind] === 4) quadKinds.push(kind);
+    const full = () => shapes.length >= limit;
+    if (!melds.length) {
+      const singles = counts.filter((count) => count % 2 === 1).length;
+      const spare = totalWilds - singles;
+      if (spare >= 0 && spare % 2 === 0) {
+        const pairs = [];
+        const quadKinds = [];
+        let forbidden = false;
+        for (let kind = 0; kind < counts.length; kind += 1) {
+          for (let pair = 0; pair < Math.floor(counts[kind] / 2); pair += 1) pairs.push(kind);
+          if (counts[kind] % 2) {
+            pairs.push(kind);
+            if (forbiddenPair(kind, 1)) forbidden = true;
+          }
+          if (counts[kind] === 4) quadKinds.push(kind);
+        }
+        if (!forbidden) {
+          const extra = spare / 2;
+          const choose = (start, chosen) => {
+            if (full()) return;
+            if (chosen.length === extra) {
+              shapes.push({
+                type: "sevenPairs",
+                pairs: [...pairs, ...chosen].sort((a, b) => a - b),
+                quadKinds: [...quadKinds],
+                wildPairs: extra
+              });
+              return;
+            }
+            for (let index = start; index < allowed.length; index += 1) choose(index, [...chosen, allowed[index]]);
+          };
+          choose(0, []);
+        }
       }
-      shapes.push({ type: "sevenPairs", pairs, quadKinds });
     }
     const groups = [];
     const required = 4 - melds.length;
-    function split(pair) {
+    let wilds = totalWilds;
+    const record = (pair, pairWild) => {
+      if (!forbiddenPair(pair, pairWild)) {
+        shapes.push({ type: "standard", pair, pairWild, groups: [...fixedGroups, ...groups].map((group) => ({ ...group })) });
+      }
+    };
+    function finishWild(pair, pairWild, start) {
+      if (full()) return;
+      if (groups.length === required) return record(pair, pairWild);
+      const options = wildGroups(missingSuit);
+      for (let index = start; index < options.length; index += 1) {
+        groups.push(options[index]);
+        finishWild(pair, pairWild, index);
+        groups.pop();
+        if (full()) return;
+      }
+    }
+    function split(pair, pairWild) {
+      if (full()) return;
       const kind = counts.findIndex((count) => count > 0);
       if (kind === -1) {
-        if (groups.length === required) {
-          shapes.push({ type: "standard", pair, groups: [...fixedGroups, ...groups].map((group) => ({ ...group })) });
+        if (wilds === 3 * (required - groups.length)) {
+          if (wilds) {
+            const saved = wilds;
+            wilds = 0;
+            finishWild(pair, pairWild, 0);
+            wilds = saved;
+          } else if (groups.length === required) record(pair, pairWild);
         }
         return;
       }
       if (groups.length >= required) return;
-      if (counts[kind] >= 3) {
-        counts[kind] -= 3;
-        groups.push({ type: "triplet", kind, open: false });
-        split(pair);
+      for (const used of [3, 2, 1]) {
+        const need = 3 - used;
+        if (counts[kind] < used || wilds < need || !wild && need) continue;
+        counts[kind] -= used;
+        wilds -= need;
+        groups.push({ type: "triplet", kind, open: false, wild: need });
+        split(pair, pairWild);
         groups.pop();
-        counts[kind] += 3;
+        wilds += need;
+        counts[kind] += used;
       }
-      if (kind % 9 <= 6 && counts[kind + 1] > 0 && counts[kind + 2] > 0) {
-        counts[kind] -= 1;
-        counts[kind + 1] -= 1;
-        counts[kind + 2] -= 1;
-        groups.push({ type: "sequence", kind, open: false });
-        split(pair);
-        groups.pop();
-        counts[kind] += 1;
-        counts[kind + 1] += 1;
-        counts[kind + 2] += 1;
+      for (let start = kind - 2; start <= kind; start += 1) {
+        if (start < 0 || Math.floor(start / 9) !== Math.floor(kind / 9) || start % 9 > 6) continue;
+        let need = 0;
+        const taken = [];
+        for (let offset = 0; offset < 3; offset += 1) {
+          const position = start + offset;
+          if (position >= kind && counts[position] > 0) {
+            counts[position] -= 1;
+            taken.push(position);
+          } else need += 1;
+        }
+        if (taken[0] === kind && need <= wilds && (wild || !need)) {
+          wilds -= need;
+          groups.push({ type: "sequence", kind: start, open: false, wild: need });
+          split(pair, pairWild);
+          groups.pop();
+          wilds += need;
+        }
+        for (const position of taken) counts[position] += 1;
       }
     }
-    for (let pair = 0; pair < counts.length; pair += 1) {
-      if (counts[pair] < 2) continue;
-      counts[pair] -= 2;
-      split(pair);
-      counts[pair] += 2;
+    for (let pair = 0; pair < counts.length && !full(); pair += 1) {
+      if (counts[pair] >= 2) {
+        counts[pair] -= 2;
+        split(pair, 0);
+        counts[pair] += 2;
+      }
+    }
+    if (wild) {
+      for (let pair = 0; pair < counts.length && !full(); pair += 1) {
+        if (counts[pair] >= 1 && wilds >= 1) {
+          counts[pair] -= 1;
+          wilds -= 1;
+          split(pair, 1);
+          wilds += 1;
+          counts[pair] += 1;
+        }
+      }
+      if (wilds >= 2) {
+        for (const pair of allowed) {
+          if (full()) break;
+          wilds -= 2;
+          split(pair, 2);
+          wilds += 2;
+        }
+      }
     }
     return shapes;
   }
-  function sichuanWaitKinds(hand, { melds = [], missingSuit } = {}) {
-    const { allCounts, used, hasMissing } = inspectHolding(hand, melds, missingSuit);
+  function spareCopy(used, kind) {
+    const suit = Math.floor(kind / 9) + 1;
+    const rank = kind % 9 + 1;
+    let copy = 1;
+    while (used.has(tileId(suit, rank, copy))) copy += 1;
+    return tileId(suit, rank, copy);
+  }
+  function sichuanWaitKinds(hand, { melds = [], missingSuit, wild = false } = {}) {
+    const { allCounts, used, hasMissing } = inspectHolding(hand, melds, missingSuit, wild);
     if (hasMissing || hand.length !== 13 - 3 * melds.length) return [];
     const waits = [];
     for (let kind = 0; kind < 27; kind += 1) {
       const suit = Math.floor(kind / 9) + 1;
       if (suit === missingSuit || allCounts[kind] >= 4) continue;
-      const rank = kind % 9 + 1;
-      let copy = 1;
-      while (used.has(tileId(suit, rank, copy))) copy += 1;
-      const id = tileId(suit, rank, copy);
-      if (analyzeSichuanHand([...hand, id], { melds, missingSuit }).length) waits.push(kind);
+      const id = spareCopy(used, kind);
+      if (analyzeSichuanHand([...hand, id], { melds, missingSuit, wild, winTile: id, limit: 1 }).length) waits.push(kind);
     }
     return waits;
   }
-  function legalSichuanDiscards(hand, missingSuit) {
-    inspectHolding(hand, [], missingSuit);
-    const missing = hand.filter((id) => decodeId(id).suit === missingSuit);
-    return missing.length ? missing : hand.slice();
+  function legalSichuanDiscards(hand, missingSuit, wild = false) {
+    inspectHolding(hand, [], missingSuit, wild);
+    const missing = hand.filter((id) => !isRedZhong(id) && decodeId(id).suit === missingSuit);
+    if (missing.length) return missing;
+    const ordinary = wild ? hand.filter((id) => !isRedZhong(id)) : hand.slice();
+    return ordinary.length ? ordinary : hand.slice();
   }
 
   // mockjs/sichuan_catalog.mjs
@@ -22690,12 +22802,12 @@
   };
 
   // mockjs/sichuan_score.mjs
-  var catalogs = new Map([5021, 5022].map((gameType) => [
+  var catalogs = new Map([5021, 5022, 5023].map((gameType) => [
     gameType,
     new Map(SICHUAN_CATALOG.games[gameType].yaku.map((item) => [item.calcYiType, item]))
   ]));
   function checkRules(gameType, topBei) {
-    if (!catalogs.has(gameType)) throw new RangeError("\u6B64\u8BA1\u5206\u5668\u4EC5\u652F\u6301\u666E\u901A\u8840\u6218/\u8840\u6D41\uFF0C\u4E0D\u652F\u6301\u7EA2\u4E2D\u8D56\u5B50");
+    if (!catalogs.has(gameType)) throw new RangeError("\u6B64\u8BA1\u5206\u5668\u4EC5\u652F\u6301\u8840\u6218\u3001\u8840\u6D41\u4E0E\u7EA2\u4E2D\u8840\u6D41");
     if (![128, 256].includes(topBei)) throw new RangeError("\u5FC5\u987B\u7531\u623F\u95F4\u89C4\u5219\u660E\u786E\u6307\u5B9A\u5408\u6CD5\u5C01\u9876\u500D\u6570");
   }
   function yaku(gameType, calcYiType) {
@@ -22704,6 +22816,16 @@
     return { yiType: rule.yiType, name: rule.name, bei: rule.bei };
   }
   var terminal = (kind) => kind % 9 === 0 || kind % 9 === 8;
+  var isWildGame = (gameType) => gameType === 5023;
+  function shapeKinds(shape) {
+    if (shape.type === "sevenPairs") return shape.pairs.flatMap((kind) => [kind, kind]);
+    const kinds = [shape.pair, shape.pair];
+    for (const group of shape.groups) {
+      if (group.type === "sequence") kinds.push(group.kind, group.kind + 1, group.kind + 2);
+      else kinds.push(...Array(group.type === "quad" ? 4 : 3).fill(group.kind));
+    }
+    return kinds;
+  }
   function shapeYaku(shape, melds, kinds, rootCount) {
     const pure = new Set(kinds.map((kind) => Math.floor(kind / 9))).size === 1;
     const simple = kinds.every((kind) => !terminal(kind));
@@ -22743,10 +22865,86 @@
     }
     if (pure && !includedPure) ids.push(13);
     if (simple && !jiang) ids.push(12);
-    if (!ids.length) ids.push(1001);
-    const countedRoots = rootCount - consumedRoots;
-    if (countedRoots > 0) ids.push(6 + countedRoots);
-    return { ids, countedRoots };
+    return { ids, countedRoots: rootCount - consumedRoots, pure };
+  }
+  function wildShapeYaku(shape, melds, { ids, countedRoots, pure }, { winType, winTile }) {
+    const remove = /* @__PURE__ */ new Set();
+    const add2 = [];
+    if (shape.type === "standard") {
+      const groups = shape.groups;
+      const sequences = groups.filter((group) => group.type === "sequence").map((group) => group.kind);
+      const triplets = groups.filter((group) => group.type !== "sequence");
+      const hasSequence = (kind) => sequences.includes(kind);
+      const sameSuit = (a, b) => Math.floor(a / 9) === Math.floor(b / 9);
+      if ([0, 9, 18].some((base2) => hasSequence(base2) && hasSequence(base2 + 3) && hasSequence(base2 + 6))) {
+        add2.push(1016);
+      } else if (sequences.some((kind) => kind % 9 <= 3 && hasSequence(kind + 3) && sameSuit(kind, kind + 3))) add2.push(1013);
+      const ranks = triplets.map((group) => group.kind % 9);
+      if (triplets.some((a, index) => triplets.some((b, other) => other !== index && a.kind % 9 === b.kind % 9 && !sameSuit(a.kind, b.kind)))) add2.push(1014);
+      let run = 0;
+      const tripletKinds = new Set(triplets.map((group) => group.kind));
+      for (const kind of tripletKinds) {
+        let length = 1;
+        while (tripletKinds.has(kind + length) && sameSuit(kind, kind + length)) length += 1;
+        run = Math.max(run, length);
+      }
+      if (run >= 4) {
+        add2.push(1020);
+        remove.add(1003);
+      } else if (run === 3) add2.push(1017);
+      let concealed = triplets.filter((group) => !group.open).length;
+      if (winType !== "tsumo" && winTile !== null && !isRedZhong(winTile)) {
+        const winKind = sichuanKind(winTile);
+        const elsewhere = shape.pair === winKind || sequences.some((kind) => winKind >= kind && winKind <= kind + 2 && sameSuit(kind, winKind));
+        if (!elsewhere && triplets.some((group) => !group.open && group.kind === winKind && group.type === "triplet")) concealed -= 1;
+      }
+      if (concealed >= 4) {
+        add2.push(1021);
+        remove.add(1003);
+      } else if (concealed === 3) add2.push(1015);
+      if (!sequences.length && ranks.every((rank) => rank % 2 === 1) && shape.pair % 9 % 2 === 1) {
+        add2.push(1018);
+        remove.add(1003).add(12);
+      }
+      const kongs = melds.filter((meld) => meld.type !== "pon").length;
+      if (kongs === 3) add2.push(1019);
+      if (pure && sequences.length === 4 && shape.pair % 9 === 4) {
+        const base2 = Math.floor(shape.pair / 9) * 9;
+        const sorted = [...sequences].sort((a, b) => a - b);
+        if (sorted.join() === [base2, base2, base2 + 6, base2 + 6].join()) {
+          add2.push(1023);
+          remove.add(13);
+        }
+      }
+      if (melds.length === 4 && shape.pairWild === 2 && isRedZhong(winTile)) {
+        if (ids.includes(1004)) {
+          remove.add(1004).add(1003);
+          add2.push(1022);
+        } else if (ids.includes(1007)) {
+          remove.add(1007).add(1003);
+          add2.push(1022, 13);
+        }
+      }
+    }
+    if (!melds.length) {
+      const counts = Array(9).fill(0);
+      const kinds = shapeKinds(shape);
+      if (pure) {
+        for (const kind of kinds) counts[kind % 9] += 1;
+        const base2 = [3, 1, 1, 1, 1, 1, 1, 1, 3];
+        if (counts.every((count, rank) => count >= base2[rank])) {
+          add2.push(1024);
+          remove.add(13);
+        }
+      }
+    }
+    if (add2.includes(1016)) remove.add(1013);
+    if (add2.includes(1020)) remove.add(1017);
+    if (add2.includes(1021)) remove.add(1015);
+    let roots = countedRoots;
+    if (add2.includes(1019)) roots = 0;
+    const merged = [...ids.filter((id) => !remove.has(id)), ...add2.filter((id) => !remove.has(id))];
+    return { ids: merged, countedRoots: roots };
   }
   function scoreSichuanHand(hand, {
     melds = [],
@@ -22756,32 +22954,48 @@
     winType = "ron",
     afterKong = false,
     lastTile = false,
-    opening = null
+    opening = null,
+    kongDiscard = false,
+    redKongs = 0,
+    winTile = hand.at(-1) ?? null
   } = {}) {
     checkRules(gameType, topBei);
-    if (!["ron", "tsumo", "robKong"].includes(winType) || ![null, "heaven", "earth"].includes(opening) || typeof afterKong !== "boolean" || typeof lastTile !== "boolean") throw new RangeError("\u65E0\u6548\u7684\u56DB\u5DDD\u548C\u724C\u60C5\u5883");
+    const wild = isWildGame(gameType);
+    if (!["ron", "tsumo", "robKong"].includes(winType) || ![null, "heaven", "earth"].includes(opening) || typeof afterKong !== "boolean" || typeof lastTile !== "boolean" || typeof kongDiscard !== "boolean" || !Number.isInteger(redKongs) || redKongs < 0 || redKongs > 6) throw new RangeError("\u65E0\u6548\u7684\u56DB\u5DDD\u548C\u724C\u60C5\u5883");
+    if (!wild && (kongDiscard || redKongs)) throw new RangeError("\u6760\u4E0A\u70AE\u4E0E\u7EA2\u4E2D\u6760\u53EA\u5C5E\u4E8E\u7EA2\u4E2D\u8840\u6D41");
     if ((afterKong || lastTile || opening) && winType !== "tsumo") throw new RangeError("\u81EA\u6478\u60C5\u5883\u4E0D\u80FD\u7528\u4E8E\u8363\u548C\u6216\u62A2\u6760");
-    if (opening && (afterKong || lastTile || melds.length)) throw new RangeError("\u5929\u80E1/\u5730\u80E1\u4E0D\u80FD\u4E0E\u6760\u3001\u6D77\u5E95\u6216\u5DF2\u6709\u526F\u9732\u6DF7\u7528");
-    const shapes = analyzeSichuanHand(hand, { melds, missingSuit });
-    if (afterKong && !melds.some((meld) => ["kan", "ankan"].includes(meld.type))) throw new RangeError("\u6760\u4E0A\u5F00\u82B1\u5FC5\u987B\u6709\u5B9E\u9645\u6760\u724C");
+    if (kongDiscard && winType !== "ron") throw new RangeError("\u6760\u4E0A\u70AE\u53EA\u80FD\u7528\u4E8E\u8363\u548C");
+    if (opening && (afterKong || lastTile || melds.length || redKongs)) throw new RangeError("\u5929\u80E1/\u5730\u80E1\u4E0D\u80FD\u4E0E\u6760\u3001\u6D77\u5E95\u6216\u5DF2\u6709\u526F\u9732\u6DF7\u7528");
+    if (winTile !== null && !hand.includes(winTile)) throw new RangeError("\u548C\u724C\u5F20\u5FC5\u987B\u5728\u624B\u724C\u4E2D");
+    const shapes = analyzeSichuanHand(hand, { melds, missingSuit, wild, winTile });
+    if (afterKong && !redKongs && !melds.some((meld) => ["kan", "ankan"].includes(meld.type))) throw new RangeError("\u6760\u4E0A\u5F00\u82B1\u5FC5\u987B\u6709\u5B9E\u9645\u6760\u724C");
     if (!shapes.length) return null;
-    const kinds = [...hand, ...melds.flatMap((meld) => meld.tiles)].map(sichuanKind);
     const counts = Array(27).fill(0);
-    for (const kind of kinds) counts[kind] += 1;
+    for (const id of [...hand, ...melds.flatMap((meld) => meld.tiles)]) {
+      const kind = sichuanKind(id, wild);
+      if (kind !== RED_ZHONG_KIND) counts[kind] += 1;
+    }
     const rootCount = counts.filter((count) => count === 4).length;
     let best = null;
     for (const shape of shapes) {
-      const { ids, countedRoots } = shapeYaku(shape, melds, kinds, rootCount);
+      let base2 = shapeYaku(shape, melds, shapeKinds(shape), rootCount);
+      if (wild) base2 = { ...base2, ...wildShapeYaku(shape, melds, base2, { winType, winTile }) };
+      const { ids, countedRoots } = base2;
+      if (!ids.length) ids.push(1001);
+      if (countedRoots > 0) ids.push(6 + countedRoots);
       if (opening) ids.push(opening === "heaven" ? 1 : 2);
       else if (winType === "tsumo") ids.push(4);
       if (afterKong) ids.push(6);
       if (lastTile) ids.push(5);
       if (winType === "robKong") ids.push(3);
+      if (kongDiscard) ids.push(23);
+      if (redKongs) ids.push(23 + redKongs);
       const items = ids.map((id) => yaku(gameType, id));
-      if (countedRoots) {
+      if (countedRoots > 0) {
         const item = items.find((entry) => entry.yiType === yaku(gameType, 6 + countedRoots).yiType);
         item.name = countedRoots === 1 ? "\u6839" : `${countedRoots}\u6839`;
       }
+      if (redKongs > 1) items.find((entry) => entry.yiType === yaku(gameType, 23 + redKongs).yiType).name = `\u7EA2\u4E2D\u6760\xD7${redKongs}`;
       const rawBei = items.reduce((total, item) => total * item.bei, 1);
       if (!Number.isSafeInteger(rawBei)) throw new RangeError("\u56DB\u5DDD\u500D\u6570\u6EA2\u51FA");
       const result = {
@@ -22801,7 +23015,8 @@
   }
   function maxSichuanReadyScore(hand, { melds = [], missingSuit, gameType = 5022, topBei } = {}) {
     checkRules(gameType, topBei);
-    const waits = sichuanWaitKinds(hand, { melds, missingSuit });
+    const wild = isWildGame(gameType);
+    const waits = sichuanWaitKinds(hand, { melds, missingSuit, wild });
     const used = /* @__PURE__ */ new Set([...hand, ...melds.flatMap((meld) => meld.tiles)]);
     let best = null;
     for (const kind of waits) {
@@ -22809,7 +23024,8 @@
       const suit = Math.floor(kind / 9) + 1;
       const rank = kind % 9 + 1;
       while (used.has(tileId(suit, rank, copy))) copy += 1;
-      const score2 = scoreSichuanHand([...hand, tileId(suit, rank, copy)], { melds, missingSuit, gameType, topBei });
+      const tile = tileId(suit, rank, copy);
+      const score2 = scoreSichuanHand([...hand, tile], { melds, missingSuit, gameType, topBei, winTile: tile });
       if (score2 && (!best || score2.rawBei > best.rawBei)) best = { ...score2, waitKind: kind };
     }
     return best;
@@ -22857,14 +23073,14 @@
     const used = /* @__PURE__ */ new Set();
     const status = Array.from(players, (player) => {
       if (!player || typeof player.won !== "boolean" || typeof player.allDiscardsMissing !== "boolean" || !Number.isSafeInteger(player.discardCount) || player.discardCount < 0) throw new RangeError("\u65E0\u6548\u7684\u73A9\u5BB6\u6E05\u7B97\u8BB0\u5F55");
-      analyzeSichuanHand(player.hand, player);
+      analyzeSichuanHand(player.hand, { melds: player.melds, missingSuit: player.missingSuit, wild: gameType === 5023 });
       for (const tile of [...player.hand, ...player.melds.flatMap((meld) => meld.tiles)]) {
         if (used.has(tile)) throw new RangeError("\u73A9\u5BB6\u4E4B\u95F4\u91CD\u590D\u5B9E\u4F53\u724C");
         used.add(tile);
       }
       if (player.won) return { type: "won", bei: 0 };
       if (player.hand.length !== 13 - 3 * player.melds.length) throw new RangeError("\u8352\u724C\u65F6\u624B\u724C\u5F20\u6570\u4E0D\u7B26");
-      const flower = player.hand.some((tile) => Math.floor(sichuanKind(tile) / 9) + 1 === player.missingSuit);
+      const flower = player.hand.some((tile) => !isRedZhong(tile) && Math.floor(sichuanKind(tile) / 9) + 1 === player.missingSuit);
       if (flower) return { type: "flower", bei: 0, exempt: player.discardCount > 0 && player.allDiscardsMissing };
       const score2 = maxSichuanReadyScore(player.hand, { melds: player.melds, missingSuit: player.missingSuit, gameType, topBei });
       return { type: score2 ? "ready" : "notReady", bei: score2?.bei ?? 0 };
@@ -22903,57 +23119,64 @@
   }
 
   // mockjs/sichuan_ai.mjs
-  function countsOf2(hand, missingSuit = 0) {
+  function countsOf2(hand, missingSuit = 0, wild = false) {
     const counts = Array(34).fill(0);
     for (const id of hand) {
-      const kind = sichuanKind(id);
-      if (Math.floor(kind / 9) + 1 !== missingSuit) counts[kind] += 1;
+      const kind = sichuanKind(id, wild);
+      if (kind !== RED_ZHONG_KIND && Math.floor(kind / 9) + 1 !== missingSuit) counts[kind] += 1;
     }
     return counts;
   }
-  function estimate(counts, meldCount) {
+  var wildCount = (hand, wild) => wild ? hand.filter(isRedZhong).length : 0;
+  function estimate(counts, meldCount, wilds = 0) {
     const usable = counts.reduce((sum, count) => sum + count, 0);
-    let result = Math.max(stdShanten(counts, meldCount), 13 - 3 * meldCount - usable);
+    let result = Math.max(stdShanten(counts, meldCount) - wilds, 13 - 3 * meldCount - usable - wilds);
     if (!meldCount) {
       const pairs = counts.reduce((sum, count) => sum + Math.floor(count / 2), 0);
       const singles = counts.filter((count) => count % 2 === 1).length;
-      result = Math.min(result, 13 - 2 * pairs - Math.min(7 - pairs, singles));
+      const matched = Math.min(wilds, singles);
+      const effective = Math.min(7, pairs + matched + Math.floor((wilds - matched) / 2));
+      result = Math.min(result, 13 - 2 * effective - Math.min(7 - effective, singles - matched));
     }
-    return result;
+    return Math.max(result, -1);
   }
-  function checkHolding(hand, melds, missingSuit) {
-    analyzeSichuanHand(hand, { melds, missingSuit });
+  function checkHolding(hand, melds, missingSuit, wild = false) {
+    analyzeSichuanHand(hand, { melds, missingSuit, wild, limit: 1 });
     if (![13 - 3 * melds.length, 14 - 3 * melds.length].includes(hand.length)) throw new RangeError("AI\u624B\u724C\u5F20\u6570\u4E0E\u9762\u5B50\u6570\u4E0D\u7B26");
-    if (melds.some((meld) => meld.tiles.some((id) => Math.floor(sichuanKind(id) / 9) + 1 === missingSuit))) {
+    if (melds.some((meld) => meld.tiles.some((id) => Math.floor(sichuanKind(id, wild) / 9) + 1 === missingSuit))) {
       throw new RangeError("AI\u526F\u9732\u4E0D\u80FD\u542B\u5B9A\u7F3A\u82B1\u8272");
     }
   }
-  function sichuanShanten(hand, { melds = [], missingSuit } = {}) {
-    checkHolding(hand, melds, missingSuit);
-    const shanten = estimate(countsOf2(hand, missingSuit), melds.length);
+  function sichuanShanten(hand, { melds = [], missingSuit, wild = false } = {}) {
+    checkHolding(hand, melds, missingSuit, wild);
+    const shanten = estimate(countsOf2(hand, missingSuit, wild), melds.length, wildCount(hand, wild));
+    if (shanten <= 0 && hand.length === 13 - 3 * melds.length) {
+      return sichuanWaitKinds(hand, { melds, missingSuit, wild }).length ? 0 : 1;
+    }
     if (shanten === 0) {
-      const candidates = hand.length === 13 - 3 * melds.length ? [hand] : [...new Map(legalSichuanDiscards(hand, missingSuit).map((id) => [sichuanKind(id), id])).values()].map((id) => hand.filter((tile) => tile !== id));
-      if (!candidates.some((tiles) => sichuanWaitKinds(tiles, { melds, missingSuit }).length)) return 1;
+      const candidates = [...new Map(legalSichuanDiscards(hand, missingSuit, wild).map((id) => [sichuanKind(id, wild), id])).values()].map((id) => hand.filter((tile) => tile !== id));
+      if (!candidates.some((tiles) => sichuanWaitKinds(tiles, { melds, missingSuit, wild }).length)) return 1;
     }
     return shanten;
   }
-  function checkInitialHand(hand) {
-    legalSichuanDiscards(hand, 1);
+  function checkInitialHand(hand, wild) {
+    legalSichuanDiscards(hand, 1, wild);
     if (![13, 14].includes(hand.length)) throw new RangeError("\u6362\u724C/\u5B9A\u7F3A\u9700\u8981\u5B8C\u6574\u8D77\u624B\u724C");
   }
-  function chooseSichuanMissingSuit(hand) {
-    checkInitialHand(hand);
+  var suitOf = (id, wild) => Math.floor(sichuanKind(id, wild) / 9) + 1;
+  function chooseSichuanMissingSuit(hand, wild = false) {
+    checkInitialHand(hand, wild);
     const suits = [1, 2, 3].map((suit) => ({
       suit,
-      count: hand.filter((id) => Math.floor(sichuanKind(id) / 9) + 1 === suit).length,
-      shanten: estimate(countsOf2(hand, suit), 0)
+      count: hand.filter((id) => suitOf(id, wild) === suit).length,
+      shanten: estimate(countsOf2(hand, suit, wild), 0, wildCount(hand, wild))
     }));
     suits.sort((a, b) => a.count - b.count || a.shanten - b.shanten || a.suit - b.suit);
     return suits[0].suit;
   }
-  function chooseSichuanExchange(hand) {
-    checkInitialHand(hand);
-    const suits = [1, 2, 3].map((suit) => hand.filter((id) => Math.floor(sichuanKind(id) / 9) + 1 === suit).sort((a, b) => a - b)).filter((tiles) => tiles.length >= 3);
+  function chooseSichuanExchange(hand, wild = false) {
+    checkInitialHand(hand, wild);
+    const suits = [1, 2, 3].map((suit) => hand.filter((id) => suitOf(id, wild) === suit).sort((a, b) => a - b)).filter((tiles) => tiles.length >= 3);
     const smallest = Math.min(...suits.map((tiles) => tiles.length));
     let best = null;
     for (const tiles of suits.filter((tiles2) => tiles2.length === smallest)) {
@@ -22962,7 +23185,7 @@
           for (let c = b + 1; c < tiles.length; c += 1) {
             const selected = [tiles[a], tiles[b], tiles[c]];
             const retained = hand.filter((id) => !selected.includes(id));
-            const shanten = estimate(countsOf2(retained), 0);
+            const shanten = estimate(countsOf2(retained, 0, wild), 0, wildCount(retained, wild));
             if (!best || shanten < best.shanten) best = { tiles: selected, shanten };
           }
         }
@@ -22970,74 +23193,78 @@
     }
     return best.tiles;
   }
-  function knownTiles(hand, melds, visibleTiles) {
-    if (!Array.isArray(visibleTiles) || visibleTiles.length > 108) throw new RangeError("\u65E0\u6548\u7684\u516C\u5F00\u5B9E\u4F53\u724C\u5217\u8868");
+  function knownTiles(hand, melds, visibleTiles, wild) {
+    if (!Array.isArray(visibleTiles) || visibleTiles.length > (wild ? 114 : 108)) throw new RangeError("\u65E0\u6548\u7684\u516C\u5F00\u5B9E\u4F53\u724C\u5217\u8868");
     const seen = /* @__PURE__ */ new Set();
-    const counts = Array(27).fill(0);
+    const counts = Array(28).fill(0);
     for (const id of [...hand, ...melds.flatMap((meld) => meld.tiles), ...visibleTiles]) {
-      const kind = sichuanKind(id);
+      const kind = sichuanKind(id, wild);
       if (seen.has(id)) throw new RangeError("AI\u53EF\u89C1\u4FE1\u606F\u4E2D\u51FA\u73B0\u91CD\u590D\u5B9E\u4F53\u724C");
       seen.add(id);
       counts[kind] += 1;
     }
     return { seen, counts };
   }
-  function improvements(hand, melds, missingSuit, shanten, known) {
+  function improvements(hand, melds, missingSuit, shanten, known, wild) {
     const waits = [];
     let ukeire = 0;
-    for (let kind = 0; kind < 27; kind += 1) {
-      if (Math.floor(kind / 9) + 1 === missingSuit || known.counts[kind] === 4) continue;
-      const suit = Math.floor(kind / 9) + 1;
-      const rank = kind % 9 + 1;
+    for (let kind = 0; kind < (wild ? 28 : 27); kind += 1) {
+      const copies = kind === RED_ZHONG_KIND ? 6 : 4;
+      if (Math.floor(kind / 9) + 1 === missingSuit || known.counts[kind] === copies) continue;
+      const suit = kind === RED_ZHONG_KIND ? 4 : Math.floor(kind / 9) + 1;
+      const rank = kind === RED_ZHONG_KIND ? 5 : kind % 9 + 1;
       let copy = 1;
       while (known.seen.has(tileId(suit, rank, copy))) copy += 1;
-      const drawn = [...hand, tileId(suit, rank, copy)];
-      const improves = shanten === 0 ? analyzeSichuanHand(drawn, { melds, missingSuit }).length > 0 : sichuanShanten(drawn, { melds, missingSuit }) < shanten;
+      const tile = tileId(suit, rank, copy);
+      const drawn = [...hand, tile];
+      const improves = shanten === 0 ? analyzeSichuanHand(drawn, { melds, missingSuit, wild, winTile: tile, limit: 1 }).length > 0 : sichuanShanten(drawn, { melds, missingSuit, wild }) < shanten;
       if (improves) {
         waits.push(kind);
-        ukeire += 4 - known.counts[kind];
+        ukeire += copies - known.counts[kind];
       }
     }
     return { waits, ukeire };
   }
-  function chooseSichuanDiscard({ hand, melds = [], missingSuit, visibleTiles = [] }) {
-    checkHolding(hand, melds, missingSuit);
+  function chooseSichuanDiscard({ hand, melds = [], missingSuit, visibleTiles = [], wild = false }) {
+    checkHolding(hand, melds, missingSuit, wild);
     if (hand.length !== 14 - 3 * melds.length) throw new RangeError("\u5F53\u524D\u4E0D\u662F\u53EF\u51FA\u724C\u5F20\u6570");
-    const known = knownTiles(hand, melds, visibleTiles);
-    const legal = legalSichuanDiscards(hand, missingSuit).sort((a, b) => a - b);
+    const known = knownTiles(hand, melds, visibleTiles, wild);
+    const legal = legalSichuanDiscards(hand, missingSuit, wild).sort((a, b) => a - b);
     const byKind = /* @__PURE__ */ new Map();
-    for (const tile of legal) if (!byKind.has(sichuanKind(tile))) byKind.set(sichuanKind(tile), tile);
+    for (const tile of legal) if (!byKind.has(sichuanKind(tile, wild))) byKind.set(sichuanKind(tile, wild), tile);
     const choices = [...byKind.values()].map((tile) => {
       const remaining = hand.filter((id) => id !== tile);
-      return { tile, remaining, shanten: sichuanShanten(remaining, { melds, missingSuit }) };
+      return { tile, remaining, shanten: sichuanShanten(remaining, { melds, missingSuit, wild }) };
     });
     const bestShanten = Math.min(...choices.map((choice) => choice.shanten));
     let best = null;
     for (const choice of choices.filter((entry) => entry.shanten === bestShanten)) {
-      const { waits, ukeire } = improvements(choice.remaining, melds, missingSuit, choice.shanten, known);
+      const { waits, ukeire } = improvements(choice.remaining, melds, missingSuit, choice.shanten, known, wild);
       if (!best || ukeire > best.ukeire) best = { tile: choice.tile, shanten: choice.shanten, waits, ukeire };
     }
     return best;
   }
-  function chooseSichuanClaim({ hand, melds = [], missingSuit, visibleTiles = [] }, { tile, canHu = false, canPon = false, canKong = false }) {
-    checkHolding(hand, melds, missingSuit);
+  function chooseSichuanClaim({ hand, melds = [], missingSuit, visibleTiles = [], wild = false }, { tile, canHu = false, canPon = false, canKong = false }) {
+    checkHolding(hand, melds, missingSuit, wild);
     if (hand.length !== 13 - 3 * melds.length) throw new RangeError("\u5F53\u524D\u4E0D\u662F\u53EF\u54CD\u5E94\u53EB\u724C\u7684\u5F20\u6570");
     if (![canHu, canPon, canKong].every((value) => typeof value === "boolean")) throw new RangeError("\u65E0\u6548\u7684\u6743\u5A01\u52A8\u4F5C\u9009\u9879");
     const kind = sichuanKind(tile);
     if (hand.includes(tile) || melds.some((meld) => meld.tiles.includes(tile))) throw new RangeError("\u53EB\u724C\u4E0D\u80FD\u5DF2\u5728\u672C\u4EBA\u624B\u4E2D");
     const publicTiles = visibleTiles.includes(tile) ? visibleTiles : [...visibleTiles, tile];
-    knownTiles(hand, melds, publicTiles);
+    knownTiles(hand, melds, publicTiles, wild);
     if (canHu) {
-      if (!analyzeSichuanHand([...hand, tile], { melds, missingSuit }).length) throw new RangeError("\u80E1\u724C\u9009\u9879\u4E0E\u5B9E\u4F53\u624B\u724C\u4E0D\u7B26");
+      if (!analyzeSichuanHand([...hand, tile], { melds, missingSuit, wild, winTile: tile, limit: 1 }).length) {
+        throw new RangeError("\u80E1\u724C\u9009\u9879\u4E0E\u5B9E\u4F53\u624B\u724C\u4E0D\u7B26");
+      }
       return { type: "hu", tiles: [] };
     }
-    const matching = hand.filter((id) => sichuanKind(id) === kind).sort((a, b) => a - b);
+    const matching = hand.filter((id) => sichuanKind(id, wild) === kind).sort((a, b) => a - b);
     if ((canPon || canKong) && Math.floor(kind / 9) + 1 === missingSuit) throw new RangeError("\u4E0D\u80FD\u78B0\u6760\u5B9A\u7F3A\u82B1\u8272");
     if (canPon && matching.length < 2 || canKong && matching.length !== 3) throw new RangeError("\u78B0\u6760\u9009\u9879\u4E0E\u5B9E\u4F53\u624B\u724C\u4E0D\u7B26");
-    const before = sichuanShanten(hand, { melds, missingSuit });
+    const before = sichuanShanten(hand, { melds, missingSuit, wild });
     if (canKong) {
       const nextMelds = [...melds, { type: "kan", tiles: [...matching, tile] }];
-      if (sichuanShanten(hand.filter((id) => !matching.includes(id)), { melds: nextMelds, missingSuit }) <= before) {
+      if (sichuanShanten(hand.filter((id) => !matching.includes(id)), { melds: nextMelds, missingSuit, wild }) <= before) {
         return { type: "kan", tiles: matching };
       }
     }
@@ -23048,16 +23275,24 @@
         hand: hand.filter((id) => !ownTiles.includes(id)),
         melds: nextMelds,
         missingSuit,
-        visibleTiles: publicTiles.filter((id) => id !== tile)
+        visibleTiles: publicTiles.filter((id) => id !== tile),
+        wild
       });
       if (after.shanten < before) return { type: "pon", tiles: ownTiles };
     }
     return { type: "pass", tiles: [] };
   }
+  function chooseSichuanRedKong({ hand, melds = [], missingSuit, visibleTiles = [], wild = false }, tile) {
+    if (!wild || !isRedZhong(tile) || !hand.includes(tile)) throw new RangeError("\u7EA2\u4E2D\u6760\u53EA\u80FD\u6253\u51FA\u672C\u4EBA\u624B\u4E2D\u7684\u7EA2\u4E2D");
+    const without = hand.filter((id) => id !== tile);
+    const best = chooseSichuanDiscard({ hand, melds, missingSuit, visibleTiles, wild });
+    return sichuanShanten(without, { melds, missingSuit, wild }) <= best.shanten;
+  }
 
   // mockjs/sichuan_engine.mjs
   var clone = (value) => structuredClone(value);
-  var suitOf = (tile) => Math.floor(sichuanKind(tile) / 9) + 1;
+  var kindOf3 = (tile) => sichuanKind(tile, true);
+  var suitOf2 = (tile) => Math.floor(kindOf3(tile) / 9) + 1;
   var exited = (state, seat) => state.rules.gameType === 5022 && state.players[seat].won;
   var activeSeats = (state) => [0, 1, 2, 3].filter((seat) => !exited(state, seat));
   var action = (type, tiles = []) => ({ type, tiles });
@@ -23086,10 +23321,10 @@
   }
   function turnInfo(state, seat) {
     const options = ownOptions(state, seat);
-    const legal = new Set(options.filter((option) => option.type === "discard").map((option) => option.tiles[0]));
+    const legal = new Set(options.filter((option) => ["discard", "redKong"].includes(option.type)).map((option) => option.tiles[0]));
     return { actionTypes: actionTypes(options), cantPlays: state.players[seat].hand.filter((tile) => !legal.has(tile)) };
   }
-  function score(state, seat, tile = null, winType = "ron") {
+  function score(state, seat, tile = null, winType = "ron", kongDiscard = false) {
     const player = state.players[seat];
     let opening = null;
     if (winType === "tsumo" && !state.interrupted && player.discardCount === 0 && !player.melds.length) {
@@ -23104,37 +23339,44 @@
       winType,
       opening,
       afterKong: winType === "tsumo" && state.turnSource === "kong",
-      lastTile: winType === "tsumo" && state.wall.length === 0
+      lastTile: winType === "tsumo" && state.wall.length === 0,
+      winTile: tile ?? state.drawnTile,
+      ...state.rules.wild ? { kongDiscard, redKongs: player.redKongs.length } : {}
     });
   }
-  var locked = (state, seat) => state.rules.gameType === 5021 && state.players[seat].won;
-  function waitKey(hand, player, melds = player.melds) {
-    return sichuanWaitKinds(hand, { melds, missingSuit: player.missingSuit }).join(",");
+  var locked = (state, seat) => state.rules.gameType !== 5022 && state.players[seat].won;
+  function waitKey(state, hand, player, melds = player.melds) {
+    return sichuanWaitKinds(hand, { melds, missingSuit: player.missingSuit, wild: state.rules.wild }).join(",");
   }
-  function lockedKongKeepsWaits(player, before, remove, meld) {
-    const after = waitKey(player.hand.filter((tile) => !remove.includes(tile)), player, meld);
+  function lockedKongKeepsWaits(state, player, before, remove, meld) {
+    const after = waitKey(state, player.hand.filter((tile) => !remove.includes(tile)), player, meld);
     return after !== "" && after === before;
   }
+  var redKongOption = (state, tile) => state.rules.wild && isRedZhong(tile) && state.wall.length > 0;
   function ownOptions(state, seat) {
     const player = state.players[seat];
     const isLocked = locked(state, seat);
-    const options = isLocked ? [action("discard", [state.drawnTile])] : legalSichuanDiscards(player.hand, player.missingSuit).map((tile) => action("discard", [tile]));
+    const options = isLocked ? [action(redKongOption(state, state.drawnTile) ? "redKong" : "discard", [state.drawnTile])] : legalSichuanDiscards(player.hand, player.missingSuit, state.rules.wild).filter((tile) => !redKongOption(state, tile)).map((tile) => action("discard", [tile]));
+    const holdsMissing = player.hand.some((tile) => !isRedZhong(tile) && suitOf2(tile) === player.missingSuit);
+    if (!isLocked && !holdsMissing) {
+      for (const tile of player.hand) if (redKongOption(state, tile)) options.push(action("redKong", [tile]));
+    }
     if (state.turnSource !== "pon" && score(state, seat, null, "tsumo")) options.push(action("hu"));
     if (state.turnSource === "pon" || !state.wall.length) return options;
     const groups = /* @__PURE__ */ new Map();
     for (const tile of player.hand) {
-      if (suitOf(tile) === player.missingSuit) continue;
-      const kind = sichuanKind(tile);
+      if (suitOf2(tile) === player.missingSuit || isRedZhong(tile)) continue;
+      const kind = kindOf3(tile);
       if (!groups.has(kind)) groups.set(kind, []);
       groups.get(kind).push(tile);
     }
-    const before = isLocked ? waitKey(player.hand.filter((tile) => tile !== state.drawnTile), player) : null;
-    const allowed = (tiles, melds) => !isLocked || tiles.includes(state.drawnTile) && lockedKongKeepsWaits(player, before, tiles, melds);
+    const before = isLocked ? waitKey(state, player.hand.filter((tile) => tile !== state.drawnTile), player) : null;
+    const allowed = (tiles, melds) => !isLocked || tiles.includes(state.drawnTile) && lockedKongKeepsWaits(state, player, before, tiles, melds);
     for (const tiles of groups.values()) {
       if (tiles.length === 4 && allowed(tiles, [...player.melds, { type: "ankan", tiles }])) options.push(action("ankan", tiles));
     }
     for (const meld of player.melds.filter((item) => item.type === "pon")) {
-      const tiles = groups.get(sichuanKind(meld.tiles[0]));
+      const tiles = groups.get(kindOf3(meld.tiles[0]));
       if (tiles?.length === 1 && allowed(tiles, player.melds.map((item) => item === meld ? { ...item, type: "kan", tiles: [...item.tiles, ...tiles] } : item))) options.push(action("kakan", tiles));
     }
     return options;
@@ -23146,8 +23388,17 @@
     if (state.phase === "exchange") {
       if (state.exchanges[seat] !== null) return [];
       const options = [];
+      if (state.rules.wild) {
+        const tiles = player.hand;
+        for (let a = 0; a < tiles.length - 2; a += 1) {
+          for (let b = a + 1; b < tiles.length - 1; b += 1) {
+            for (let c = b + 1; c < tiles.length; c += 1) options.push(action("exchange", [tiles[a], tiles[b], tiles[c]]));
+          }
+        }
+        return options;
+      }
       for (let suit = 1; suit <= 3; suit += 1) {
-        const tiles = player.hand.filter((tile) => suitOf(tile) === suit);
+        const tiles = player.hand.filter((tile) => suitOf2(tile) === suit);
         for (let a = 0; a < tiles.length - 2; a += 1) {
           for (let b = a + 1; b < tiles.length - 1; b += 1) {
             for (let c = b + 1; c < tiles.length; c += 1) options.push(action("exchange", [tiles[a], tiles[b], tiles[c]]));
@@ -23238,6 +23489,16 @@
     emit(state, "kong", { seat, kind, tiles, from, waived, delta: deltaOf(transfers), scores: state.scores, baseScore: state.rules.baseScore });
     draw(state, seat, "kong", state.kongs.length - 1);
   }
+  function commitRedKong(state, seat, tile) {
+    const player = state.players[seat];
+    player.hand = player.hand.filter((id) => id !== tile);
+    player.redKongs.push(tile);
+    state.kongs.push({ seat, kind: "red", transfers: [], transferred: false });
+    state.pending = null;
+    state.interrupted = true;
+    emit(state, "redKong", { seat, tile, count: player.redKongs.length });
+    draw(state, seat, "kong", state.kongs.length - 1);
+  }
   function win(state, winners, from = null) {
     const pending = state.pending;
     const active = activeSeats(state);
@@ -23253,7 +23514,7 @@
       const result = from === null ? score(state, seat, null, winType) : pending.offers[seat].score;
       const payment = sichuanWinPayments({ winner: seat, loser: from, activeSeats: active, bei: result.bei, baseScore: state.rules.baseScore });
       const transfers = applyTransfers(state, payment.transfers, "win");
-      if (from === null && state.rules.gameType === 5021) player.hand = player.hand.filter((id) => id !== tile);
+      if (from === null && state.rules.gameType !== 5022) player.hand = player.hand.filter((id) => id !== tile);
       player.won = true;
       player.win = { tile, from, score: result };
       player.wins.push({ tile, from, score: result });
@@ -23319,15 +23580,23 @@
       if (seat === pending.from) continue;
       const player = state.players[seat];
       const options = [action("pass")];
-      const result = score(state, seat, pending.tile, pending.kind === "added" ? "robKong" : "ron");
+      if (isRedZhong(pending.tile)) continue;
+      const result = score(
+        state,
+        seat,
+        pending.tile,
+        pending.kind === "added" ? "robKong" : "ron",
+        pending.kind === "discard" && pending.kongIndex !== null
+      );
       if (result && result.bei > player.passBei) options.push(action("hu"));
-      const matching = player.hand.filter((tile) => sichuanKind(tile) === sichuanKind(pending.tile));
-      if (pending.kind === "discard" && state.wall.length && suitOf(pending.tile) !== player.missingSuit) {
+      const matching = player.hand.filter((tile) => !isRedZhong(tile) && kindOf3(tile) === kindOf3(pending.tile));
+      if (pending.kind === "discard" && state.wall.length && suitOf2(pending.tile) !== player.missingSuit) {
         if (locked(state, seat)) {
           const tiles = [...matching, pending.tile];
           if (matching.length === 3 && lockedKongKeepsWaits(
+            state,
             player,
-            waitKey(player.hand, player),
+            waitKey(state, player.hand, player),
             matching,
             [...player.melds, { type: "kan", tiles }]
           )) options.push(action("kan", matching));
@@ -23382,10 +23651,11 @@
       return;
     }
     if (chosen.type === "hu") return win(state, [seat]);
+    if (chosen.type === "redKong") return commitRedKong(state, seat, chosen.tiles[0]);
     if (chosen.type === "ankan") return commitKong(state, seat, "concealed", chosen.tiles);
     if (chosen.type === "kakan") {
       const tile2 = chosen.tiles[0];
-      const meldIndex = player.melds.findIndex((meld) => meld.type === "pon" && sichuanKind(meld.tiles[0]) === sichuanKind(tile2));
+      const meldIndex = player.melds.findIndex((meld) => meld.type === "pon" && kindOf3(meld.tiles[0]) === kindOf3(tile2));
       openClaims(state, { kind: "added", from: seat, tile: tile2, meldIndex });
       return;
     }
@@ -23394,7 +23664,7 @@
     if (declinedWin) player.passBei = Math.max(player.passBei, declinedWin.bei);
     player.hand = player.hand.filter((id) => id !== tile);
     player.discardCount += 1;
-    player.allDiscardsMissing && (player.allDiscardsMissing = suitOf(tile) === player.missingSuit);
+    player.allDiscardsMissing && (player.allDiscardsMissing = suitOf2(tile) === player.missingSuit);
     player.river.push({ tile, claimed: false, winners: [] });
     emit(state, "discard", {
       seat,
@@ -23413,11 +23683,13 @@
   var SichuanEngine = class {
     constructor({ gameType = 5022, seed = 1, dealer = 0, exchange = true, topBei = 128, baseScore = 1, wall = null } = {}) {
       __privateAdd(this, _state);
-      if (![5021, 5022].includes(gameType) || !Number.isSafeInteger(seed) || !Number.isInteger(dealer) || dealer < 0 || dealer > 3 || typeof exchange !== "boolean" || ![128, 256].includes(topBei) || !exchange && topBei !== 256 || !Number.isSafeInteger(baseScore) || baseScore <= 0 || baseScore > Math.floor(Number.MAX_SAFE_INTEGER / (256 * 1024))) throw new RangeError("\u65E0\u6548\u7684\u56DB\u5DDD\u623F\u95F4\u89C4\u5219");
+      if (![5021, 5022, 5023].includes(gameType) || !Number.isSafeInteger(seed) || !Number.isInteger(dealer) || dealer < 0 || dealer > 3 || typeof exchange !== "boolean" || ![128, 256].includes(topBei) || !exchange && topBei !== 256 || !Number.isSafeInteger(baseScore) || baseScore <= 0 || baseScore > Math.floor(Number.MAX_SAFE_INTEGER / (256 * 1024))) throw new RangeError("\u65E0\u6548\u7684\u56DB\u5DDD\u623F\u95F4\u89C4\u5219");
       const rng = seededRandom(seed);
-      const source = wall === null ? shuffle(buildSichuanWall(), rng) : [...wall];
-      if (source.length !== 108 || new Set(source).size !== 108) throw new RangeError("\u724C\u5C71\u5FC5\u987B\u5305\u542B108\u5F20\u552F\u4E00\u5B9E\u4F53\u724C");
-      source.forEach(sichuanKind);
+      const wild = gameType === 5023;
+      const size = wild ? 114 : 108;
+      const source = wall === null ? shuffle(buildSichuanWall({ wild }), rng) : [...wall];
+      if (source.length !== size || new Set(source).size !== size) throw new RangeError(`\u724C\u5C71\u5FC5\u987B\u5305\u542B${size}\u5F20\u552F\u4E00\u5B9E\u4F53\u724C`);
+      source.forEach((tile) => sichuanKind(tile, wild));
       const players = Array.from({ length: 4 }, () => ({
         hand: source.splice(0, 13),
         melds: [],
@@ -23429,13 +23701,14 @@
         passBei: 0,
         drawCount: 0,
         discardCount: 0,
-        allDiscardsMissing: true
+        allDiscardsMissing: true,
+        redKongs: []
       }));
       const drawnTile = source.shift();
       players[dealer].hand.push(drawnTile);
       const lossCap = gameType === 5021 ? 40 * topBei * baseScore : null;
       __privateSet(this, _state, {
-        rules: { gameType, topBei, baseScore, exchange, lossCap },
+        rules: { gameType, topBei, baseScore, exchange, lossCap, wild },
         seed,
         dealer,
         players,
@@ -23492,6 +23765,7 @@
       for (const [other, entry] of state.players.entries()) {
         for (const discard of entry.river) if (!discard.claimed) visible.add(discard.tile);
         for (const record of entry.wins) visible.add(record.tile);
+        for (const tile of entry.redKongs) visible.add(tile);
         if (other !== seat) {
           for (const meld of entry.melds) if (meld.type !== "ankan" || state.phase === "ended") for (const tile of meld.tiles) visible.add(tile);
           if (state.phase === "ended") for (const tile of entry.hand) visible.add(tile);
@@ -23502,6 +23776,7 @@
         phase: state.phase,
         windowId: state.windowId,
         turn: state.turn,
+        wild: state.rules.wild,
         hand: player.hand,
         melds: player.melds,
         missingSuit: player.missingSuit,
@@ -23519,8 +23794,8 @@
     chooseAction(seat) {
       const view = this.view(seat);
       if (!view.options.length) return null;
-      if (view.phase === "exchange") return action("exchange", chooseSichuanExchange(view.hand));
-      if (view.phase === "missing") return action("missing", [chooseSichuanMissingSuit(view.hand)]);
+      if (view.phase === "exchange") return action("exchange", chooseSichuanExchange(view.hand, view.wild));
+      if (view.phase === "missing") return action("missing", [chooseSichuanMissingSuit(view.hand, view.wild)]);
       if (view.phase === "claim") {
         const has = (type) => view.options.some((option) => option.type === type);
         return chooseSichuanClaim(view, { tile: view.claimTile, canHu: has("hu"), canPon: has("pon"), canKong: has("kan") });
@@ -23529,6 +23804,8 @@
       const kong = view.options.find((option) => ["ankan", "kakan"].includes(option.type));
       if (kong) return kong;
       const discards = view.options.filter((option) => option.type === "discard");
+      const redKong = view.options.find((option) => option.type === "redKong");
+      if (redKong && (!discards.length || chooseSichuanRedKong(view, redKong.tiles[0]))) return redKong;
       return discards.length === 1 ? discards[0] : action("discard", [chooseSichuanDiscard(view).tile]);
     }
   };
@@ -23754,7 +24031,7 @@
     if (view.phase === "claim") return { type: "pass", tiles: [] };
     if (view.phase === "turn") {
       const drawnTile = __privateGet(this, _engine).snapshot().drawnTile;
-      const drawnDiscard = view.options.find((option) => option.type === "discard" && option.tiles[0] === drawnTile);
+      const drawnDiscard = view.options.find((option) => ["discard", "redKong"].includes(option.type) && option.tiles[0] === drawnTile);
       return drawnDiscard ?? { type: "discard", tiles: [chooseSichuanDiscard(view).tile] };
     }
     return __privateGet(this, _engine).chooseAction(__privateGet(this, _humanSeat));
@@ -25563,6 +25840,7 @@
   var seconds = (milliseconds) => Math.ceil(milliseconds / 1e3);
   var playActions = {
     discard: MaJiangAction.Normal,
+    redKong: MaJiangAction.Normal,
     ankan: MaJiangAction.AnGang,
     kakan: MaJiangAction.PengGang,
     hu: MaJiangAction.Hu
@@ -25626,7 +25904,7 @@
             // 原34283按数组下标取玩家，再逐张移出/加入手牌；他家用等量背牌维持手牌数。
             cards: entry === view.seat ? state.exchanges[entry] : [0, 0, 0],
             getCards: entry === view.seat ? state.exchanges[(entry - state.exchangeOffset + 4) % 4] : [0, 0, 0],
-            dingQueSuggest: entry === view.seat ? chooseSichuanMissingSuit(view.hand) : 0,
+            dingQueSuggest: entry === view.seat ? chooseSichuanMissingSuit(view.hand, view.wild) : 0,
             canPlayActions: [],
             chuPai2Timeout: 0
           })) }));
@@ -25679,7 +25957,9 @@
       scoreType,
       hasDingQue: true,
       isMingPai: false,
-      changeCardRule: state.rules.exchange ? 1 : 0,
+      // 红中血流：原客户端按 gameType=5023 放开任意三张；规则字段用 RenYiHuan=2，赖子为 guiCards=[450]。
+      changeCardRule: state.rules.exchange ? state.rules.wild ? 2 : 1 : 0,
+      guiCards: state.rules.wild ? [RED_ZHONG_DISPLAY] : [],
       changeCardType: state.rules.exchange ? exchangeTypes[state.exchangeOffset] : 0,
       huanZhangTimeout: seconds(timeouts.exchange),
       dingQueTimeout: seconds(timeouts.missing),
@@ -25692,8 +25972,8 @@
         seat,
         score: initialScores[seat],
         handCards: seat === view.seat ? view.hand : Array(view.handCounts[seat]).fill(0),
-        changeCardSuggest: seat === view.seat && state.rules.exchange ? chooseSichuanExchange(view.hand) : [],
-        dingQueSuggest: seat === view.seat && !state.rules.exchange ? chooseSichuanMissingSuit(view.hand) : 0,
+        changeCardSuggest: seat === view.seat && state.rules.exchange ? chooseSichuanExchange(view.hand, view.wild) : [],
+        dingQueSuggest: seat === view.seat && !state.rules.exchange ? chooseSichuanMissingSuit(view.hand, view.wild) : 0,
         canPlayActions: [],
         chuPai2Timeout: 0
       }))
@@ -25702,34 +25982,40 @@
 
   // mockjs/sichuan_turn_notifications.mjs
   var seats2 = [0, 1, 2, 3];
-  var turnActions = { discard: MaJiangAction.Normal, ankan: MaJiangAction.AnGang, kakan: MaJiangAction.PengGang, hu: MaJiangAction.Hu };
+  var turnActions = {
+    discard: MaJiangAction.Normal,
+    redKong: MaJiangAction.Normal,
+    ankan: MaJiangAction.AnGang,
+    kakan: MaJiangAction.PengGang,
+    hu: MaJiangAction.Hu
+  };
   var claimActions = { pass: MaJiangAction.Guo, pon: MaJiangAction.Peng, kan: MaJiangAction.MingGang, hu: MaJiangAction.Hu };
   function checkSeat(seat) {
     if (!Number.isInteger(seat) || !seats2.includes(seat)) throw new RangeError("\u65E0\u6548\u7684\u901A\u77E5\u5EA7\u4F4D");
   }
-  function checkEvent(event, type) {
+  function checkEvent(event, type, wild = false) {
     if (!event || event.type !== type || !Number.isSafeInteger(event.index) || event.index < 0) {
       throw new TypeError(`\u9700\u8981\u6709\u6548\u7684\u56DB\u5DDD${type}\u4E8B\u4EF6`);
     }
-    sichuanKind(event.tile);
+    sichuanKind(event.tile, wild);
   }
   function actions(types2, mapping) {
     if (!Array.isArray(types2) || new Set(types2).size !== types2.length || types2.some((type) => typeof type !== "string" || !Object.hasOwn(mapping, type))) {
       throw new TypeError("\u65E0\u6548\u7684\u56DB\u5DDD\u4E8B\u4EF6\u52A8\u4F5C\u5019\u9009");
     }
-    return types2.map((type) => mapping[type]);
+    return [...new Set(types2.map((type) => mapping[type]))];
   }
   function frame2(eventIndex, name, payload) {
     const cmd = MaJiangMsg[`E${name}`];
     return { eventIndex, name, cmd, payload, bytes: encodeMaJiangEnvelope(cmd, payload) };
   }
-  function buildSichuanDrawNotification(event, humanSeat) {
-    checkEvent(event, "draw");
+  function buildSichuanDrawNotification(event, humanSeat, { wild = false } = {}) {
+    checkEvent(event, "draw", wild);
     checkSeat(event.seat);
     checkSeat(humanSeat);
-    if (!["draw", "kong"].includes(event.source) || !Number.isInteger(event.remaining) || event.remaining < 0 || event.remaining > 54) throw new RangeError("\u65E0\u6548\u7684\u56DB\u5DDD\u6478\u724C\u4E8B\u4EF6");
+    if (!["draw", "kong"].includes(event.source) || !Number.isInteger(event.remaining) || event.remaining < 0 || event.remaining > (wild ? 60 : 54)) throw new RangeError("\u65E0\u6548\u7684\u56DB\u5DDD\u6478\u724C\u4E8B\u4EF6");
     const canPlayActions = actions(event.actionTypes, turnActions);
-    if (!event.actionTypes.includes("discard")) throw new TypeError("\u6478\u724C\u4E8B\u4EF6\u7F3A\u5C11\u51FA\u724C\u5019\u9009");
+    if (!event.actionTypes.some((type) => ["discard", "redKong"].includes(type))) throw new TypeError("\u6478\u724C\u4E8B\u4EF6\u7F3A\u5C11\u51FA\u724C\u5019\u9009");
     return frame2(event.index, "NtfSendCard", {
       seat: event.seat,
       remainDuiCardNum: event.remaining,
@@ -25745,9 +26031,9 @@
       // chuPai1Timeout已由开局通知给出；chuPai2Timeout为附加时间，不能再填一次基础时间。
     });
   }
-  function buildSichuanDiscardNotification(event, claimWindow, humanSeat) {
-    checkEvent(event, "discard");
-    checkEvent(claimWindow, "claimWindow");
+  function buildSichuanDiscardNotification(event, claimWindow, humanSeat, { wild = false } = {}) {
+    checkEvent(event, "discard", wild);
+    checkEvent(claimWindow, "claimWindow", wild);
     checkSeat(event.seat);
     checkSeat(humanSeat);
     if (typeof event.isMoQie !== "boolean" || claimWindow.kind !== "discard" || claimWindow.index !== event.index + 1 || claimWindow.from !== event.seat || claimWindow.tile !== event.tile || !Array.isArray(claimWindow.actionTypes) || claimWindow.actionTypes.length !== 4) throw new TypeError("\u51FA\u724C\u4E8B\u4EF6\u4E0E\u62A2\u724C\u7A97\u53E3\u4E0D\u5339\u914D");
@@ -25776,7 +26062,13 @@
 
   // mockjs/sichuan_notifications.mjs
   var seats3 = [0, 1, 2, 3];
-  var turnActions2 = { discard: MaJiangAction.Normal, hu: MaJiangAction.Hu, ankan: MaJiangAction.AnGang, kakan: MaJiangAction.PengGang };
+  var turnActions2 = {
+    discard: MaJiangAction.Normal,
+    redKong: MaJiangAction.Normal,
+    hu: MaJiangAction.Hu,
+    ankan: MaJiangAction.AnGang,
+    kakan: MaJiangAction.PengGang
+  };
   var claimActions2 = { pass: MaJiangAction.Guo, hu: MaJiangAction.Hu, pon: MaJiangAction.Peng, kan: MaJiangAction.MingGang };
   var kongTypes = { exposed: 1, added: 2, concealed: 3 };
   var settlementTypes = { flower: 8, ready: 9, refund: 10, callTransfer: 11 };
@@ -25815,7 +26107,7 @@
     return seats3.map((seat) => ({
       seat,
       tingInfos: [],
-      canPlayActions: seat === humanSeat && seat === caller ? event.actionTypes.map((type) => turnActions2[type]) : [],
+      canPlayActions: seat === humanSeat && seat === caller ? [...new Set(event.actionTypes.map((type) => turnActions2[type]))] : [],
       cantPlays: seat === humanSeat && seat === caller ? [...event.cantPlays] : [],
       chuPai2Timeout: 0,
       canGangNoNumCardsAfterRiichiHu: []
@@ -25886,6 +26178,7 @@
       let scores = [...__privateGet(this, _scores)];
       let ended = false;
       const humanSeat = __privateGet(this, _humanSeat2);
+      const wild = { wild: state.rules.wild };
       for (let index = __privateGet(this, _cursor); index < state.events.length; index += 1) {
         const event = state.events[index];
         if (event.index !== index || ended) throw new Error("\u56DB\u5DDD\u4E8B\u4EF6\u7D22\u5F15\u6216\u7EC8\u5C40\u987A\u5E8F\u9519\u8BEF");
@@ -25893,7 +26186,7 @@
           case "discard": {
             if (pending) throw new Error("\u62A2\u724C\u88C1\u51B3\u5C1A\u672A\u5B8C\u6210\uFF0C\u4E0D\u80FD\u7EE7\u7EED\u51FA\u724C");
             pending = state.events[++index];
-            frames.push(buildSichuanDiscardNotification(event, pending, humanSeat));
+            frames.push(buildSichuanDiscardNotification(event, pending, humanSeat, wild));
             break;
           }
           case "claimWindow": {
@@ -25972,6 +26265,12 @@
             pending = null;
             break;
           }
+          case "redKong": {
+            if (pending) throw new Error("\u62A2\u724C\u88C1\u51B3\u5C1A\u672A\u5B8C\u6210\uFF0C\u4E0D\u80FD\u7EA2\u4E2D\u6760");
+            frames.push(play(event, humanSeat, { seat: event.seat, card: event.tile, action: MaJiangAction.Normal }));
+            frames.push(claimEnd(event, humanSeat));
+            break;
+          }
           case "win": {
             const tsumo = event.winType === "tsumo";
             const isFinish = state.rules.gameType === 5022;
@@ -26015,7 +26314,7 @@
           }
           case "draw": {
             if (pending) throw new Error("\u62A2\u724C\u88C1\u51B3\u5C1A\u672A\u5B8C\u6210\uFF0C\u4E0D\u80FD\u7EE7\u7EED\u6478\u724C");
-            frames.push(buildSichuanDrawNotification(event, humanSeat));
+            frames.push(buildSichuanDrawNotification(event, humanSeat, wild));
             break;
           }
           case "end": {
@@ -26116,7 +26415,8 @@
     if (name === "ReqPlayCard") {
       if (view.phase !== "turn") return { result: MaJiangResult.Fail_InvalidSequence };
       const type = { [MaJiangAction.Normal]: "discard", [MaJiangAction.PengGang]: "kakan", [MaJiangAction.AnGang]: "ankan", [MaJiangAction.Hu]: "hu" }[payload.action];
-      if (!type || !options.some((option) => option.type === type)) return { result: MaJiangResult.Fail_ActionNotInCanPlayActions };
+      const offered = (entry) => entry === type || type === "discard" && entry === "redKong";
+      if (!type || !options.some((option) => offered(option.type))) return { result: MaJiangResult.Fail_ActionNotInCanPlayActions };
       if (type === "hu") {
         return {
           chosen: (payload.card === 0 || view.hand.includes(payload.card)) && find("hu", []),
@@ -26124,6 +26424,8 @@
         };
       }
       if (!view.hand.includes(payload.card)) return { result: MaJiangResult.Fail_CardNotInHand };
+      const redKong = type === "discard" && options.find((option) => option.type === "redKong" && option.tiles[0] === payload.card);
+      if (redKong) return { chosen: redKong };
       const chosen = options.find((option) => option.type === type && option.tiles.includes(payload.card));
       return { chosen, result: type === "discard" ? MaJiangResult.Fail_CardInCantPlays : MaJiangResult.Fail_CardNotMatchAction };
     }
@@ -26163,7 +26465,7 @@
   }
 
   // mockjs/sichuan_table.mjs
-  var SICHUAN_PLAYABLE_GAME_TYPES = Object.freeze([5021, 5022]);
+  var SICHUAN_PLAYABLE_GAME_TYPES = Object.freeze([5021, 5022, 5023]);
   var SCORE_TYPE_MONEY = 1;
   var REPLY_CACHE = 64;
   function sichuanRoom(gameType, roomId) {
@@ -26174,7 +26476,8 @@
   }
   function sichuanRoomRules(room) {
     const exchange = !room.ruleTags.includes(1);
-    return { gameType: room.gameType, exchange, topBei: room.topBei === 128 && exchange ? 128 : 256, baseScore: room.moneyBase };
+    const topBei = room.topBei === 0 && room.gameType === 5023 ? 128 : room.topBei;
+    return { gameType: room.gameType, exchange, topBei: topBei === 128 && exchange ? 128 : 256, baseScore: room.moneyBase };
   }
   var _session3, _notifications, _onFrame, _onSettle, _log, _replies, _buffer, _settled, _failed, _exited, _SichuanTable_instances, flush_fn, fail_fn, settle_fn, dispatch_fn;
   var SichuanTable = class {
