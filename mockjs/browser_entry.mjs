@@ -48,6 +48,8 @@ var RiichiSession = class {
       autoHuman: opts.autoHuman != null ? opts.autoHuman : false,
       // AI 难度：intermediate / advanced（由服务按房间决定）
       aiLevel: opts.aiLevel,
+      // 本人当前雀士好感度等级：结算面板只展示，不增减
+      selfLoveLevel: opts.selfLoveLevel || 0,
       // 座位 -> 真实 userID，必须与 20408/20014 下发的牌桌 uid 完全一致
       uids: opts.uids || null
     };
@@ -111,6 +113,7 @@ var RiichiSession = class {
       uids: o.uids,
       autoHuman: o.autoHuman,
       aiLevel: o.aiLevel,
+      selfLoveLevel: o.selfLoveLevel,
       onFinalResult: (scores, engine, humanWin) => this.onFinalResult(scores, engine, humanWin),
       // false=0号位真人，true=AI代打（测试用）
       emit: (ev, payload) => this.send(ev, payload),

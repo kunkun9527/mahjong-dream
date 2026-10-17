@@ -126,3 +126,20 @@ test('内容归一把低好感度旧档的雀士升到最高级并觉醒，且�
   assert.equal(user.normalizeOfflineContent(), null, '已归一的档案不再产生增量');
   assert.deepEqual(Object.fromEntries(Object.entries(user.modules).map(([dt, m]) => [dt, m.version])), versions);
 });
+
+test('立直结算本人席位回显好感度等级，不再显示 Lv.0', async () => {
+  const { GameEngine } = await import('../mockjs/engine.mjs');
+  const { RiichiMsg } = await import('../mockjs/proto_enum.mjs');
+  const stops = [];
+  const engine = new GameEngine({
+    players: 4, speed: 0, seed: 11, maxHands: 1, autoHuman: true, selfLoveLevel: 6,
+    emit: (event, payload) => { if (event === RiichiMsg.ENtfGameStop) stops.push(payload); },
+  });
+  await engine.start();
+  assert.ok(stops.length >= 1);
+  for (const stop of stops) {
+    assert.equal(stop.userInfos[0].level, 6);
+    assert.equal(stop.userInfos[0].oldLevel, 6);
+    assert.ok(stop.userInfos.slice(1).every((info) => info.level === 0 && info.oldLevel === 0));
+  }
+});

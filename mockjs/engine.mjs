@@ -26,6 +26,7 @@ var GameEngine = class {
     this.emit = emit || (() => {
     });
     this.autoHuman = !!opts.autoHuman;
+    this.selfLoveLevel = Number(opts.selfLoveLevel) || 0;
     // AI 难度：basic（旧启发式，仅供对照）/ intermediate / advanced；可按座位单独指定。
     const levels = Array.isArray(opts.aiLevels) ? opts.aiLevels : [];
     this.aiLevels = Array.from({ length: players }, (_, seat) => normalizeAiLevel(levels[seat] ?? opts.aiLevel));
@@ -1474,9 +1475,10 @@ var GameEngine = class {
         maxFan: currentDetail?.totalFan || 0,
         realJieBi: 0,
         finalBi: 0,
-        level: 0,
+        // 好感度不随对局变化，本人席位原样回显当前等级，避免结算面板显示 Lv.0。
+        level: s === 0 ? this.selfLoveLevel : 0,
         loveValue: 0,
-        oldLevel: 0,
+        oldLevel: s === 0 ? this.selfLoveLevel : 0,
         oldLoveValue: 0,
         ptLevel: rankResult?.level || 0,
         ptPoint: rankResult?.point || 0,

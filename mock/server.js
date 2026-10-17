@@ -779,6 +779,7 @@
       autoHuman: CONFIG.autoHuman,
       // 段位战御龙间（roomID=4）用高级 AI，其余房间（含一局战）用中级 AI。
       aiLevel: sess.rankRoomId === 4 ? 'advanced' : 'intermediate',
+      selfLoveLevel: sess.table && sess.table.self ? sess.table.self.loveLevel || 0 : 0,
       internalState: sess.internalState || {},
       onSettingsChange: function (state) {
         sess.internalState = state;
@@ -1024,6 +1025,7 @@
         if (inner) {
           var sculptId = P.get(inner, 3);             // SculptId
           if (sculptId) profile.skin = sculptId;
+          profile.loveLevel = P.get(inner, 5) || 0;   // 好感度等级（结算面板展示）
         }
       }
     } catch (e) {
@@ -1353,6 +1355,7 @@
           room: room, seed: seed, gameID: sess.table.gameId, aiDelayMs: aiDelayMs,
           userIds: [sess.uid].concat(sess.table.robots.map(function (x) { return x.uid; })),
           initialScores: scores,
+          selfLoveLevel: sess.table.self ? sess.table.self.loveLevel || 0 : 0,
           onFrame: function (cmd, bytes) {
             if (sess.sichuan !== table) return;
             recordSichuanFrame(sess, cmd, bytes);

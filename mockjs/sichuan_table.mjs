@@ -51,7 +51,7 @@ export class SichuanTable {
   #failed = false;
   #exited = false;
 
-  constructor({ room, seed, userIds, initialScores, gameID, aiDelayMs = 350, timeoutsMs = {}, clock,
+  constructor({ room, seed, userIds, initialScores, gameID, selfLoveLevel = 0, aiDelayMs = 350, timeoutsMs = {}, clock,
     onFrame, onSettle = () => {}, log = () => {} }) {
     if (!SICHUAN_PLAYABLE_GAME_TYPES.includes(room?.gameType)) throw new RangeError('尚未实现的四川玩法');
     if (typeof onFrame !== 'function' || typeof onSettle !== 'function') throw new TypeError('无效的四川牌桌回调');
@@ -64,7 +64,7 @@ export class SichuanTable {
       onFinish: (result) => this.#settle(result.scores[0], 'finish'),
       onError: (error) => this.#fail(error) });
     this.#notifications = new SichuanNotifications(this.#session,
-      { gameID, userIds, initialScores, scoreType: SCORE_TYPE_MONEY });
+      { gameID, userIds, initialScores, selfLoveLevel, scoreType: SCORE_TYPE_MONEY });
   }
 
   get matchOver() { return this.#settled || this.#failed || this.#session.matchOver || this.#session.stopped; }

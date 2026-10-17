@@ -105,6 +105,9 @@ test('四川血流乘风房：组桌回显5021，胡后不离场、终局只结�
   assert.equal(result.reason, 'wall', '血流只在摸完牌墙时结束');
   const stop = games(ws.frames).find((g) => g.cmd === Msg.ENtfGameStop).payload;
   assert.ok(stop.userInfos.every((info) => !info.isFinish), '血流终局不标记离场');
+  assert.equal(stop.userInfos[0].oldLoveLevel, 6, '本人结算面板回显当前好感度等级');
+  assert.equal(stop.userInfos[0].newLoveLevel, 6);
+  assert.ok(stop.userInfos.slice(1).every((info) => !info.oldLoveLevel && !info.newLoveLevel));
   rpc(session, 20102, 10, new Uint8Array(0));
   assert.equal(mock.userdata.inventoryCount(6, COIN), before + result.scores[0] - 1250);
 });

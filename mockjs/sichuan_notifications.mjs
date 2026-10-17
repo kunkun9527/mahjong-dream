@@ -73,6 +73,7 @@ export class SichuanNotifications {
   #opening;
   #initialScores;
   #humanSeat;
+  #selfLoveLevel = 0;
   #cursor = null;
   #pending = null;
   #scores = [0, 0, 0, 0];
@@ -83,6 +84,7 @@ export class SichuanNotifications {
     this.#session = session;
     this.#initialScores = [...context.initialScores];
     this.#humanSeat = session.view().seat;
+    this.#selfLoveLevel = Number(context.selfLoveLevel) || 0;
   }
 
   get complete() { return this.#ended; }
@@ -243,6 +245,10 @@ export class SichuanNotifications {
               })),
               huInfos: player.wins.map((record) => ({ huCard: record.tile,
                 huType: record.from === null ? 1 : record.score.winType === 'robKong' ? 3 : 2 })),
+              // 好感度不随对局变化，本人席位回显当前等级，避免结算面板显示 Lv.0。
+              ...(seat === this.#humanSeat
+                ? { oldLoveLevel: this.#selfLoveLevel, newLoveLevel: this.#selfLoveLevel }
+                : {}),
             })),
           }));
           ended = true;

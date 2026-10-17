@@ -13289,6 +13289,7 @@
       this.emit = emit2 || (() => {
       });
       this.autoHuman = !!opts.autoHuman;
+      this.selfLoveLevel = Number(opts.selfLoveLevel) || 0;
       const levels = Array.isArray(opts.aiLevels) ? opts.aiLevels : [];
       this.aiLevels = Array.from({ length: players }, (_, seat) => normalizeAiLevel(levels[seat] ?? opts.aiLevel));
       this.speed = opts.speed != null ? opts.speed : 1;
@@ -14704,9 +14705,10 @@
           maxFan: currentDetail?.totalFan || 0,
           realJieBi: 0,
           finalBi: 0,
-          level: 0,
+          // 好感度不随对局变化，本人席位原样回显当前等级，避免结算面板显示 Lv.0。
+          level: s === 0 ? this.selfLoveLevel : 0,
           loveValue: 0,
-          oldLevel: 0,
+          oldLevel: s === 0 ? this.selfLoveLevel : 0,
           oldLoveValue: 0,
           ptLevel: rankResult?.level || 0,
           ptPoint: rankResult?.point || 0,
@@ -26678,13 +26680,14 @@
       }))
     });
   }
-  var _session2, _opening, _initialScores, _humanSeat2, _cursor, _pending, _scores, _ended;
+  var _session2, _opening, _initialScores, _humanSeat2, _selfLoveLevel, _cursor, _pending, _scores, _ended;
   var SichuanNotifications = class {
     constructor(session, context) {
       __privateAdd(this, _session2);
       __privateAdd(this, _opening);
       __privateAdd(this, _initialScores);
       __privateAdd(this, _humanSeat2);
+      __privateAdd(this, _selfLoveLevel, 0);
       __privateAdd(this, _cursor, null);
       __privateAdd(this, _pending, null);
       __privateAdd(this, _scores, [0, 0, 0, 0]);
@@ -26693,6 +26696,7 @@
       __privateSet(this, _session2, session);
       __privateSet(this, _initialScores, [...context.initialScores]);
       __privateSet(this, _humanSeat2, session.view().seat);
+      __privateSet(this, _selfLoveLevel, Number(context.selfLoveLevel) || 0);
     }
     get complete() {
       return __privateGet(this, _ended);
@@ -26885,7 +26889,9 @@
                 huInfos: player.wins.map((record) => ({
                   huCard: record.tile,
                   huType: record.from === null ? 1 : record.score.winType === "robKong" ? 3 : 2
-                }))
+                })),
+                // 好感度不随对局变化，本人席位回显当前等级，避免结算面板显示 Lv.0。
+                ...seat === __privateGet(this, _humanSeat2) ? { oldLoveLevel: __privateGet(this, _selfLoveLevel), newLoveLevel: __privateGet(this, _selfLoveLevel) } : {}
               }))
             }));
             ended = true;
@@ -26906,6 +26912,7 @@
   _opening = new WeakMap();
   _initialScores = new WeakMap();
   _humanSeat2 = new WeakMap();
+  _selfLoveLevel = new WeakMap();
   _cursor = new WeakMap();
   _pending = new WeakMap();
   _scores = new WeakMap();
@@ -27020,6 +27027,7 @@
       userIds,
       initialScores,
       gameID,
+      selfLoveLevel = 0,
       aiDelayMs = 350,
       timeoutsMs = {},
       clock,
@@ -27058,7 +27066,7 @@
       }));
       __privateSet(this, _notifications, new SichuanNotifications(
         __privateGet(this, _session3),
-        { gameID, userIds, initialScores, scoreType: SCORE_TYPE_MONEY }
+        { gameID, userIds, initialScores, selfLoveLevel, scoreType: SCORE_TYPE_MONEY }
       ));
     }
     get matchOver() {
@@ -27428,6 +27436,8 @@
         autoHuman: opts.autoHuman != null ? opts.autoHuman : false,
         // AI 难度：intermediate / advanced（由服务按房间决定）
         aiLevel: opts.aiLevel,
+        // 本人当前雀士好感度等级：结算面板只展示，不增减
+        selfLoveLevel: opts.selfLoveLevel || 0,
         // 座位 -> 真实 userID，必须与 20408/20014 下发的牌桌 uid 完全一致
         uids: opts.uids || null
       };
@@ -27489,6 +27499,7 @@
         uids: o.uids,
         autoHuman: o.autoHuman,
         aiLevel: o.aiLevel,
+        selfLoveLevel: o.selfLoveLevel,
         onFinalResult: (scores, engine, humanWin) => this.onFinalResult(scores, engine, humanWin),
         // false=0号位真人，true=AI代打（测试用）
         emit: (ev, payload) => this.send(ev, payload),
