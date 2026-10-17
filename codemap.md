@@ -2,7 +2,7 @@
 
 ## Purpose
 关服前的 Unity WebGL 客户端快照，修复为 Windows 本地单机版。原客户端只负责界面；Node.js 回环服务（127.0.0.1）负责协议、权威牌局、AI、商店和本地档案，运行时不访问外网。
-已支持：立直四麻/三麻东风、半庄、一局战；四川血战 5022、血流 5021；四类商店。
+范围：只做单机立直麻将——四麻/三麻东风、半庄、一局战，四类商店。四川、斗地主、掼蛋及好友/抽卡等外围入口一律提示“离线模式下此功能不可用”（四川后端已于 2026-10-18 删除，见 git 历史 `a469df1`）。
 
 ## Entry points
 - `start-game.bat` / `local/launcher.mjs` — 启动服务并打开浏览器。
@@ -27,7 +27,7 @@
 | --- | --- | --- |
 | `local/` | Node 进程：启动器、静态/WS 服务、档案与经济初始化 | [local/codemap.md](local/codemap.md) |
 | `mock/` | 原客户端兼容层：wrapper 协议、大厅数据、消息处理器、匹配 | [mock/codemap.md](mock/codemap.md) |
-| `mockjs/` | ESM 后端源码：立直/四川引擎与 AI、商店、协议 | [mockjs/codemap.md](mockjs/codemap.md) |
+| `mockjs/` | ESM 后端源码：立直引擎与 AI、商店、协议 | [mockjs/codemap.md](mockjs/codemap.md) |
 | `tools/` | 从原 bundle 提取配置与协议的只读脚本 | [tools/codemap.md](tools/codemap.md) |
 
 其他目录：`test/`（node:test，名称用中文描述行为）、`docs/`（`handoff.md`、`technical-architecture.md`、`repair-backlog.md`、`adr/`）、`Build/`、`Build_intl/`、`StreamingAssets/`、`TemplateData/`（Unity 产物，不要修改）、`userdata/`（运行时存档，Git 忽略）。
@@ -37,6 +37,6 @@
 - 不重新接入生产域名、远端 WSS 或任何联网流程。
 - 浏览器状态不是牌局真相；AI 不得读对手暗牌、未来牌山。
 - 协议字段名、消息名、枚举值沿用原协议；改协议同时查 `mockjs/riichi_desc.mjs`、编解码调用方、`mock/server.js` 和测试。
-- 规则基线：立直 ADR 0002（雀魂段位战）；四川 ADR 0004（红中血流 ADR 0005）；存档 ADR 0001；商店经济 ADR 0003；立直 AI 分级 ADR 0006。
+- 规则基线：立直 ADR 0002（雀魂段位战）；存档 ADR 0001；商店经济 ADR 0003；立直 AI 分级 ADR 0006。
 - 规则、协议、存档、服务行为的改动必须带回归测试；不提交 `.tmp-*`、截图等调试文件。
 - 提交信息用 Conventional Commits（中文描述），例如 `fix(engine): 修正三麻拔北抢和`。

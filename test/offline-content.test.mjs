@@ -42,6 +42,24 @@ for (const [name, mid] of [
   });
 }
 
+for (const [name, gameType, roomId] of [
+  ['四川血战', 5022, 502205], ['四川血流', 5021, 502107], ['红中血流', 5023, 502306],
+  ['斗地主', 4101, 1], ['掼蛋', 4111, 1],
+]) {
+  test(`非立直玩法${name}（${gameType}）匹配提示离线不可用，不组桌`, (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const session = mock.createSession();
+    const received = connect(session);
+    const srm = P.W().v(1, gameType).v(3, 11).v(4, roomId).bytes();
+    const [response] = request(session, 20403, 9, P.W().s(1, srm).bytes());
+    assert.equal(response[2], 20404);
+    assert.equal(P.dict(response[3])[1], 10, '业务结果为 CommandServiceNotAvailable');
+    t.mock.timers.tick(5_000);
+    assert.deepEqual(received.map((frame) => frame[2]), [20106], '只推离线提示，不推 20408 组桌');
+    assert.equal(session.tableId, 0);
+  });
+}
+
 for (const mid of [21407, 21409, 21411]) {
   test(`奖励赛事查询 ${mid} 返回原客户端有提示的“比赛信息已失效”错误码 30`, (t) => {
     t.mock.timers.enable({ apis: ['setTimeout'] });

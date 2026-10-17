@@ -259,10 +259,7 @@ websocketServer.on('connection', (websocket) => {
       session.table = null;
     }
     session.suspend();
-    if (session.sichuan && session.liveMatch()) {
-      session.detachMatch();
-      console.log('[local] 页面断开，AI 已接管四川牌桌真人席');
-    } else if (session.riichi?.engine && !session.riichi.matchOver) {
+    if (session.riichi?.engine && !session.riichi.matchOver) {
       const engine = session.riichi.engine;
       engine.setHumanAutoplay(true);
       clearTimeout(fastForwardTimer);

@@ -6,9 +6,6 @@
   var __getOwnPropNames = Object.getOwnPropertyNames;
   var __getProtoOf = Object.getPrototypeOf;
   var __hasOwnProp = Object.prototype.hasOwnProperty;
-  var __typeError = (msg) => {
-    throw TypeError(msg);
-  };
   var __commonJS = (cb, mod) => function __require() {
     try {
       return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
@@ -36,11 +33,6 @@
     isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
     mod
   ));
-  var __accessCheck = (obj, member, msg) => member.has(obj) || __typeError("Cannot " + msg);
-  var __privateGet = (obj, member, getter) => (__accessCheck(obj, member, "read from private field"), getter ? getter.call(obj) : member.get(obj));
-  var __privateAdd = (obj, member, value) => member.has(obj) ? __typeError("Cannot add the same private member more than once") : member instanceof WeakSet ? member.add(obj) : member.set(obj, value);
-  var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "write to private field"), setter ? setter.call(obj, value) : member.set(obj, value), value);
-  var __privateMethod = (obj, member, method) => (__accessCheck(obj, member, "access private method"), method);
 
   // node_modules/agari/index.js
   var require_agari = __commonJS({
@@ -2713,12 +2705,12 @@
         console.log("%s - %s", timestamp(), exports2.format.apply(exports2, arguments));
       };
       exports2.inherits = require_inherits_browser();
-      exports2._extend = function(origin, add2) {
-        if (!add2 || !isObject(add2)) return origin;
-        var keys = Object.keys(add2);
+      exports2._extend = function(origin, add) {
+        if (!add || !isObject(add)) return origin;
+        var keys = Object.keys(add);
         var i = keys.length;
         while (i--) {
-          origin[keys[i]] = add2[keys[i]];
+          origin[keys[i]] = add[keys[i]];
         }
         return origin;
       };
@@ -5119,8 +5111,8 @@
               return false;
           } else {
             hasJyuntsu = true;
-            let add2 = parseInt(v[0]) + parseInt(v[1]) + parseInt(v[2]);
-            if (add2 > 6 && add2 < 24)
+            let add = parseInt(v[0]) + parseInt(v[1]) + parseInt(v[2]);
+            if (add > 6 && add < 24)
               return false;
           }
         }
@@ -5956,7 +5948,7 @@
       var i;
       s64[45] = 62;
       s64[95] = 63;
-      base64.encode = function encode2(buffer, start, end) {
+      base64.encode = function encode(buffer, start, end) {
         var parts = null, chunk = [];
         var i2 = 0, j = 0, t;
         while (start < end) {
@@ -5997,7 +5989,7 @@
         return String.fromCharCode.apply(String, chunk.slice(0, i2));
       };
       var invalidEncoding = "invalid encoding";
-      base64.decode = function decode2(string, buffer, offset) {
+      base64.decode = function decode(string, buffer, offset) {
         var start = offset;
         var j = 0, t;
         for (var i2 = 0; i2 < string.length; ) {
@@ -6074,7 +6066,7 @@
         }
         return this;
       };
-      EventEmitter.prototype.emit = function emit2(evt) {
+      EventEmitter.prototype.emit = function emit(evt) {
         var listeners = this._listeners[evt];
         if (listeners) {
           var args = [], i = 1;
@@ -7163,7 +7155,7 @@
             return this.not().add(ONE);
           };
           LongPrototype.neg = LongPrototype.negate;
-          LongPrototype.add = function add2(addend) {
+          LongPrototype.add = function add(addend) {
             if (!isLong(addend)) addend = fromValue(addend);
             var a48 = this.high >>> 16;
             var a32 = this.high & 65535;
@@ -8130,7 +8122,7 @@
         }
         return this;
       };
-      Writer.prototype.finish = function finish2(shared) {
+      Writer.prototype.finish = function finish(shared) {
         if (shared)
           return this.buf.subarray(0, this.pos);
         var buf = this.constructor.alloc(this.pos);
@@ -9211,14 +9203,14 @@
         this._needsRecursiveFeatureResolution = true;
         this._needsRecursiveResolve = true;
       }
-      function clearCache(namespace2) {
-        namespace2._nestedArray = null;
-        namespace2._lookupCache = /* @__PURE__ */ Object.create(null);
-        var parent = namespace2;
+      function clearCache(namespace) {
+        namespace._nestedArray = null;
+        namespace._lookupCache = /* @__PURE__ */ Object.create(null);
+        var parent = namespace;
         while (parent = parent.parent) {
           parent._lookupCache = /* @__PURE__ */ Object.create(null);
         }
-        return namespace2;
+        return namespace;
       }
       Object.defineProperty(Namespace.prototype, "nestedArray", {
         get: function() {
@@ -9258,7 +9250,7 @@
           return this.nested[name].values;
         throw Error("no such enum: " + name);
       };
-      Namespace.prototype.add = function add2(object) {
+      Namespace.prototype.add = function add(object) {
         if (!(object instanceof Field && object.extend !== void 0 || object instanceof Type || object instanceof OneOf || object instanceof Enum || object instanceof Service || object instanceof Namespace))
           throw TypeError("object must be a valid nested object");
         if (object.name === "__proto__")
@@ -9460,7 +9452,7 @@
         }
       });
       MapField.className = "MapField";
-      var types2 = require_types2();
+      var types = require_types2();
       var util = require_util2();
       function MapField(name, id, keyType, type, options, comment) {
         Field.call(this, name, id, type, void 0, void 0, options, comment);
@@ -9504,7 +9496,7 @@
       MapField.prototype.resolve = function resolve() {
         if (this.resolved)
           return this;
-        if (types2.mapKey[this.keyType] === void 0)
+        if (types.mapKey[this.keyType] === void 0)
           throw Error("invalid key type: " + this.keyType);
         return Field.prototype.resolve.call(this);
       };
@@ -9690,7 +9682,7 @@
         });
         return this;
       };
-      Service.prototype.add = function add2(object) {
+      Service.prototype.add = function add(object) {
         if (this.get(object.name))
           throw Error("duplicate name '" + object.name + "' in " + this);
         if (object instanceof Method) {
@@ -9744,13 +9736,13 @@
       Message.create = function create(properties) {
         return this.$type.create(properties);
       };
-      Message.encode = function encode2(message, writer) {
+      Message.encode = function encode(message, writer) {
         return this.$type.encode(message, writer);
       };
       Message.encodeDelimited = function encodeDelimited(message, writer) {
         return this.$type.encodeDelimited(message, writer);
       };
-      Message.decode = function decode2(reader) {
+      Message.decode = function decode(reader) {
         return this.$type.decode(reader);
       };
       Message.decodeDelimited = function decodeDelimited(reader) {
@@ -9777,7 +9769,7 @@
       "use strict";
       module2.exports = decoder;
       var Enum = require_enum();
-      var types2 = require_types2();
+      var types = require_types2();
       var util = require_util2();
       function missing(field) {
         return "missing required '" + field.name + "'";
@@ -9806,13 +9798,13 @@
             gen("case %i:{", field.id)("if(u!==2)")("break");
             if (!closed) gen("if(%s===util.emptyObject)", ref)("%s={}", ref);
             gen("var c2=r.uint32()+r.pos")("if(c2>r.len)")('throw RangeError("index out of range")')("r.len=c2");
-            if (types2.defaults[field.keyType] !== void 0) gen("k=%j", types2.defaults[field.keyType]);
+            if (types.defaults[field.keyType] !== void 0) gen("k=%j", types.defaults[field.keyType]);
             else gen("k=null");
-            if (types2.long[type] !== void 0) gen("v=util.Long?util.Long.fromNumber(0,%j):0", type === "uint64" || type === "fixed64");
-            else if (types2.defaults[type] !== void 0) gen("v=%j", types2.defaults[type]);
+            if (types.long[type] !== void 0) gen("v=util.Long?util.Long.fromNumber(0,%j):0", type === "uint64" || type === "fixed64");
+            else if (types.defaults[type] !== void 0) gen("v=%j", types.defaults[type]);
             else gen("v=null");
-            gen("while(r.pos<c2){")("var t2=r.tag()")("u=t2&7")("switch(t2>>>=3){")("case 1:")("if(u!==%i)", types2.mapKey[field.keyType])("break")("k=r.%s()", field.keyType === "string" ? stringMethod(field) : field.keyType)("continue")("case 2:")("if(u!==%i)", types2.basic[type] === void 0 ? 2 : types2.basic[type])("break");
-            if (types2.basic[type] === void 0) gen("v=types[%i].decode(r,r.uint32(),undefined,q+1,v)", i);
+            gen("while(r.pos<c2){")("var t2=r.tag()")("u=t2&7")("switch(t2>>>=3){")("case 1:")("if(u!==%i)", types.mapKey[field.keyType])("break")("k=r.%s()", field.keyType === "string" ? stringMethod(field) : field.keyType)("continue")("case 2:")("if(u!==%i)", types.basic[type] === void 0 ? 2 : types.basic[type])("break");
+            if (types.basic[type] === void 0) gen("v=types[%i].decode(r,r.uint32(),undefined,q+1,v)", i);
             else gen("v=r.%s()", type === "string" ? stringMethod(field) : type);
             gen("continue")("}")("r.skipType(u,q,t2)")("}");
             gen("if(r.pos!==c2)")('throw RangeError("index out of range")')("r.len=c");
@@ -9820,15 +9812,15 @@
               gen("if(types[%i].valuesById[v]===undefined){", i);
               genPreserveUnknown(gen, "r.raw(s,r.pos)")("continue")("}")("if(%s===util.emptyObject)", ref)("%s={}", ref);
             }
-            var val = types2.basic[type] === void 0 ? "v||new types[" + i + "].ctor" : "v";
-            if (types2.long[field.keyType] !== void 0) gen('%s[typeof k==="object"?util.longToHash(k):k]=%s', ref, val);
+            var val = types.basic[type] === void 0 ? "v||new types[" + i + "].ctor" : "v";
+            if (types.long[field.keyType] !== void 0) gen('%s[typeof k==="object"?util.longToHash(k):k]=%s', ref, val);
             else {
               if (field.keyType === "string") gen('if(k==="__proto__")')("util.makeProp(%s,k)", ref);
               gen("%s[k]=%s", ref, val);
             }
           } else if (field.repeated) {
             gen("case %i:", field.id)("{");
-            if (types2.packed[type] !== void 0) {
+            if (types.packed[type] !== void 0) {
               gen("if(u===2){");
               if (closed) {
                 gen("var c2=r.uint32()+r.pos")("if(c2>r.len)")('throw RangeError("index out of range")')("r.len=c2")("while(r.pos<c2){")("s=r.pos")("v=r.%s()", type)("if(types[%i].valuesById[v]!==undefined){", i)("if(!(%s&&%s.length))", ref, ref)("%s=[]", ref)("%s.push(v)", ref)("}else");
@@ -9837,21 +9829,21 @@
               } else gen("if(!(%s&&%s.length))", ref, ref)("%s=[]", ref)("r.%ss(%s)", type, ref);
               gen("continue")("}");
             }
-            gen("if(u!==%i)", types2.basic[type] === void 0 ? field.delimited ? 3 : 2 : types2.basic[type])("break");
+            gen("if(u!==%i)", types.basic[type] === void 0 ? field.delimited ? 3 : 2 : types.basic[type])("break");
             if (!closed) gen("if(!(%s&&%s.length))", ref, ref)("%s=[]", ref);
-            if (types2.basic[type] === void 0) {
+            if (types.basic[type] === void 0) {
               if (field.delimited) gen("%s.push(types[%i].decode(r,undefined,%i,q+1))", ref, i, field.id * 8 + 4);
               else gen("%s.push(types[%i].decode(r,r.uint32(),undefined,q+1))", ref, i);
             } else if (closed) {
               gen("v=r.%s()", type)("if(types[%i].valuesById[v]!==undefined){", i)("if(!(%s&&%s.length))", ref, ref)("%s=[]", ref)("%s.push(v)", ref)("}else");
               genPreserveUnknown(gen, "r.raw(s,r.pos)");
             } else gen("%s.push(r.%s())", ref, type === "string" ? stringMethod(field) : type);
-          } else if (types2.basic[type] === void 0) {
+          } else if (types.basic[type] === void 0) {
             gen("case %i:{", field.id)("if(u!==%i)", field.delimited ? 3 : 2)("break");
             if (field.delimited) gen("%s=types[%i].decode(r,undefined,%i,q+1,%s)", ref, i, field.id * 8 + 4, ref);
             else gen("%s=types[%i].decode(r,r.uint32(),undefined,q+1,%s)", ref, i, ref);
           } else if (field.hasPresence) {
-            gen("case %i:{", field.id)("if(u!==%i)", types2.basic[type])("break");
+            gen("case %i:{", field.id)("if(u!==%i)", types.basic[type])("break");
             if (closed) {
               gen("v=r.%s()", type)("if(types[%i].valuesById[v]!==undefined){", i)("%s=v", ref);
               if (field.partOf) gen("m%s=%j", util.safeProp(field.partOf.name), field.name);
@@ -9859,7 +9851,7 @@
               genPreserveUnknown(gen, "r.raw(s,r.pos)");
             } else gen("%s=r.%s()", ref, type === "string" ? stringMethod(field) : type);
           } else {
-            gen("case %i:{", field.id)("if(u!==%i)", types2.basic[type])("break");
+            gen("case %i:{", field.id)("if(u!==%i)", types.basic[type])("break");
             if (closed) {
               gen("v=r.%s()", type)("if(types[%i].valuesById[v]!==undefined){", i)("if(v!==%j)", field.typeDefault)("%s=v", ref)("else")("delete %s", ref)("}else{");
               genPreserveUnknown(gen, "r.raw(s,r.pos)")("}");
@@ -9867,7 +9859,7 @@
               if (field.resolvedType instanceof Enum && field.typeDefault !== 0) gen("if((v=r.%s())!==%j)", type, field.typeDefault);
               else if (type === "string") gen("if((v=r.%s()).length)", stringMethod(field));
               else if (type === "bytes") gen("if((v=r.%s()).length)", type);
-              else if (types2.long[type] !== void 0) gen('if(typeof(v=r.%s())==="object"?v.low||v.high:v!==0)', type);
+              else if (types.long[type] !== void 0) gen('if(typeof(v=r.%s())==="object"?v.low||v.high:v!==0)', type);
               else if (type === "double" || type === "float") gen("if(!Object.is(v=r.%s(),0))", type);
               else gen("if(v=r.%s())", type);
               gen("%s=v", ref)("else")("delete %s", ref);
@@ -10002,7 +9994,7 @@
       "use strict";
       var converter = exports2;
       var Enum = require_enum();
-      var types2 = require_types2();
+      var types = require_types2();
       var util = require_util2();
       function genValuePartial_fromObject(gen, field, fieldIndex, prop, dstProp) {
         if (field.resolvedType) {
@@ -10062,7 +10054,7 @@
         if (!fields.length) return gen("return new C");
         gen("var m=new C");
         for (var i = 0; i < fields.length; ++i) {
-          var field = fields[i].resolve(), prop = util.safeProp(field.name), implicitPresence = !field.hasPresence && !field.repeated && !field.map && (field.resolvedType instanceof Enum || types2.basic[field.type] !== void 0);
+          var field = fields[i].resolve(), prop = util.safeProp(field.name), implicitPresence = !field.hasPresence && !field.repeated && !field.map && (field.resolvedType instanceof Enum || types.basic[field.type] !== void 0);
           if (field.map) {
             gen("if(d%s){", prop)("if(!util.isObject(d%s))", prop)("throw TypeError(%j)", field.fullName + ": object expected")("m%s={}", prop)("for(var ks=Object.keys(d%s),i=0;i<ks.length;++i){", prop);
             gen('if(ks[i]==="__proto__")')("util.makeProp(m%s,ks[i])", prop);
@@ -10094,7 +10086,7 @@
               else if (field.type === "bytes") gen("if(d%s.length){", prop);
               else if (field.type === "bool") gen("if(d%s){", prop);
               else if (field.type === "double" || field.type === "float") gen("if(!Object.is(Number(d%s),0)){", prop);
-              else if (types2.long[field.type] !== void 0) gen('if(typeof d%s==="object"?d%s.low||d%s.high:Number(d%s)!==0){', prop, prop, prop, prop);
+              else if (types.long[field.type] !== void 0) gen('if(typeof d%s==="object"?d%s.low||d%s.high:Number(d%s)!==0){', prop, prop, prop, prop);
               else gen("if(Number(d%s)!==0){", prop);
             }
             genValuePartial_fromObject(
@@ -10184,7 +10176,7 @@
               gen("var ks2");
             }
             gen("if(m%s&&(ks2=Object.keys(m%s)).length){", prop, prop)("d%s={}", prop);
-            var longKey = types2.long[field.keyType] !== void 0, srcProp = prop + "[ks2[j]]";
+            var longKey = types.long[field.keyType] !== void 0, srcProp = prop + "[ks2[j]]";
             gen("for(var j=0;j<ks2.length;++j){");
             if (longKey) gen("var k2=util.longFromKey(ks2[j],%j).toString()", field.keyType === "uint64" || field.keyType === "fixed64");
             gen('if(ks2[j]==="__proto__")')("util.makeProp(d%s,ks2[j])", prop);
@@ -10530,7 +10522,7 @@
           return this.nested[name];
         return null;
       };
-      Type.prototype.add = function add2(object) {
+      Type.prototype.add = function add(object) {
         if (this.get(object.name))
           throw Error("duplicate name '" + object.name + "' in " + this);
         if (object instanceof Field && object.extend === void 0) {
@@ -10592,38 +10584,38 @@
         return new this.ctor(properties);
       };
       Type.prototype.setup = function setup() {
-        var root3 = this.root;
-        if (root3 && root3._needsRecursiveFeatureResolution) {
-          var edition = root3._edition || this._edition;
+        var root2 = this.root;
+        if (root2 && root2._needsRecursiveFeatureResolution) {
+          var edition = root2._edition || this._edition;
           if (edition)
-            root3._resolveFeaturesRecursive(edition);
+            root2._resolveFeaturesRecursive(edition);
         }
-        var fullName = this.fullName, types2 = [];
+        var fullName = this.fullName, types = [];
         for (var i = 0; i < /* initializes */
         this.fieldsArray.length; ++i)
-          types2.push(this._fieldsArray[i].resolve().resolvedType);
+          types.push(this._fieldsArray[i].resolve().resolvedType);
         this.encode = encoder(this)({
           Writer,
-          types: types2,
+          types,
           util
         });
         this.decode = decoder(this)({
           Reader,
-          types: types2,
+          types,
           util,
           C: this.ctor
         });
         this.verify = verifier(this)({
-          types: types2,
+          types,
           util
         });
         this.fromObject = converter.fromObject(this)({
-          types: types2,
+          types,
           util,
           C: this.ctor
         });
         this.toObject = converter.toObject(this)({
-          types: types2,
+          types,
           util
         });
         var wrapper = wrappers[fullName];
@@ -10703,16 +10695,16 @@
         this._edition = "proto2";
         this._fullyQualifiedObjects = {};
       }
-      Root.fromJSON = function fromJSON(json, root3, depth) {
+      Root.fromJSON = function fromJSON(json, root2, depth) {
         if (depth === void 0)
           depth = 0;
         if (depth > util.recursionLimit)
           throw Error("max depth exceeded");
-        if (!root3)
-          root3 = new Root();
+        if (!root2)
+          root2 = new Root();
         if (json.options)
-          root3.setOptions(json.options);
-        return root3.addJSON(json.nested, depth).resolveAll();
+          root2.setOptions(json.options);
+        return root2.addJSON(json.nested, depth).resolveAll();
       };
       Root.prototype.resolvePath = util.path.resolve;
       Root.prototype.fetch = util.fetch;
@@ -10728,19 +10720,19 @@
           return util.asPromise(load, self2, filename, options);
         }
         var sync = callback === SYNC;
-        function finish2(err, root3) {
+        function finish(err, root2) {
           if (!callback) {
             return;
           }
           if (sync) {
             throw err;
           }
-          if (root3) {
-            root3.resolveAll();
+          if (root2) {
+            root2.resolveAll();
           }
           var cb = callback;
           callback = null;
-          cb(err, root3);
+          cb(err, root2);
         }
         function getBundledFileName(filename2) {
           var idx = filename2.lastIndexOf("google/protobuf/");
@@ -10776,10 +10768,10 @@
               }
             }
           } catch (err) {
-            finish2(err);
+            finish(err);
           }
           if (!sync && !queued) {
-            finish2(null, self2);
+            finish(null, self2);
           }
         }
         function fetch(filename2, weak, depth) {
@@ -10808,7 +10800,7 @@
               source = util.fs.readFileSync(filename2).toString("utf8");
             } catch (err) {
               if (!weak)
-                finish2(err);
+                finish(err);
               return;
             }
             process2(filename2, source, depth);
@@ -10821,9 +10813,9 @@
               }
               if (err) {
                 if (!weak)
-                  finish2(err);
+                  finish(err);
                 else if (!queued)
-                  finish2(null, self2);
+                  finish(null, self2);
                 return;
               }
               process2(filename2, source2, depth);
@@ -10842,7 +10834,7 @@
           return self2;
         }
         if (!queued) {
-          finish2(null, self2);
+          finish(null, self2);
         }
         return self2;
       };
@@ -10860,7 +10852,7 @@
         return Namespace.prototype.resolveAll.call(this);
       };
       var exposeRe = /^[A-Z]/;
-      function tryHandleExtension(root3, field) {
+      function tryHandleExtension(root2, field) {
         var extendedType = field.parent.lookup(field.extend);
         if (extendedType) {
           var sisterField = new Field(field.fullName, field.id, field.type, field.rule, void 0, field.options);
@@ -11089,7 +11081,7 @@
   var require_types2 = __commonJS({
     "node_modules/protobufjs/src/types.js"(exports2) {
       "use strict";
-      var types2 = exports2;
+      var types = exports2;
       var util = require_util2();
       var s = [
         "double",
@@ -11129,7 +11121,7 @@
         while (i < values.length) o[s[i + offset]] = values[i++];
         return o;
       }
-      types2.basic = bake([
+      types.basic = bake([
         /* double   */
         1,
         /* float    */
@@ -11161,7 +11153,7 @@
         /* bytes    */
         2
       ]);
-      types2.defaults = bake([
+      types.defaults = bake([
         /* double   */
         0,
         /* float    */
@@ -11195,7 +11187,7 @@
         /* message  */
         null
       ]);
-      types2.long = bake([
+      types.long = bake([
         /* int64    */
         0,
         /* uint64   */
@@ -11207,7 +11199,7 @@
         /* sfixed64 */
         1
       ], 7);
-      types2.mapKey = bake([
+      types.mapKey = bake([
         /* int32    */
         0,
         /* uint32   */
@@ -11233,7 +11225,7 @@
         /* string   */
         2
       ], 2);
-      types2.packed = bake([
+      types.packed = bake([
         /* double   */
         1,
         /* float    */
@@ -11280,7 +11272,7 @@
       });
       Field.className = "Field";
       var Enum = require_enum();
-      var types2 = require_types2();
+      var types = require_types2();
       var util = require_util2();
       var Type;
       var ruleRe = /^(?:required|optional|repeated)$/;
@@ -11326,7 +11318,7 @@
         this.partOf = null;
         this.typeDefault = null;
         this.defaultValue = null;
-        this.long = util.Long ? types2.long[type] !== void 0 : (
+        this.long = util.Long ? types.long[type] !== void 0 : (
           /* istanbul ignore next */
           false
         );
@@ -11397,7 +11389,7 @@
       Field.prototype.resolve = function resolve() {
         if (this.resolved)
           return this;
-        if ((this.typeDefault = types2.defaults[this.type]) === void 0) {
+        if ((this.typeDefault = types.defaults[this.type]) === void 0) {
           this.resolvedType = (this.declaringField ? this.declaringField.parent : this.parent).lookupTypeOrEnum(this.type);
           if (this.resolvedType instanceof Type)
             this.typeDefault = null;
@@ -11422,7 +11414,7 @@
           this.typeDefault = typeof this.typeDefault === "string" ? util.Long.fromString(this.typeDefault, unsigned) : util.Long.fromNumber(this.typeDefault, unsigned);
           if (Object.freeze)
             Object.freeze(this.typeDefault);
-        } else if (types2.long[this.type] !== void 0 && typeof this.typeDefault === "string") {
+        } else if (types.long[this.type] !== void 0 && typeof this.typeDefault === "string") {
           this.typeDefault = parseInt(this.typeDefault, 10);
         } else if (this.bytes && typeof this.typeDefault === "string") {
           var buf;
@@ -11454,7 +11446,7 @@
         if (this.rule === "required") {
           features.field_presence = "LEGACY_REQUIRED";
         }
-        if (this.parent && types2.defaults[this.type] === void 0) {
+        if (this.parent && types.defaults[this.type] === void 0) {
           var type = this.parent.get(this.type.split(".").pop());
           if (type && type instanceof Type && type.group) {
             features.message_encoding = "DELIMITED";
@@ -11535,7 +11527,7 @@
               oneof.parent.add(oneof.fieldsArray[i]);
         }
       }
-      OneOf.prototype.add = function add2(field) {
+      OneOf.prototype.add = function add(field) {
         if (!(field instanceof Field))
           throw TypeError("field must be a Field");
         if (field.parent && field.parent !== this.parent)
@@ -11673,14 +11665,14 @@
           this.parent.remove(this);
         this.parent = parent;
         this.resolved = false;
-        var root3 = parent.root;
-        if (root3 instanceof Root)
-          root3._handleAdd(this);
+        var root2 = parent.root;
+        if (root2 instanceof Root)
+          root2._handleAdd(this);
       };
       ReflectionObject.prototype.onRemove = function onRemove(parent) {
-        var root3 = parent.root;
-        if (root3 instanceof Root)
-          root3._handleRemove(this);
+        var root2 = parent.root;
+        if (root2 instanceof Root)
+          root2._handleRemove(this);
         this.parent = null;
         this.resolved = false;
       };
@@ -11896,7 +11888,7 @@
           keepComments ? this.comments : void 0
         ]);
       };
-      Enum.prototype.add = function add2(name, id, comment, options) {
+      Enum.prototype.add = function add(name, id, comment, options) {
         if (!util.isString(name))
           throw TypeError("name must be a string");
         if (!util.isInteger(id))
@@ -11951,7 +11943,7 @@
       "use strict";
       module2.exports = encoder;
       var Enum = require_enum();
-      var types2 = require_types2();
+      var types = require_types2();
       var util = require_util2();
       function genTypePartial(gen, field, fieldIndex, ref) {
         return field.delimited ? gen("types[%i].encode(%s,w.uint32(%i),q+1).uint32(%i)", fieldIndex, ref, (field.id << 3 | 3) >>> 0, (field.id << 3 | 4) >>> 0) : gen("types[%i].encode(%s,w.uint32(%i).fork(),q+1).ldelim()", fieldIndex, ref, (field.id << 3 | 2) >>> 0);
@@ -11964,19 +11956,19 @@
           mtype.fieldsArray.slice().sort(util.compareFieldsById)
         );
         for (var i = 0; i < fields.length; ++i) {
-          var field = fields[i].resolve(), index = mtype._fieldsArray.indexOf(field), type = field.resolvedType instanceof Enum ? "int32" : field.type, wireType = types2.basic[type];
+          var field = fields[i].resolve(), index = mtype._fieldsArray.indexOf(field), type = field.resolvedType instanceof Enum ? "int32" : field.type, wireType = types.basic[type];
           ref = "m" + util.safeProp(field.name);
           if (field.map) {
             gen("if(%s!=null&&Object.hasOwnProperty.call(m,%j)){", ref, field.name)("for(var ks=Object.keys(%s),i=0;i<ks.length;++i){", ref);
-            if (field.keyType === "bool") gen("w.uint32(%i).fork().uint32(%i).bool(util.boolFromKey(ks[i]))", (field.id << 3 | 2) >>> 0, 8 | types2.mapKey[field.keyType]);
-            else if (types2.long[field.keyType] !== void 0) gen("w.uint32(%i).fork().uint32(%i).%s(util.longFromKey(ks[i],%j))", (field.id << 3 | 2) >>> 0, 8 | types2.mapKey[field.keyType], field.keyType, field.keyType === "uint64" || field.keyType === "fixed64");
-            else gen("w.uint32(%i).fork().uint32(%i).%s(ks[i])", (field.id << 3 | 2) >>> 0, 8 | types2.mapKey[field.keyType], field.keyType);
+            if (field.keyType === "bool") gen("w.uint32(%i).fork().uint32(%i).bool(util.boolFromKey(ks[i]))", (field.id << 3 | 2) >>> 0, 8 | types.mapKey[field.keyType]);
+            else if (types.long[field.keyType] !== void 0) gen("w.uint32(%i).fork().uint32(%i).%s(util.longFromKey(ks[i],%j))", (field.id << 3 | 2) >>> 0, 8 | types.mapKey[field.keyType], field.keyType, field.keyType === "uint64" || field.keyType === "fixed64");
+            else gen("w.uint32(%i).fork().uint32(%i).%s(ks[i])", (field.id << 3 | 2) >>> 0, 8 | types.mapKey[field.keyType], field.keyType);
             if (wireType === void 0) gen("types[%i].encode(%s[ks[i]],w.uint32(18).fork(),q+1).ldelim().ldelim()", index, ref);
             else gen(".uint32(%i).%s(%s[ks[i]]).ldelim()", 16 | wireType, type, ref);
             gen("}")("}");
           } else if (field.repeated) {
             gen("if(%s!=null&&%s.length){", ref, ref);
-            if (field.packed && types2.packed[type] !== void 0) {
+            if (field.packed && types.packed[type] !== void 0) {
               gen("w.uint32(%i).%ss(%s)", (field.id << 3 | 2) >>> 0, type, ref);
             } else {
               gen("for(var i=0;i<%s.length;++i)", ref);
@@ -11987,13 +11979,13 @@
             gen("}");
           } else {
             if (!field.required)
-              if (field.hasPresence || !(field.resolvedType instanceof Enum || types2.basic[type] !== void 0)) gen("if(%s!=null&&Object.hasOwnProperty.call(m,%j))", ref, field.name);
+              if (field.hasPresence || !(field.resolvedType instanceof Enum || types.basic[type] !== void 0)) gen("if(%s!=null&&Object.hasOwnProperty.call(m,%j))", ref, field.name);
               else if (field.resolvedType instanceof Enum) gen("if(%s!=null&&Object.hasOwnProperty.call(m,%j)&&%s!==%j)", ref, field.name, ref, field.typeDefault);
               else if (type === "bool") gen("if(%s!=null&&Object.hasOwnProperty.call(m,%j)&&%s!==false)", ref, field.name, ref);
               else if (type === "string") gen('if(%s!=null&&Object.hasOwnProperty.call(m,%j)&&%s!=="")', ref, field.name, ref);
               else if (type === "bytes") gen("if(%s!=null&&Object.hasOwnProperty.call(m,%j)&&%s.length)", ref, field.name, ref);
               else if (type === "double" || type === "float") gen("if(%s!=null&&Object.hasOwnProperty.call(m,%j)&&!Object.is(%s,0))", ref, field.name, ref);
-              else if (types2.long[type] !== void 0) gen('if(%s!=null&&Object.hasOwnProperty.call(m,%j)&&(typeof %s==="object"?%s.low||%s.high:%s!==0))', ref, field.name, ref, ref, ref, ref);
+              else if (types.long[type] !== void 0) gen('if(%s!=null&&Object.hasOwnProperty.call(m,%j)&&(typeof %s==="object"?%s.low||%s.high:%s!==0))', ref, field.name, ref, ref, ref, ref);
               else gen("if(%s!=null&&Object.hasOwnProperty.call(m,%j)&&%s!==0)", ref, field.name, ref);
             if (wireType === void 0)
               genTypePartial(gen, field, index, ref);
@@ -12011,19 +12003,19 @@
       "use strict";
       exports2 = module2.exports = require_index_minimal();
       exports2.build = "light";
-      function load(filename, root3, callback) {
-        if (typeof root3 === "function") {
-          callback = root3;
-          root3 = new exports2.Root();
-        } else if (!root3)
-          root3 = new exports2.Root();
-        return root3.load(filename, callback);
+      function load(filename, root2, callback) {
+        if (typeof root2 === "function") {
+          callback = root2;
+          root2 = new exports2.Root();
+        } else if (!root2)
+          root2 = new exports2.Root();
+        return root2.load(filename, callback);
       }
       exports2.load = load;
-      function loadSync(filename, root3) {
-        if (!root3)
-          root3 = new exports2.Root();
-        return root3.loadSync(filename);
+      function loadSync(filename, root2) {
+        if (!root2)
+          root2 = new exports2.Root();
+        return root2.loadSync(filename);
       }
       exports2.loadSync = loadSync;
       exports2.encoder = require_encoder();
@@ -12409,11 +12401,11 @@
               if (Number(group[0]) === rank) fu += 2;
             }
           } else {
-            const terminal2 = group[0][1] === "z" || group[0][0] === "1" || group[0][0] === "9";
-            if (group.length === 1) fu += terminal2 ? 8 : 4;
-            else if (group.length === 2) fu += terminal2 ? 32 : 16;
-            else if (group.length === 4) fu += terminal2 ? 16 : 8;
-            else if (group[0] === group[1]) fu += terminal2 ? 4 : 2;
+            const terminal = group[0][1] === "z" || group[0][0] === "1" || group[0][0] === "9";
+            if (group.length === 1) fu += terminal ? 8 : 4;
+            else if (group.length === 2) fu += terminal ? 32 : 16;
+            else if (group.length === 4) fu += terminal ? 16 : 8;
+            else if (group[0] === group[1]) fu += terminal ? 4 : 2;
           }
         }
         this.tmpResult.fu = Math.max(30, Math.ceil(fu / 10) * 10);
@@ -12672,11 +12664,11 @@
     const pw = turnWinChance(ctx, shanten === 0 ? ukeire : tenpaiUkeire);
     const dist = new Array(shanten + 1).fill(0);
     dist[shanten] = 1;
-    let win2 = 0;
+    let win = 0;
     for (let t = 0; t < draws; t++) {
       for (let k = 0; k <= shanten; k++) dist[k] *= ctx.survival;
       const w = dist[0] * pw;
-      win2 += w;
+      win += w;
       dist[0] -= w;
       for (let k = 1; k <= shanten; k++) {
         const moved = dist[k] * hits[k];
@@ -12684,7 +12676,7 @@
         dist[k - 1] += moved;
       }
     }
-    return win2;
+    return win;
   }
   function isYakuhaiIndex(ctx, idx) {
     if (idx < 27) return 0;
@@ -12707,27 +12699,27 @@
     }
     dora += melds.filter((m) => m.type === "babei").length;
     const counts = countsOf(handIds);
-    let yaku2 = 0;
+    let yaku = 0;
     for (const m of realMelds(melds)) {
       const idx = tileIndex(m.tiles[0]);
-      if (m.type !== "chi") yaku2 += isYakuhaiIndex(ctx, idx);
+      if (m.type !== "chi") yaku += isYakuhaiIndex(ctx, idx);
     }
     for (let idx = 27; idx < 34; idx++) {
       const y = isYakuhaiIndex(ctx, idx);
       if (!y) continue;
-      if (counts[idx] >= 3) yaku2 += y;
-      else if (counts[idx] === 2) yaku2 += 0.45 * y;
+      if (counts[idx] >= 3) yaku += y;
+      else if (counts[idx] === 2) yaku += 0.45 * y;
     }
     const decoded = all.map(decodeId);
     const yaochu = decoded.filter(({ suit, rank }) => suit === 4 || rank === 1 || rank === 9).length;
-    if (yaochu === 0) yaku2 += 1;
-    else if (menzen) yaku2 += Math.max(0, 1 - 0.3 * yaochu);
+    if (yaochu === 0) yaku += 1;
+    else if (menzen) yaku += Math.max(0, 1 - 0.3 * yaochu);
     const suits = new Set(decoded.filter(({ suit }) => suit !== 4).map(({ suit }) => suit));
     const honors = decoded.filter(({ suit }) => suit === 4).length;
-    if (suits.size === 1) yaku2 += honors ? menzen ? 3 : 2 : menzen ? 6 : 5;
-    if (menzen) yaku2 += 1.35;
-    if (yaku2 < 0.5 && !menzen) return 0;
-    return pointsForHan(yaku2 + dora, ctx.dealer) + ctx.tableBonus;
+    if (suits.size === 1) yaku += honors ? menzen ? 3 : 2 : menzen ? 6 : 5;
+    if (menzen) yaku += 1.35;
+    if (yaku < 0.5 && !menzen) return 0;
+    return pointsForHan(yaku + dora, ctx.dealer) + ctx.tableBonus;
   }
   function tieBreak(ctx, id, handIds) {
     const { suit, rank } = decodeId(id);
@@ -12805,15 +12797,15 @@
           break;
         }
         state.calls++;
-        const win2 = calcWin(ids, melds, ctx.akaSet, {
+        const win = calcWin(ids, melds, ctx.akaSet, {
           ronTile: synthId(idx, used),
           riichi: menzen,
           doraTiles: ctx.doraTiles,
           roundWind: ctx.engine.roundWind,
           seatWind
         });
-        if (!win2.hasYaku) continue;
-        const base2 = nukiDora ? Math.max(win2.ten, pointsForHan(win2.han + nukiDora, ctx.dealer)) : win2.ten;
+        if (!win.hasYaku) continue;
+        const base2 = nukiDora ? Math.max(win.ten, pointsForHan(win.han + nukiDora, ctx.dealer)) : win.ten;
         const ten = base2 * (menzen ? 1.3 : 1.05) + ctx.tableBonus;
         ukeire += r;
         points += r * ten;
@@ -12850,8 +12842,8 @@
           rest.splice(rest.indexOf(pickIdFromHand(hand14, idx, ctx.akaSet)), 1);
           if (shantenOfCounts(countsOf(rest), meldCount) !== 0) continue;
           const prof = tenpaiProfile(rest);
-          const score2 = prof.ukeire * prof.points;
-          if (!best || score2 > best.score) best = { score: score2, prof };
+          const score = prof.ukeire * prof.points;
+          if (!best || score > best.score) best = { score, prof };
           if (state.exhausted) return null;
         }
         if (!best) continue;
@@ -12893,9 +12885,9 @@
       const rest = p.hand.slice();
       rest.splice(rest.indexOf(id), 1);
       const value = estimateValue(ctx, rest, p.melds) * ctx.gainScale;
-      const win2 = winCurve(ctx, w.shanten, w.ukeire, ctx.ownDraws, quality);
+      const win = winCurve(ctx, w.shanten, w.ukeire, ctx.ownDraws, quality);
       const risk = dealInProbability(ctx, kindOf(id)) * ctx.threatLoss * ctx.lossScale;
-      const push = win2 * value - futureExposure(ctx, w.shanten);
+      const push = win * value - futureExposure(ctx, w.shanten);
       const foldBase = ctx.danger ? -0.012 * ctx.threatLoss * ctx.lossScale * Math.min(ctx.ownDraws, 6) : -Infinity;
       candidates.push({
         id,
@@ -12904,7 +12896,7 @@
         shanten: w.shanten,
         ukeire: w.ukeire,
         waits: w.waits,
-        win: win2,
+        win,
         value,
         risk,
         push,
@@ -12954,9 +12946,9 @@
     const meldCount = realMelds(melds).length;
     const w = waitsOfCounts(countsOf(hand), meldCount, ctx.remainOf);
     const value = estimateValue(ctx, hand, melds) * ctx.gainScale * valueScale;
-    const win2 = winCurve(ctx, w.shanten, w.ukeire, ctx.ownDraws);
+    const win = winCurve(ctx, w.shanten, w.ukeire, ctx.ownDraws);
     const nextRisk = ctx.danger ? 0.06 * ctx.threatLoss * ctx.lossScale : 0;
-    const push = win2 * value - futureExposure(ctx, w.shanten) - nextRisk;
+    const push = win * value - futureExposure(ctx, w.shanten) - nextRisk;
     const fold = ctx.danger ? -0.012 * ctx.threatLoss * ctx.lossScale * Math.min(ctx.ownDraws, 6) : -Infinity;
     return { push, fold, ev: Math.max(push, fold) };
   }
@@ -13031,8 +13023,8 @@
         damaUkeire,
         risk: dealInProbability(ctx, kind) * ctx.threatLoss * ctx.lossScale
       };
-      const score2 = candidate.ukeire * candidate.riichiPts - candidate.risk * 10;
-      if (!best || score2 > best.score || score2 === best.score && card < best.card) best = { ...candidate, score: score2 };
+      const score = candidate.ukeire * candidate.riichiPts - candidate.risk * 10;
+      if (!best || score > best.score || score === best.score && card < best.card) best = { ...candidate, score };
     }
     if (!best) return null;
     const draws = ctx.ownDraws;
@@ -13279,14 +13271,14 @@
         players = 4,
         akaCount = 1,
         startScore = 25e3,
-        emit: emit2,
+        emit,
         seed
       } = opts;
       this.playersN = players;
       this.sanma = players === 3;
       this.akaCount = akaCount;
       this.startScore = startScore;
-      this.emit = emit2 || (() => {
+      this.emit = emit || (() => {
       });
       this.autoHuman = !!opts.autoHuman;
       this.selfLoveLevel = Number(opts.selfLoveLevel) || 0;
@@ -13408,12 +13400,12 @@
       this.remain = wall.length;
       const players = [];
       for (let s = 0; s < this.playersN; s++) {
-        const score2 = this.scores ? this.scores[s] : this.startScore;
+        const score = this.scores ? this.scores[s] : this.startScore;
         players.push({
           seat: s,
           isHuman: s === 0,
-          score: score2,
-          scoreAtStart: score2,
+          score,
+          scoreAtStart: score,
           timeBank: s === 0 ? this.extraTime : 0,
           hand: wall.splice(0, 13).sort((a, b) => a - b),
           melds: [],
@@ -13551,77 +13543,77 @@
       if (!await this.drawReplacement(seat)) return;
       await this.awaitTurn(seat, true);
     }
-    expectDraw(seat, drew, actions2, cantPlays = []) {
+    expectDraw(seat, drew, actions, cantPlays = []) {
       if (this.autoHuman || !this.players[seat]?.isHuman) {
         this._expectedDraw = null;
         return;
       }
       this._processing = false;
-      this._expectedDraw = { seat, drew, actions: actions2.slice(), cantPlays: cantPlays.slice() };
+      this._expectedDraw = { seat, drew, actions: actions.slice(), cantPlays: cantPlays.slice() };
     }
     validateTurnPayload(payload, expected = this._expectedDraw) {
       if (!expected || !this.players?.[expected.seat]) return Result.Fail_InvalidSequence;
       const p = this.players[expected.seat];
-      const action2 = Number(payload?.action);
+      const action = Number(payload?.action);
       const card = Number(payload?.card);
-      if (!Number.isInteger(action2)) return Result.Fail_InvalidParam;
-      if (!expected.actions.includes(action2)) return Result.Fail_ActionNotInCanPlayActions;
-      if (action2 === PlayAction.Hu || action2 === PlayAction.JiuZhongJiuLiuJu) return Result.Succ;
+      if (!Number.isInteger(action)) return Result.Fail_InvalidParam;
+      if (!expected.actions.includes(action)) return Result.Fail_ActionNotInCanPlayActions;
+      if (action === PlayAction.Hu || action === PlayAction.JiuZhongJiuLiuJu) return Result.Succ;
       if (!Number.isInteger(card) || !p.hand.includes(card)) return Result.Fail_CardNotInHand;
       if (expected.cantPlays.includes(kindOf2(card) * 10)) return Result.Fail_CardInCantPlays;
-      if (action2 === PlayAction.Riichi) {
+      if (action === PlayAction.Riichi) {
         const hand = p.hand.slice();
         hand.splice(hand.indexOf(card), 1);
         if (!this.isFormalTenpaiHand(hand, p.melds)) return Result.Fail_RiichiPlayCardWrong;
       }
-      if (action2 === PlayAction.AnGang) {
+      if (action === PlayAction.AnGang) {
         const allowed = this.concealedQuadTiles(p).some((tile) => kindOf2(tile) === kindOf2(card));
         if (!allowed) return Result.Fail_CardNotMatchAction;
       }
-      if (action2 === PlayAction.PengGang) {
+      if (action === PlayAction.PengGang) {
         const matchesPon = p.melds.some((meld) => meld.type === "pon" && kindOf2(meld.tiles[0]) === kindOf2(card));
         if (!matchesPon) return Result.Fail_CardNotMatchAction;
       }
-      if (action2 === PlayAction.BaBei) {
+      if (action === PlayAction.BaBei) {
         const { suit, rank } = decodeId(card);
         if (suit !== 4 || rank !== 4 || p.riichi && card !== p.drawnTile) return Result.Fail_CardNotMatchAction;
       }
-      if (action2 === PlayAction.Normal && p.riichi && p.riichiTurn !== this.xunNum && card !== p.drawnTile) {
+      if (action === PlayAction.Normal && p.riichi && p.riichiTurn !== this.xunNum && card !== p.drawnTile) {
         return Result.Fail_CardNotMatchAction;
       }
       return Result.Succ;
     }
-    expectClaim(seat, discarderSeat, card, actions2) {
-      if (this.autoHuman || !this.players[seat]?.isHuman || !actions2?.length) {
+    expectClaim(seat, discarderSeat, card, actions) {
+      if (this.autoHuman || !this.players[seat]?.isHuman || !actions?.length) {
         this._expectedClaim = null;
         return;
       }
       this._processing = false;
-      this._expectedClaim = { seat, discarderSeat, card, actions: actions2.slice() };
+      this._expectedClaim = { seat, discarderSeat, card, actions: actions.slice() };
     }
     validateClaimPayload(payload, expected = this._expectedClaim) {
       if (!expected || !this.players?.[expected.seat]) return Result.Fail_InvalidSequence;
-      const action2 = Number(payload?.action);
-      if (!Number.isInteger(action2)) return Result.Fail_InvalidParam;
-      if (!expected.actions.includes(action2)) return Result.Fail_ActionNotInCanQiangActions;
-      if (action2 === PlayAction.Guo || action2 === PlayAction.Hu) return Result.Succ;
+      const action = Number(payload?.action);
+      if (!Number.isInteger(action)) return Result.Fail_InvalidParam;
+      if (!expected.actions.includes(action)) return Result.Fail_ActionNotInCanQiangActions;
+      if (action === PlayAction.Guo || action === PlayAction.Hu) return Result.Succ;
       const p = this.players[expected.seat];
       const otherCards = Array.isArray(payload?.otherCards) ? payload.otherCards.map(Number) : [];
-      const needed = action2 === PlayAction.MingGang ? 3 : 2;
+      const needed = action === PlayAction.MingGang ? 3 : 2;
       if (otherCards.length !== needed || new Set(otherCards).size !== otherCards.length || otherCards.some((tile) => !p.hand.includes(tile))) {
         return Result.Fail_InvalidOtherCards;
       }
       const claimedKind = kindOf2(expected.card);
-      if (action2 === PlayAction.Peng || action2 === PlayAction.MingGang) {
+      if (action === PlayAction.Peng || action === PlayAction.MingGang) {
         return otherCards.every((tile) => kindOf2(tile) === claimedKind) ? Result.Succ : Result.Fail_InvalidOtherCards;
       }
-      if (action2 === PlayAction.Chi) {
+      if (action === PlayAction.Chi) {
         if (this.sanma || expected.seat !== this.nextSeat(expected.discarderSeat)) return Result.Fail_InvalidOtherCards;
         const all = [...otherCards, expected.card].map(decodeId);
         if (all.some((tile) => tile.suit === 4 || tile.suit !== all[0].suit)) return Result.Fail_InvalidOtherCards;
         const ranks = all.map((tile) => tile.rank).sort((a, b) => a - b);
         const isSequence = ranks[0] + 1 === ranks[1] && ranks[1] + 1 === ranks[2];
-        return isSequence && this.canDiscardAfterClaim(p, action2, expected.card, otherCards) ? Result.Succ : Result.Fail_InvalidOtherCards;
+        return isSequence && this.canDiscardAfterClaim(p, action, expected.card, otherCards) ? Result.Succ : Result.Fail_InvalidOtherCards;
       }
       return Result.Fail_ActionNotInCanQiangActions;
     }
@@ -13656,23 +13648,23 @@
         });
         await this._d(this.T.think);
       }
-      let action2, card;
+      let action, card;
       const useHumanInput = !this.isAiSeat(p) || this._bufferedDraw != null;
       if (useHumanInput) {
         if (!this._expectedDraw && this._bufferedDraw == null) this.expectDraw(seat, drew, can, cantPlays);
         this._processing = false;
         const payload = await this.waitHuman("draw");
-        action2 = payload.action != null ? payload.action : PlayAction.Normal;
+        action = payload.action != null ? payload.action : PlayAction.Normal;
         card = payload.card != null ? payload.card : p.drawnTile;
       } else {
         this._expectedDraw = null;
         const d = this.aiTurn(seat, drew, can, cantPlays);
-        action2 = d.action;
+        action = d.action;
         card = d.card;
         await this._d(this.T.think);
       }
-      const result = await this.processTurnAction(seat, action2, card, drew, cantPlays);
-      if (result !== Result.Succ) throw new Error(`\u975E\u6CD5\u5185\u90E8\u52A8\u4F5C seat=${seat} action=${action2} result=${result}`);
+      const result = await this.processTurnAction(seat, action, card, drew, cantPlays);
+      if (result !== Result.Succ) throw new Error(`\u975E\u6CD5\u5185\u90E8\u52A8\u4F5C seat=${seat} action=${action} result=${result}`);
     }
     // 手牌 14 张时的可选动作
     turnActions(seat, drew) {
@@ -13791,15 +13783,15 @@
     // 场上已公开的牌（牌河 + 副露 + 宝牌指示牌）
     visibleCounts() {
       const c = new Array(34).fill(0);
-      const add2 = (id) => {
+      const add = (id) => {
         const i = tileIndex(id);
         if (i >= 0) c[i]++;
       };
       for (const q of this.players) {
-        for (const t of q.discards) add2(t);
-        for (const m of q.melds) for (const t of m.tiles) add2(t);
+        for (const t of q.discards) add(t);
+        for (const m of q.melds) for (const t of m.tiles) add(t);
       }
-      for (const t of this.doraIndicators) add2(t);
+      for (const t of this.doraIndicators) add(t);
       return c;
     }
     // 某家视角下「某牌种还剩几张」（用于受入枚数）
@@ -13877,11 +13869,11 @@
       return this.selfFuriten(p) || !!p.tempFuriten || !!p.riichiFuriten;
     }
     furitenTypes(p) {
-      const types2 = [];
-      if (p.riichiFuriten) types2.push(0);
-      if (p.tempFuriten) types2.push(1);
-      if (this.selfFuriten(p)) types2.push(2);
-      return types2;
+      const types = [];
+      if (p.riichiFuriten) types.push(0);
+      if (p.tempFuriten) types.push(1);
+      if (this.selfFuriten(p)) types.push(2);
+      return types;
     }
     markPassedRon(p) {
       if (p.riichi) p.riichiFuriten = true;
@@ -13919,7 +13911,7 @@
       for (const o of options) {
         const playTile = p.hand.find((t) => tileIndex(t) === o.idx);
         if (!playTile) continue;
-        const play2 = indexToTileId(o.idx, 0);
+        const play = indexToTileId(o.idx, 0);
         const hand13 = p.hand.slice();
         hand13.splice(hand13.indexOf(playTile), 1);
         if (!this.isFormalTenpaiHand(hand13, p.melds)) continue;
@@ -13929,7 +13921,7 @@
           const wMo = calcWin(hand14, p.melds, this.akaSet, this.winOpts(p, false));
           const wRong = calcWin(hand13, p.melds, this.akaSet, this.winOpts(p, true, tingTile));
           out.push({
-            play: play2,
+            play,
             ting: tingTile,
             hasYiWhenMo: wMo.hasYaku,
             yiManChance: 0,
@@ -13942,37 +13934,37 @@
       return out.slice(0, 60);
     }
     // ================= 处理行动 =================
-    async processTurnAction(seat, action2, card, drew, cantPlays = []) {
+    async processTurnAction(seat, action, card, drew, cantPlays = []) {
       const p = this.players[seat];
       const result = this.validateTurnPayload(
-        { action: action2, card },
+        { action, card },
         { seat, drew, actions: this.turnActions(seat, drew), cantPlays }
       );
       if (result !== Result.Succ) return result;
       this._processing = true;
       this._bufferedDraw = null;
       this._bufferedClaim = null;
-      if (action2 === PlayAction.Hu) {
+      if (action === PlayAction.Hu) {
         await this.winTsumo(seat);
         return Result.Succ;
       }
-      if (action2 === PlayAction.JiuZhongJiuLiuJu) {
+      if (action === PlayAction.JiuZhongJiuLiuJu) {
         await this.abortiveDraw(LiuJuType.JiuZhongJiuPai, seat);
         return Result.Succ;
       }
-      if (action2 === PlayAction.AnGang) {
+      if (action === PlayAction.AnGang) {
         await this.doKan(seat, card, "ankan");
         return Result.Succ;
       }
-      if (action2 === PlayAction.PengGang) {
+      if (action === PlayAction.PengGang) {
         await this.doKan(seat, card, "kakan");
         return Result.Succ;
       }
-      if (action2 === PlayAction.BaBei) {
+      if (action === PlayAction.BaBei) {
         await this.doBaBei(seat, card);
         return Result.Succ;
       }
-      if (action2 === PlayAction.Riichi) {
+      if (action === PlayAction.Riichi) {
         p.riichi = true;
         p.doubleRiichi = this.firstGoAround && p.discards.length === 0;
         p.riichiTurn = this.xunNum;
@@ -13989,13 +13981,13 @@
       this.updateWaits(p);
       this.lastDiscard = { seat, card };
       if (p.ippatsu && p.riichiTurn !== this.xunNum) p.ippatsu = false;
-      await this.discard(seat, card, action2);
+      await this.discard(seat, card, action);
       return Result.Succ;
     }
     emptyClaims() {
       return this.players.map(() => []);
     }
-    async discard(seat, card, action2) {
+    async discard(seat, card, action) {
       const p = this.players[seat];
       const isMoQie = p.drawnTile === card;
       p.drawnTile = null;
@@ -14003,7 +13995,7 @@
       this.flushDeferredKanDora();
       const canQiang = this.players.map((q) => q.seat === seat ? [] : this.claimActions(q.seat, seat, card));
       this.expectClaim(0, seat, card, canQiang[0] || []);
-      this.emit(RiichiMsg.ENtfPlayCard, this.buildPlayCard(seat, card, action2, isMoQie, canQiang));
+      this.emit(RiichiMsg.ENtfPlayCard, this.buildPlayCard(seat, card, action, isMoQie, canQiang));
       await this._d(this.T.claim);
       await this.resolveClaims(seat, card, canQiang);
     }
@@ -14017,11 +14009,11 @@
       const kinds = firsts.map(kindOf2);
       return kinds.every((k) => k >= 41 && k <= 44 && k === kinds[0]);
     }
-    buildPlayCard(seat, card, action2, isMoQie, canQiang) {
+    buildPlayCard(seat, card, action, isMoQie, canQiang) {
       return {
         seat,
         card,
-        action: action2,
+        action,
         isMoQie,
         userInfos: this.players.map((q) => ({
           seat: q.seat,
@@ -14055,8 +14047,8 @@
       const w = calcWin(p.hand, p.melds, this.akaSet, { ...this.winOpts(p, true, card), ...extra });
       return w.isAgari && w.hasYaku;
     }
-    canDiscardAfterClaim(p, action2, card, used) {
-      const forbidden = this.kuikaeKinds(action2, [...used, card], card);
+    canDiscardAfterClaim(p, action, card, used) {
+      const forbidden = this.kuikaeKinds(action, [...used, card], card);
       return p.hand.some((tile) => !used.includes(tile) && !forbidden.has(kindOf2(tile)));
     }
     chiOptions(p, card) {
@@ -14147,23 +14139,23 @@
         player.pao.daisuushi = discarderSeat;
       }
     }
-    paoYakumanUnits(player, win2) {
-      const yaku2 = win2.yaku || {};
+    paoYakumanUnits(player, win) {
+      const yaku = win.yaku || {};
       let units = 0;
-      if (player.pao?.daisangen != null && Object.keys(yaku2).some((name) => name.includes("\u5927\u4E09\u5143"))) units += 1;
-      if (player.pao?.daisuushi != null && Object.keys(yaku2).some((name) => name.includes("\u5927\u56DB\u559C"))) units += 2;
-      return Math.min(units, win2.yakuman || units);
+      if (player.pao?.daisangen != null && Object.keys(yaku).some((name) => name.includes("\u5927\u4E09\u5143"))) units += 1;
+      if (player.pao?.daisuushi != null && Object.keys(yaku).some((name) => name.includes("\u5927\u56DB\u559C"))) units += 2;
+      return Math.min(units, win.yakuman || units);
     }
-    paoSeatFor(player, win2) {
-      const names = Object.keys(win2.yaku || {});
+    paoSeatFor(player, win) {
+      const names = Object.keys(win.yaku || {});
       if (player.pao?.daisangen != null && names.some((name) => name.includes("\u5927\u4E09\u5143"))) return player.pao.daisangen;
       if (player.pao?.daisuushi != null && names.some((name) => name.includes("\u5927\u56DB\u559C"))) return player.pao.daisuushi;
       return null;
     }
-    async executeClaim(seat, action2, card, discarderSeat, otherCards) {
+    async executeClaim(seat, action, card, discarderSeat, otherCards) {
       const p = this.players[seat];
       const validation = this.validateClaimPayload(
-        { action: action2, otherCards },
+        { action, otherCards },
         { seat, discarderSeat, card, actions: this.claimActions(seat, discarderSeat, card) }
       );
       if (validation !== Result.Succ) return validation;
@@ -14171,7 +14163,7 @@
       this._bufferedDraw = null;
       this._bufferedClaim = null;
       const donor = this.players[discarderSeat];
-      if (action2 === PlayAction.Hu) {
+      if (action === PlayAction.Hu) {
         await this.winRon(seat, discarderSeat, card);
         return Result.Succ;
       }
@@ -14179,22 +14171,22 @@
       donor.discardClaimed = true;
       for (const q of this.players) q.ippatsu = false;
       this.firstGoAround = false;
-      if (action2 === PlayAction.MingGang) {
+      if (action === PlayAction.MingGang) {
         const used2 = this.takeTiles(p, card, 3);
         p.melds.push({ type: "kan", tiles: [...used2, card], from: discarderSeat });
         p.menzen = false;
         this.kanCount++;
         this.recordPao(p, discarderSeat);
-        this.emit(RiichiMsg.ENtfQiangCard, this.buildQiang(seat, action2, used2));
+        this.emit(RiichiMsg.ENtfQiangCard, this.buildQiang(seat, action, used2));
         await this._d(this.T.claim);
         this._deferredKanDora++;
         if (!await this.drawReplacement(seat)) return Result.Succ;
-        this.emit(RiichiMsg.ENtfQiangCardEnd, this.buildQiangEnd(seat, action2, used2, [...used2, card]));
+        this.emit(RiichiMsg.ENtfQiangCardEnd, this.buildQiangEnd(seat, action, used2, [...used2, card]));
         await this._d(this.T.claim);
         await this.awaitTurn(seat, true);
         return Result.Succ;
       }
-      const isChi = action2 === PlayAction.Chi;
+      const isChi = action === PlayAction.Chi;
       const used = otherCards.slice();
       for (const tile of used) {
         p.hand.splice(p.hand.indexOf(tile), 1);
@@ -14205,22 +14197,22 @@
       p.menzen = false;
       p.drawnTile = null;
       p.rinshan = false;
-      const cantPlays = this.cantPlays(p, action2, meldTiles);
+      const cantPlays = this.cantPlays(p, action, meldTiles);
       this._nextCantPlays = { seat, values: cantPlays };
-      this.emit(RiichiMsg.ENtfQiangCard, this.buildQiang(seat, action2, used));
+      this.emit(RiichiMsg.ENtfQiangCard, this.buildQiang(seat, action, used));
       await this._d(this.T.claim);
       this.expectDraw(seat, false, this.turnActions(seat, false), cantPlays);
-      this.emit(RiichiMsg.ENtfQiangCardEnd, this.buildQiangEnd(seat, action2, used, meldTiles));
+      this.emit(RiichiMsg.ENtfQiangCardEnd, this.buildQiangEnd(seat, action, used, meldTiles));
       await this._d(this.T.claim);
       await this.awaitTurn(seat, false);
       return Result.Succ;
     }
     canRobKan(p, tile, kind) {
       if (!p.waits?.includes(kindOf2(tile)) || this.isFuriten(p)) return false;
-      const win2 = calcWin(p.hand, p.melds, this.akaSet, { ...this.winOpts(p, true, tile), chankan: true });
-      if (!win2.isAgari || !win2.hasYaku) return false;
+      const win = calcWin(p.hand, p.melds, this.akaSet, { ...this.winOpts(p, true, tile), chankan: true });
+      if (!win.isAgari || !win.hasYaku) return false;
       if (kind !== "ankan") return true;
-      return Object.keys(win2.yaku || {}).some((name) => name.includes("\u56FD\u58EB\u7121\u53CC"));
+      return Object.keys(win.yaku || {}).some((name) => name.includes("\u56FD\u58EB\u7121\u53CC"));
     }
     kanRobActions(kanSeat, tile, kind) {
       return this.players.map((player) => {
@@ -14256,10 +14248,10 @@
     async doKan(seat, card, kind) {
       this.flushDeferredKanDora();
       const p = this.players[seat];
-      const action2 = kind === "ankan" ? PlayAction.AnGang : PlayAction.PengGang;
+      const action = kind === "ankan" ? PlayAction.AnGang : PlayAction.PengGang;
       const canQiang = this.kanRobActions(seat, card, kind);
       this.expectClaim(0, seat, card, canQiang[0] || []);
-      this.emit(RiichiMsg.ENtfPlayCard, this.buildPlayCard(seat, card, action2, false, canQiang));
+      this.emit(RiichiMsg.ENtfPlayCard, this.buildPlayCard(seat, card, action, false, canQiang));
       await this._d(this.T.claim);
       if (await this.resolveKanRob(seat, card, canQiang)) return;
       if (kind === "ankan") {
@@ -14311,21 +14303,21 @@
     // Chi/Peng 均为 2 张、MingGang 为 3 张，被鸣牌只由 NtfPlayCard.card 给出）。
     // 若把被鸣牌也塞进来，客户端会按 otherCards.length+1 判定副露类型：
     // 碰(3)→显示成明杠、吃(3)→UI 拼不出顺子而卡死。
-    buildQiang(seat, action2, otherCards) {
+    buildQiang(seat, action, otherCards) {
       return {
         seat,
-        action: action2,
+        action,
         otherCards: otherCards || [],
         userInfos: this.players.map((q) => ({ seat: q.seat }))
       };
     }
     // otherCards = 发给客户端的「自己手里贡献的牌」（不含被鸣的那张）
     // meldTiles   = 完整面子（含被鸣牌），仅内部用于算食替禁止牌
-    buildQiangEnd(seat, action2, otherCards, meldTiles) {
+    buildQiangEnd(seat, action, otherCards, meldTiles) {
       const p = this.players[seat];
       return {
         seats: [seat],
-        action: action2,
+        action,
         otherCards: otherCards || [],
         userInfos: this.players.map((q) => ({
           seat: q.seat,
@@ -14334,7 +14326,7 @@
           // 即「仅可打牌」），绝不带 6/7/8/9/10。完整可选项由紧随其后的 NtfSendCard 下发。
           canPlayActions: q.seat === seat ? [PlayAction.Normal] : [],
           isZhenTing: this.isFuriten(q),
-          cantPlays: q.seat === seat ? this.cantPlays(p, action2, meldTiles || otherCards || []) : [],
+          cantPlays: q.seat === seat ? this.cantPlays(p, action, meldTiles || otherCards || []) : [],
           leftTimer: q.isHuman ? Math.ceil(q.timeBank) : 0,
           xunNum: this.xunNum,
           zhenTingTypes: this.furitenTypes(q)
@@ -14342,16 +14334,16 @@
       };
     }
     // 吃碰后的食替禁止牌（同样是牌种编码 copy=0，实机样本 [440,310,280,380,320]）
-    cantPlays(p, action2, meldTiles) {
-      if (action2 !== PlayAction.Chi && action2 !== PlayAction.Peng) return [];
+    cantPlays(p, action, meldTiles) {
+      if (action !== PlayAction.Chi && action !== PlayAction.Peng) return [];
       const claimed = this.lastDiscard ? this.lastDiscard.card : null;
-      return [...this.kuikaeKinds(action2, meldTiles, claimed)].filter((kind) => p.hand.some((tile) => kindOf2(tile) === kind)).map((kind) => kind * 10);
+      return [...this.kuikaeKinds(action, meldTiles, claimed)].filter((kind) => p.hand.some((tile) => kindOf2(tile) === kind)).map((kind) => kind * 10);
     }
-    kuikaeKinds(action2, meldTiles, claimed) {
+    kuikaeKinds(action, meldTiles, claimed) {
       const out = /* @__PURE__ */ new Set();
-      if (claimed == null || action2 !== PlayAction.Chi && action2 !== PlayAction.Peng) return out;
+      if (claimed == null || action !== PlayAction.Chi && action !== PlayAction.Peng) return out;
       out.add(kindOf2(claimed));
-      if (action2 !== PlayAction.Chi || meldTiles.length !== 3) return out;
+      if (action !== PlayAction.Chi || meldTiles.length !== 3) return out;
       const claimedTile = decodeId(claimed);
       const ranks = meldTiles.map((tile) => decodeId(tile).rank).sort((left, right) => left - right);
       if (ranks[2] - ranks[0] !== 2) return out;
@@ -14368,21 +14360,21 @@
     async winRon(seat, loser, card, extra = {}) {
       await this.winRons([seat], loser, card, extra);
     }
-    async winRons(seats4, loser, card, extra = {}, { robbed = false } = {}) {
+    async winRons(seats, loser, card, extra = {}, { robbed = false } = {}) {
       const donor = this.players[loser];
       const robbedIndex = robbed ? donor.hand.indexOf(card) : -1;
       if (robbed && robbedIndex < 0) throw new Error(`\u88AB\u62A2\u724C\u4E0D\u5728\u624B\u4E2D seat=${loser} card=${card}`);
       const wins = /* @__PURE__ */ new Map();
-      for (const seat of seats4) {
+      for (const seat of seats) {
         const p = this.players[seat];
-        const win2 = calcWin(
+        const win = calcWin(
           p.hand,
           p.melds,
           this.akaSet,
           { ...this.winOpts(p, true, card), ...extra }
         );
-        if (!win2.isAgari || !win2.hasYaku) throw new Error(`\u975E\u6CD5\u8363\u548C seat=${seat}`);
-        wins.set(seat, win2);
+        if (!win.isAgari || !win.hasYaku) throw new Error(`\u975E\u6CD5\u8363\u548C seat=${seat}`);
+        wins.set(seat, win);
       }
       this.rollbackRiichiDeclaration(donor);
       if (robbed) {
@@ -14390,7 +14382,7 @@
         donor.drawnTile = null;
         this.updateWaits(donor);
       }
-      await this.endHand({ type: "ron", winners: seats4.slice(), loser, card, wins });
+      await this.endHand({ type: "ron", winners: seats.slice(), loser, card, wins });
     }
     async exhaustiveDraw() {
       const nagashiWinners = this.players.filter((player) => player.discards.length > 0 && !player.discardClaimed && player.discards.every((tile) => {
@@ -14483,12 +14475,12 @@
         const paoSeat = this.paoSeatFor(winP, rawWin);
         const paoUnits = this.paoYakumanUnits(winP, rawWin);
         const paoTotal = paoUnits * (isDealerWin ? 48e3 : 32e3);
-        const win2 = this.applyExtraFan(rawWin, extraFan, isDealerWin);
+        const win = this.applyExtraFan(rawWin, extraFan, isDealerWin);
         if (res.type === "tsumo") {
           let pureGain = 0;
           for (let seat = 0; seat < n; seat++) {
             if (seat === winner) continue;
-            const base2 = isDealerWin ? win2.oya[0] || 0 : seat === this.dealerSeat ? win2.ko[0] || 0 : win2.ko[1] || 0;
+            const base2 = isDealerWin ? win.oya[0] || 0 : seat === this.dealerSeat ? win.ko[0] || 0 : win.ko[1] || 0;
             const payment = base2 + this.honba * 100;
             scores[seat] -= payment;
             scores[winner] += payment;
@@ -14512,7 +14504,7 @@
           }
           huDelta[winner] += pureGain;
         } else {
-          const base2 = win2.ten || 0;
+          const base2 = win.ten || 0;
           const honbaPayment = winnerIndex === 0 ? this.honba * 300 : 0;
           scores[res.loser] -= base2 + honbaPayment;
           scores[winner] += base2 + honbaPayment;
@@ -14526,21 +14518,21 @@
             huDelta[paoSeat] -= split;
           }
         }
-        const yakuInfo = mapYaku(win2.yaku, {
+        const yakuInfo = mapYaku(win.yaku, {
           roundWind: this.roundWind,
           seatWind: this.seatWindOf(winner)
         });
         details.set(winner, {
           yiFans: this.rebuildYiFans(yakuInfo.yiFans),
-          isYiMan: yakuInfo.isYiMan || win2.yakuman > 0,
-          manType: manTypeFromResult({ han: win2.han, fu: win2.fu, yakuman: win2.yakuman, name: win2.name }),
+          isYiMan: yakuInfo.isYiMan || win.yakuman > 0,
+          manType: manTypeFromResult({ han: win.han, fu: win.fu, yakuman: win.yakuman, name: win.name }),
           baoFan: doraBreak.omote,
           liBaoFan: doraBreak.ura,
           redBaoFan: doraBreak.aka,
           baBeiFan: doraBreak.babei,
-          fu: win2.fu,
-          totalFan: win2.han,
-          yakuman: win2.yakuman || 0
+          fu: win.fu,
+          totalFan: win.han,
+          yakuman: win.yakuman || 0
         });
       }
       const stickBonus = this.riichiSticks * 1e3;
@@ -14721,7 +14713,7 @@
       return out;
     }
     decideGameOver(dealerContinues, scores, { drawNoPenalty = false, multiRonDealerContinuation = false } = {}) {
-      if (scores.some((score2) => score2 < 0)) return true;
+      if (scores.some((score) => score < 0)) return true;
       if (this.handIndex + 1 >= this.maxHands) return true;
       if (drawNoPenalty) return false;
       const necessary = this.playersN === 3 ? 4e4 : 3e4;
@@ -14738,10 +14730,10 @@
       if (topMeets) return true;
       return lastSeat && !dealerContinues;
     }
-    async finishHand(gameOver, dealerContinues, scores, { draw: draw2 = false } = {}) {
+    async finishHand(gameOver, dealerContinues, scores, { draw = false } = {}) {
       this.scores = scores.slice();
       this.handIndex += 1;
-      if (draw2 || dealerContinues) {
+      if (draw || dealerContinues) {
         this.honba += 1;
       } else {
         this.honba = 0;
@@ -15038,8 +15030,8 @@
         }
         meld = { type: "chi", tiles: [...chiTiles, card] };
       }
-      const action2 = kind === "chi" ? PlayAction.Chi : PlayAction.Peng;
-      const forbiddenKinds = this.kuikaeKinds(action2, meld.tiles, card);
+      const action = kind === "chi" ? PlayAction.Chi : PlayAction.Peng;
+      const forbiddenKinds = this.kuikaeKinds(action, meld.tiles, card);
       try {
         return chooseDiscard(hand, p.melds.concat([meld]), {
           doraKinds: this.doraKinds(),
@@ -18223,11 +18215,11 @@
   function oneRoundRoom(roomId, roomLevel) {
     return ECONOMY_CATALOG.oneRound.find((row) => row.id === roomId * 1e4 + roomLevel) || null;
   }
-  function oneRoundRewardLevel(win2) {
-    if (!win2) return 0;
-    if (win2.yakuman >= 2) return 10;
-    if (win2.manType >= ManType.ManGuan) return 4 + win2.manType;
-    return Math.min(Math.max(win2.totalFan || 0, 0), 4);
+  function oneRoundRewardLevel(win) {
+    if (!win) return 0;
+    if (win.yakuman >= 2) return 10;
+    if (win.manType >= ManType.ManGuan) return 4 + win.manType;
+    return Math.min(Math.max(win.totalFan || 0, 0), 4);
   }
   function settleOneRound(user, room, humanWin) {
     const level = oneRoundRewardLevel(humanWin);
@@ -18243,8965 +18235,6 @@
     return room.cost.every((item) => user.inventoryCount(6, item.id) >= item.count);
   }
 
-  // mockjs/sichuan_hand.mjs
-  var RED_ZHONG_KIND = 27;
-  var RED_ZHONG_DISPLAY = 450;
-  var isRedZhong = (id) => Number.isSafeInteger(id) && id >= 451 && id <= 456;
-  function buildSichuanWall({ wild = false } = {}) {
-    const tiles = [];
-    for (let suit = 1; suit <= 3; suit += 1) {
-      for (let rank = 1; rank <= 9; rank += 1) {
-        for (let copy = 1; copy <= 4; copy += 1) tiles.push(tileId(suit, rank, copy));
-      }
-    }
-    if (wild) for (let copy = 1; copy <= 6; copy += 1) tiles.push(tileId(4, 5, copy));
-    return tiles;
-  }
-  function sichuanKind(id, wild = false) {
-    if (!Number.isSafeInteger(id)) throw new RangeError("\u56DB\u5DDD\u5B9E\u4F53\u724C ID \u5FC5\u987B\u662F\u6574\u6570");
-    if (wild && isRedZhong(id)) return RED_ZHONG_KIND;
-    const { suit, rank, copy } = decodeId(id);
-    if (suit < 1 || suit > 3 || rank < 1 || rank > 9 || copy < 1 || copy > 4) {
-      throw new RangeError(`\u65E0\u6548\u7684\u666E\u901A\u56DB\u5DDD\u5B9E\u4F53\u724C\uFF1A${id}`);
-    }
-    return (suit - 1) * 9 + rank - 1;
-  }
-  function inspectHolding(hand, melds, missingSuit, wild) {
-    if (![1, 2, 3].includes(missingSuit)) throw new RangeError("\u5FC5\u987B\u660E\u786E\u6307\u5B9A\u4E07/\u7B52/\u6761\u4E2D\u7684\u5B9A\u7F3A\u82B1\u8272");
-    if (!Array.isArray(hand) || !Array.isArray(melds) || melds.length > 4 || hand.length > 14) {
-      throw new RangeError("\u56DB\u5DDD\u624B\u724C\u6216\u526F\u9732\u7ED3\u6784\u65E0\u6548");
-    }
-    const used = /* @__PURE__ */ new Set();
-    const counts = Array(27).fill(0);
-    const allCounts = Array(27).fill(0);
-    let wilds = 0;
-    let hasMissing = false;
-    function add2(id, allowWild) {
-      const kind = sichuanKind(id, wild && allowWild);
-      if (used.has(id)) throw new RangeError(`\u91CD\u590D\u5B9E\u4F53\u724C\uFF1A${id}`);
-      used.add(id);
-      if (kind === RED_ZHONG_KIND) return kind;
-      allCounts[kind] += 1;
-      if (Math.floor(kind / 9) + 1 === missingSuit) hasMissing = true;
-      return kind;
-    }
-    for (const id of hand) {
-      const kind = add2(id, true);
-      if (kind === RED_ZHONG_KIND) wilds += 1;
-      else counts[kind] += 1;
-    }
-    const fixedGroups = [];
-    for (const meld of melds) {
-      const length = meld?.type === "pon" ? 3 : ["kan", "ankan"].includes(meld?.type) ? 4 : 0;
-      if (!length || !Array.isArray(meld.tiles) || meld.tiles.length !== length) {
-        throw new RangeError("\u56DB\u5DDD\u4EC5\u652F\u6301\u4E09\u5F20\u78B0\u6216\u56DB\u5F20\u6760\uFF0C\u4E0D\u80FD\u5403");
-      }
-      const kinds = [];
-      for (const id of meld.tiles) kinds.push(add2(id, false));
-      if (!kinds.every((kind) => kind === kinds[0])) throw new RangeError("\u78B0\u6760\u5FC5\u987B\u662F\u540C\u4E00\u79CD\u724C");
-      fixedGroups.push({ type: length === 4 ? "quad" : "triplet", kind: kinds[0], open: meld.type !== "ankan", wild: 0 });
-    }
-    return { counts, allCounts, used, wilds, hasMissing, fixedGroups };
-  }
-  var suitKinds = (missingSuit) => Array.from({ length: 27 }, (_, kind) => kind).filter((kind) => Math.floor(kind / 9) + 1 !== missingSuit);
-  function wildGroups(missingSuit) {
-    const groups = [];
-    for (const kind of suitKinds(missingSuit)) {
-      groups.push({ type: "triplet", kind, open: false, wild: 3 });
-      if (kind % 9 <= 6) groups.push({ type: "sequence", kind, open: false, wild: 3 });
-    }
-    return groups;
-  }
-  function analyzeSichuanHand(hand, { melds = [], missingSuit, wild = false, winTile = null, limit = Infinity } = {}) {
-    const { counts, hasMissing, fixedGroups, wilds: totalWilds } = inspectHolding(hand, melds, missingSuit, wild);
-    if (hasMissing || hand.length !== 14 - 3 * melds.length) return [];
-    const winKind = winTile !== null && wild && !isRedZhong(winTile) ? sichuanKind(winTile) : null;
-    const original = counts.slice();
-    const forbiddenPair = (kind, pairWild) => winKind !== null && kind === winKind && pairWild === 1 && original[kind] === 1;
-    const allowed = suitKinds(missingSuit);
-    const shapes = [];
-    const full = () => shapes.length >= limit;
-    if (!melds.length) {
-      const singles = counts.filter((count) => count % 2 === 1).length;
-      const spare = totalWilds - singles;
-      if (spare >= 0 && spare % 2 === 0) {
-        const pairs = [];
-        const quadKinds = [];
-        let forbidden = false;
-        for (let kind = 0; kind < counts.length; kind += 1) {
-          for (let pair = 0; pair < Math.floor(counts[kind] / 2); pair += 1) pairs.push(kind);
-          if (counts[kind] % 2) {
-            pairs.push(kind);
-            if (forbiddenPair(kind, 1)) forbidden = true;
-          }
-          if (counts[kind] === 4) quadKinds.push(kind);
-        }
-        if (!forbidden) {
-          const extra = spare / 2;
-          const choose = (start, chosen) => {
-            if (full()) return;
-            if (chosen.length === extra) {
-              shapes.push({
-                type: "sevenPairs",
-                pairs: [...pairs, ...chosen].sort((a, b) => a - b),
-                quadKinds: [...quadKinds],
-                wildPairs: extra
-              });
-              return;
-            }
-            for (let index = start; index < allowed.length; index += 1) choose(index, [...chosen, allowed[index]]);
-          };
-          choose(0, []);
-        }
-      }
-    }
-    const groups = [];
-    const required = 4 - melds.length;
-    let wilds = totalWilds;
-    const record = (pair, pairWild) => {
-      if (!forbiddenPair(pair, pairWild)) {
-        shapes.push({ type: "standard", pair, pairWild, groups: [...fixedGroups, ...groups].map((group) => ({ ...group })) });
-      }
-    };
-    function finishWild(pair, pairWild, start) {
-      if (full()) return;
-      if (groups.length === required) return record(pair, pairWild);
-      const options = wildGroups(missingSuit);
-      for (let index = start; index < options.length; index += 1) {
-        groups.push(options[index]);
-        finishWild(pair, pairWild, index);
-        groups.pop();
-        if (full()) return;
-      }
-    }
-    function split(pair, pairWild) {
-      if (full()) return;
-      const kind = counts.findIndex((count) => count > 0);
-      if (kind === -1) {
-        if (wilds === 3 * (required - groups.length)) {
-          if (wilds) {
-            const saved = wilds;
-            wilds = 0;
-            finishWild(pair, pairWild, 0);
-            wilds = saved;
-          } else if (groups.length === required) record(pair, pairWild);
-        }
-        return;
-      }
-      if (groups.length >= required) return;
-      for (const used of [3, 2, 1]) {
-        const need = 3 - used;
-        if (counts[kind] < used || wilds < need || !wild && need) continue;
-        counts[kind] -= used;
-        wilds -= need;
-        groups.push({ type: "triplet", kind, open: false, wild: need });
-        split(pair, pairWild);
-        groups.pop();
-        wilds += need;
-        counts[kind] += used;
-      }
-      for (let start = kind - 2; start <= kind; start += 1) {
-        if (start < 0 || Math.floor(start / 9) !== Math.floor(kind / 9) || start % 9 > 6) continue;
-        let need = 0;
-        const taken = [];
-        for (let offset = 0; offset < 3; offset += 1) {
-          const position = start + offset;
-          if (position >= kind && counts[position] > 0) {
-            counts[position] -= 1;
-            taken.push(position);
-          } else need += 1;
-        }
-        if (taken[0] === kind && need <= wilds && (wild || !need)) {
-          wilds -= need;
-          groups.push({ type: "sequence", kind: start, open: false, wild: need });
-          split(pair, pairWild);
-          groups.pop();
-          wilds += need;
-        }
-        for (const position of taken) counts[position] += 1;
-      }
-    }
-    for (let pair = 0; pair < counts.length && !full(); pair += 1) {
-      if (counts[pair] >= 2) {
-        counts[pair] -= 2;
-        split(pair, 0);
-        counts[pair] += 2;
-      }
-    }
-    if (wild) {
-      for (let pair = 0; pair < counts.length && !full(); pair += 1) {
-        if (counts[pair] >= 1 && wilds >= 1) {
-          counts[pair] -= 1;
-          wilds -= 1;
-          split(pair, 1);
-          wilds += 1;
-          counts[pair] += 1;
-        }
-      }
-      if (wilds >= 2) {
-        for (const pair of allowed) {
-          if (full()) break;
-          wilds -= 2;
-          split(pair, 2);
-          wilds += 2;
-        }
-      }
-    }
-    return shapes;
-  }
-  function spareCopy(used, kind) {
-    const suit = Math.floor(kind / 9) + 1;
-    const rank = kind % 9 + 1;
-    let copy = 1;
-    while (used.has(tileId(suit, rank, copy))) copy += 1;
-    return tileId(suit, rank, copy);
-  }
-  function sichuanWaitKinds(hand, { melds = [], missingSuit, wild = false } = {}) {
-    const { allCounts, used, hasMissing } = inspectHolding(hand, melds, missingSuit, wild);
-    if (hasMissing || hand.length !== 13 - 3 * melds.length) return [];
-    const waits = [];
-    for (let kind = 0; kind < 27; kind += 1) {
-      const suit = Math.floor(kind / 9) + 1;
-      if (suit === missingSuit || allCounts[kind] >= 4) continue;
-      const id = spareCopy(used, kind);
-      if (analyzeSichuanHand([...hand, id], { melds, missingSuit, wild, winTile: id, limit: 1 }).length) waits.push(kind);
-    }
-    return waits;
-  }
-  function legalSichuanDiscards(hand, missingSuit, wild = false) {
-    inspectHolding(hand, [], missingSuit, wild);
-    const missing = hand.filter((id) => !isRedZhong(id) && decodeId(id).suit === missingSuit);
-    if (missing.length) return missing;
-    const ordinary = wild ? hand.filter((id) => !isRedZhong(id)) : hand.slice();
-    return ordinary.length ? ordinary : hand.slice();
-  }
-
-  // mockjs/sichuan_catalog.mjs
-  var SICHUAN_CATALOG = {
-    "source": "StreamingAssets/Bundles/WebGL/commonconfigs_d005e1531b1cf360239da815293e48c6.bundle",
-    "sha256": "ed720b8300fcf05a69e59a524562f6d67220697239bcebfe86a2e35a70b0e581",
-    "schemaSource": "Build/mj-h5.data.unityweb",
-    "schemaSha256": "2384b9ca86cda9a3a4594dcf3eecba377041b1dffc46949b273ad01c1af4c7fd",
-    "languageAsset": "LanguageTbUISC",
-    "multiplierFormat": {
-      "id": 1549,
-      "text": "X{0}\u500D"
-    },
-    "formula": {
-      "id": 2159,
-      "text": "\u756A\u578B1 x \u756A\u578B2 x ... x \u5E95\u5206"
-    },
-    "games": {
-      "5021": {
-        "name": "\u8840\u6D41\u9EBB\u5C06",
-        "rules": [
-          {
-            "ruleId": 502101,
-            "gameType": 5021,
-            "tab": 1,
-            "titleId": 2088,
-            "contentId": 2089,
-            "title": "\u7528\u724C",
-            "content": "\xB71-9\u4E07\u30011-9\u7B52\u30011-9\u6761\uFF0C\u5171108\u5F20\u724C\n\xB7\u53EF\u4EE5\u78B0\uFF0C\u6760\uFF0C\u4E0D\u80FD\u5403"
-          },
-          {
-            "ruleId": 502102,
-            "gameType": 5021,
-            "tab": 1,
-            "titleId": 2090,
-            "contentId": 2091,
-            "title": "\u80E1\u724C\u89C4\u5219",
-            "content": "\xB7\u5141\u8BB8\u4E00\u70AE\u591A\u54CD\n\xB7\u6BCF\u4E2A\u73A9\u5BB6\u53EF\u591A\u6B21\u80E1\u724C\uFF0C\u76F4\u81F3\u6478\u5B8C\u6240\u6709\u624B\u724C\uFF0C\u80E1\u724C\u65F6\u76F4\u63A5\u7ED3\u7B97"
-          },
-          {
-            "ruleId": 502103,
-            "gameType": 5021,
-            "tab": 1,
-            "titleId": 2092,
-            "contentId": 2093,
-            "title": "\u5B9A\u7F3A",
-            "content": "\xB7\u80E1\u724C\u65F6\uFF0C\u624B\u724C\u4E2D\u4E0D\u80FD\u8D85\u8FC72\u95E8\u82B1\u8272\n\xB7\u9009\u62E9\u4E00\u95E8\u82B1\u8272\u505A\u4E3A\u7F3A\u724C\uFF0C\u6478\u5230\u8FD9\u95E8\u82B1\u8272\u7684\u724C\u4E00\u5B9A\u8981\u6253\u51FA\u3002\u5BF9\u5C40\u4E2D\u4E0D\u53EF\u66F4\u6539\u7F3A"
-          },
-          {
-            "ruleId": 502104,
-            "gameType": 5021,
-            "tab": 1,
-            "titleId": 2040,
-            "contentId": 2095,
-            "title": "\u6362\u4E09\u5F20",
-            "content": "\xB7\u53D1\u5B8C\u624B\u724C\u540E\uFF0C\u6BCF\u4F4D\u73A9\u5BB6\u9009\u62E93\u5F20\u540C\u82B1\u8272\u7684\u724C\uFF0C\u968F\u673A\u4E0E\u5176\u4ED61\u4F4D\u73A9\u5BB6\u4EA4\u6362"
-          },
-          {
-            "ruleId": 502105,
-            "gameType": 5021,
-            "tab": 1,
-            "titleId": 2096,
-            "contentId": 2097,
-            "title": "\u6760\u724C",
-            "content": "\xB7\u3010\u522E\u98CE\u3011\u660E\u6760\uFF0C\u6536\u53D6\u653E\u6760\u80052\u500D\u5E95\u5206\n\xB7\u3010\u8865\u6760\u3011\u6536\u53D6\u5176\u4ED6\u73A9\u5BB61\u500D\u5E95\u5206\n\xB7\u3010\u4E0B\u96E8\u3011\u6697\u6760\uFF0C\u6536\u53D6\u5176\u4ED6\u73A9\u5BB62\u500D\u5E95\u5206\n\xB7\u82E5\u53EF\u660E\u6760\u60C5\u51B5\u4E0B\uFF0C\u5148\u78B0\u518D\u8865\u6760\u4E0D\u6536\u53D6\u5E95\u5206"
-          },
-          {
-            "ruleId": 502106,
-            "gameType": 5021,
-            "tab": 1,
-            "titleId": 2087,
-            "contentId": 2098,
-            "title": "\u547C\u53EB\u8F6C\u79FB",
-            "content": "\xB7\u73A9\u5BB6\u6760\u4E0A\u70AE\uFF0C\u9700\u5C06\u6760\u724C\u6240\u5E94\u5206\u6570\u8F6C\u7ED9\u80E1\u724C\u73A9\u5BB6\n\xB7\u6760\u4E0A\u70AE\u81F4\u4E00\u70AE\u591A\u54CD\uFF0C\u4E0D\u89E6\u53D1\u547C\u53EB\u8F6C\u79FB"
-          },
-          {
-            "ruleId": 502107,
-            "gameType": 5021,
-            "tab": 1,
-            "titleId": 2099,
-            "contentId": 2100,
-            "title": "\u5BF9\u5C40\u7ED3\u675F",
-            "content": "\xB7\u6478\u5B8C\u6240\u6709\u624B\u724C\u65F6\uFF0C\u672A\u542C\u724C\u3001\u82B1\u732A\u73A9\u5BB6\u9700\u8981\u63A5\u53D7\u989D\u5916\u60E9\u7F5A\n\xB7\u3010\u9000\u7A0E\u3011\u5BF9\u5C40\u7ED3\u675F\u65F6\uFF0C\u672A\u542C\u724C\u73A9\u5BB6\uFF0C\u9000\u56DE\u5168\u90E8\u6760\u724C\u6240\u5F97\n\xB7\u3010\u67E5\u5927\u53EB\u3011\u5BF9\u5C40\u7ED3\u675F\u65F6\uFF0C\u672A\u542C\u724C\u73A9\u5BB6\u8D54\u7ED9\u542C\u724C\u672A\u80E1\u724C\u73A9\u5BB6\u6700\u5927\u53EF\u80FD\u500D\u6570\uFF08\u4E0D\u5305\u542B\u81EA\u6478\u500D\u6570\uFF09\n\xB7\u3010\u67E5\u82B1\u732A\u3011\u5BF9\u5C40\u7ED3\u675F\u65F6\uFF0C\u624B\u724C\u4E0A\u82E5\u6709\u7F3A\u724C\u7684\u73A9\u5BB6\u4E3A\u82B1\u732A\uFF0C\u82B1\u732A\u73A9\u5BB6\u8D54\u7ED9\u5176\u4ED6\u73A9\u5BB6\u6BCF\u4EBA16\u500D\uFF08\u82E5\u5168\u7A0B\u6253\u7F3A\u724C\uFF0C\u65E0\u9700\u8D54\u4ED8\uFF09"
-          },
-          {
-            "ruleId": 502108,
-            "gameType": 5021,
-            "tab": 1,
-            "titleId": 3157,
-            "contentId": 3158,
-            "title": "\u8840\u6D41\u5C01\u9876",
-            "content": "\xB7\u514D\u8D39\u573A\uFF1A5120\u500D\n\xB7\u5176\u5B83\u573A\uFF1A10240\u500D"
-          }
-        ],
-        "yaku": [
-          {
-            "yiType": 502110011,
-            "gameType": 5021,
-            "calcYiType": 1001,
-            "endId": 2103,
-            "languageId": 2103,
-            "describeId": 2104,
-            "yiTypeShow": [
-              111,
-              121,
-              131,
-              141,
-              151,
-              161,
-              221,
-              231,
-              241,
-              251,
-              251,
-              251,
-              291,
-              0,
-              291
-            ],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_ph.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 1,
-            "sizeType": 3,
-            "exceptYis": [],
-            "name": "\u5E73\u80E1",
-            "description": "\u75314\u4E2A\u523B\u5B50\u6216\u987A\u5B50\u52A0\u5BF9\u5B50\u7EC4\u6210\u7684\u80E1\u724C\u3002"
-          },
-          {
-            "yiType": 502100071,
-            "gameType": 5021,
-            "calcYiType": 7,
-            "endId": 2266,
-            "languageId": 2153,
-            "describeId": 2154,
-            "yiTypeShow": [],
-            "picturePath": "",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [],
-            "name": "\u6839",
-            "description": "4\u5F20\u4E00\u6837\u7684\u724C\u4E3A1\u6839\uFF0C\u6BCF\u67091\u6839\uFF0C\u5219\u80E1\u724C\u65F6\u989D\u5916x2\u3002"
-          },
-          {
-            "yiType": 502100081,
-            "gameType": 5021,
-            "calcYiType": 8,
-            "endId": 2267,
-            "languageId": 0,
-            "describeId": 0,
-            "yiTypeShow": [],
-            "picturePath": "",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 0,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 4,
-            "sizeType": 3,
-            "exceptYis": [
-              502100071
-            ],
-            "name": "",
-            "description": ""
-          },
-          {
-            "yiType": 502100091,
-            "gameType": 5021,
-            "calcYiType": 9,
-            "endId": 2268,
-            "languageId": 0,
-            "describeId": 0,
-            "yiTypeShow": [],
-            "picturePath": "",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 0,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 8,
-            "sizeType": 3,
-            "exceptYis": [
-              502100071,
-              502100081
-            ],
-            "name": "",
-            "description": ""
-          },
-          {
-            "yiType": 502100101,
-            "gameType": 5021,
-            "calcYiType": 10,
-            "endId": 2269,
-            "languageId": 0,
-            "describeId": 0,
-            "yiTypeShow": [],
-            "picturePath": "",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 0,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 16,
-            "sizeType": 3,
-            "exceptYis": [
-              502100071,
-              502100081,
-              502100091
-            ],
-            "name": "",
-            "description": ""
-          },
-          {
-            "yiType": 502100041,
-            "gameType": 5021,
-            "calcYiType": 4,
-            "endId": 2155,
-            "languageId": 2155,
-            "describeId": 2156,
-            "yiTypeShow": [],
-            "picturePath": "",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [
-              2,
-              3
-            ],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [
-              502100042
-            ],
-            "name": "\u81EA\u6478",
-            "description": "\u81EA\u6478\u80E1\u724C\u3002"
-          },
-          {
-            "yiType": 502100061,
-            "gameType": 5021,
-            "calcYiType": 6,
-            "endId": 2149,
-            "languageId": 2149,
-            "describeId": 2150,
-            "yiTypeShow": [],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_gskh.png",
-            "isOpen": 1,
-            "priority": 2,
-            "ruleOpen": 1,
-            "cantHuTypes": [
-              2,
-              3
-            ],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [],
-            "name": "\u6760\u4E0A\u5F00\u82B1",
-            "description": "\u6760\u724C\u540E\uFF0C\u8865\u5F20\u81EA\u6478\u80E1\u724C\u3002"
-          },
-          {
-            "yiType": 502100031,
-            "gameType": 5021,
-            "calcYiType": 3,
-            "endId": 2151,
-            "languageId": 2151,
-            "describeId": 2152,
-            "yiTypeShow": [],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_qgh.png",
-            "isOpen": 1,
-            "priority": 1,
-            "ruleOpen": 1,
-            "cantHuTypes": [
-              1,
-              2
-            ],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [],
-            "name": "\u62A2\u6760\u80E1",
-            "description": "\u80E1\u5176\u4ED6\u4EBA\u8865\u6760\u7684\u90A3\u5F20\u724C\u3002"
-          },
-          {
-            "yiType": 502100051,
-            "gameType": 5021,
-            "calcYiType": 5,
-            "endId": 2147,
-            "languageId": 2147,
-            "describeId": 2148,
-            "yiTypeShow": [],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_hdly.png",
-            "isOpen": 1,
-            "priority": 1,
-            "ruleOpen": 1,
-            "cantHuTypes": [
-              2,
-              3
-            ],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [],
-            "name": "\u6D77\u5E95\u635E\u6708",
-            "description": "\u6478\u5230\u724C\u5899\u4E2D\u7684\u6700\u540E1\u5F20\u724C\u80E1\u724C\u3002"
-          },
-          {
-            "yiType": 502110031,
-            "gameType": 5021,
-            "calcYiType": 1003,
-            "endId": 2105,
-            "languageId": 2105,
-            "describeId": 2106,
-            "yiTypeShow": [
-              121,
-              121,
-              121,
-              0,
-              211,
-              211,
-              211,
-              0,
-              231,
-              231,
-              231,
-              0,
-              241,
-              241,
-              241,
-              0,
-              261,
-              261
-            ],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_pph.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [
-              502110011,
-              502110101,
-              502110111,
-              502110121
-            ],
-            "name": "\u78B0\u78B0\u80E1",
-            "description": "\u75314\u4E2A\u523B\u5B50\uFF08\u6216\u6760\u724C\uFF09\u548C\u5BF9\u5B50\u7EC4\u6210\u7684\u80E1\u724C\u3002"
-          },
-          {
-            "yiType": 502100121,
-            "gameType": 5021,
-            "calcYiType": 12,
-            "endId": 2107,
-            "languageId": 2107,
-            "describeId": 2108,
-            "yiTypeShow": [
-              121,
-              131,
-              141,
-              151,
-              161,
-              171,
-              221,
-              221,
-              221,
-              231,
-              241,
-              251,
-              261,
-              0,
-              261
-            ],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_dyj.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [],
-            "name": "\u65AD\u5E7A\u4E5D",
-            "description": "\u80E1\u724C\u65F6\uFF0C\u624B\u4E2D\u6CA1\u67091\u30019\u5E8F\u6570\u724C\u3002"
-          },
-          {
-            "yiType": 502110101,
-            "gameType": 5021,
-            "calcYiType": 1010,
-            "endId": 2107,
-            "languageId": 0,
-            "describeId": 0,
-            "yiTypeShow": [],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_dyj.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 0,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [
-              502110011,
-              502110111,
-              502110121,
-              502100121
-            ],
-            "name": "",
-            "description": ""
-          },
-          {
-            "yiType": 502100131,
-            "gameType": 5021,
-            "calcYiType": 13,
-            "endId": 2109,
-            "languageId": 2109,
-            "describeId": 2110,
-            "yiTypeShow": [
-              111,
-              121,
-              131,
-              141,
-              151,
-              161,
-              171,
-              171,
-              171,
-              181,
-              181,
-              181,
-              191,
-              0,
-              191
-            ],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_qys.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 4,
-            "sizeType": 3,
-            "exceptYis": [],
-            "name": "\u6E05\u4E00\u8272",
-            "description": "\u5168\u90E8\u7531\u4E07/\u7B52/\u6761\u4E2D\u7684\u67D0\u4E00\u79CD\u82B1\u8272\u7EC4\u6210\u7684\u80E1\u724C\u3002"
-          },
-          {
-            "yiType": 502110111,
-            "gameType": 5021,
-            "calcYiType": 1011,
-            "endId": 2109,
-            "languageId": 0,
-            "describeId": 0,
-            "yiTypeShow": [],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_qys.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 0,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 4,
-            "sizeType": 3,
-            "exceptYis": [
-              502110011,
-              502110101,
-              502110121,
-              502100131
-            ],
-            "name": "",
-            "description": ""
-          },
-          {
-            "yiType": 502130011,
-            "gameType": 5021,
-            "calcYiType": 3001,
-            "endId": 2111,
-            "languageId": 2111,
-            "describeId": 2112,
-            "yiTypeShow": [
-              121,
-              121,
-              161,
-              161,
-              221,
-              221,
-              241,
-              241,
-              251,
-              251,
-              271,
-              271,
-              291,
-              291
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_qd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 4,
-            "sizeType": 3,
-            "exceptYis": [
-              502130011,
-              502100071
-            ],
-            "name": "\u4E03\u5BF9",
-            "description": "\u7531\u4E03\u4E2A\u5BF9\u5B50\u7EC4\u6210\u7684\u80E1\u724C\u3002"
-          },
-          {
-            "yiType": 502110041,
-            "gameType": 5021,
-            "calcYiType": 1004,
-            "endId": 2113,
-            "languageId": 2113,
-            "describeId": 2114,
-            "yiTypeShow": [
-              121,
-              121,
-              121,
-              0,
-              211,
-              211,
-              211,
-              0,
-              231,
-              231,
-              231,
-              0,
-              241,
-              241,
-              241,
-              0,
-              291,
-              0,
-              291
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_jgd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 4,
-            "sizeType": 3,
-            "exceptYis": [
-              502110011,
-              502110101,
-              502110111,
-              502110121,
-              502110031
-            ],
-            "name": "\u91D1\u94A9\u9493",
-            "description": "\u80E1\u724C\u65F6\u5176\u4ED6\u724C\u90FD\u88AB\u78B0\u724C\u3001\u6760\u724C\u3002\u624B\u4E2D\u53EA\u5269\u4E00\u5F20\u724C\u5355\u9493\u80E1\u724C\u3002\n\u4E0D\u8BA1\u78B0\u78B0\u80E1\u3002"
-          },
-          {
-            "yiType": 502100141,
-            "gameType": 5021,
-            "calcYiType": 14,
-            "endId": 2115,
-            "languageId": 2115,
-            "describeId": 2116,
-            "yiTypeShow": [
-              111,
-              121,
-              131,
-              191,
-              191,
-              191,
-              211,
-              221,
-              231,
-              271,
-              281,
-              291,
-              291,
-              0,
-              291
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_yj.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 4,
-            "sizeType": 3,
-            "exceptYis": [],
-            "name": "\u5E7A\u4E5D",
-            "description": "\u80E1\u724C\u65F6\uFF0C\u6BCF\u4E00\u4E2A\u523B\u5B50\u3001\u987A\u5B50\u5C06\u90FD\u5305\u542B1\u30019\u5E8F\u6570\u724C\u3002"
-          },
-          {
-            "yiType": 502110121,
-            "gameType": 5021,
-            "calcYiType": 1012,
-            "endId": 2115,
-            "languageId": 0,
-            "describeId": 0,
-            "yiTypeShow": [],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_yj.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 0,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 4,
-            "sizeType": 3,
-            "exceptYis": [
-              502110011,
-              502110101,
-              502110111,
-              502100141
-            ],
-            "name": "",
-            "description": ""
-          },
-          {
-            "yiType": 502110051,
-            "gameType": 5021,
-            "calcYiType": 1005,
-            "endId": 2117,
-            "languageId": 2117,
-            "describeId": 2118,
-            "yiTypeShow": [
-              131,
-              131,
-              131,
-              0,
-              151,
-              151,
-              151,
-              0,
-              161,
-              161,
-              161,
-              0,
-              181,
-              181,
-              181,
-              0,
-              191,
-              191
-            ],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_qp.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 8,
-            "sizeType": 2,
-            "exceptYis": [
-              502110011,
-              502110101,
-              502110111,
-              502110121,
-              502110031,
-              502100131
-            ],
-            "name": "\u6E05\u78B0",
-            "description": "\u7531\u6E05\u4E00\u8272\u548C\u78B0\u78B0\u80E1\u7EC4\u6210\u7684\u80E1\u724C\u3002\n\u4E0D\u8BA1\u78B0\u78B0\u80E1\u3001\u6E05\u4E00\u8272\u3002"
-          },
-          {
-            "yiType": 502130031,
-            "gameType": 5021,
-            "calcYiType": 3003,
-            "endId": 2119,
-            "languageId": 2119,
-            "describeId": 2120,
-            "yiTypeShow": [
-              161,
-              161,
-              161,
-              161,
-              171,
-              171,
-              191,
-              191,
-              231,
-              231,
-              251,
-              251,
-              281,
-              281
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_lqd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 8,
-            "sizeType": 2,
-            "exceptYis": [
-              502130011,
-              502100071,
-              502130051
-            ],
-            "name": "\u9F99\u4E03\u5BF9",
-            "description": "\u75317\u4E2A\u5BF9\u5B50\u7EC4\u6210\u7684\u80E1\u724C\uFF0C\u4E14\u624B\u4E0A\u67091\u7EC44\u5F20\u4E00\u6837\u7684\u724C\uFF0C\u4E0D\u80FD\u6760\u6216\u78B0\u51FA\u3002\n\u4E0D\u8BA1\u4E03\u5BF9\u3001\u5C06\u4E03\u5BF9\u3001\u4E0D\u8BA11\u6839\u3002"
-          },
-          {
-            "yiType": 502110061,
-            "gameType": 5021,
-            "calcYiType": 1006,
-            "endId": 2121,
-            "languageId": 2121,
-            "describeId": 2122,
-            "yiTypeShow": [
-              121,
-              121,
-              121,
-              0,
-              151,
-              151,
-              151,
-              0,
-              181,
-              181,
-              181,
-              0,
-              221,
-              221,
-              221,
-              0,
-              251,
-              251
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_jd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 8,
-            "sizeType": 2,
-            "exceptYis": [
-              502110011,
-              502110101,
-              502110111,
-              502110121,
-              502110031,
-              502100121
-            ],
-            "name": "\u5C06\u5BF9",
-            "description": "\u624B\u724C\u5168\u90E8\u662F2\u30015\u30018\u7684\u78B0\u78B0\u80E1\u3002\n\u4E0D\u8BA1\u78B0\u78B0\u80E1\u3001\u65AD\u5E7A\u4E5D\u3002"
-          },
-          {
-            "yiType": 502130041,
-            "gameType": 5021,
-            "calcYiType": 3004,
-            "endId": 2123,
-            "languageId": 2123,
-            "describeId": 2124,
-            "yiTypeShow": [
-              111,
-              111,
-              131,
-              131,
-              141,
-              141,
-              151,
-              151,
-              161,
-              161,
-              171,
-              171,
-              191,
-              191
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_qqd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 16,
-            "sizeType": 2,
-            "exceptYis": [
-              502130011,
-              502100131
-            ],
-            "name": "\u6E05\u4E03\u5BF9",
-            "description": "\u7531\u6E05\u4E00\u8272\u548C\u4E03\u5BF9\u7EC4\u6210\u7684\u80E1\u724C\u3002\n\u4E0D\u8BA1\u6E05\u4E00\u8272\u3001\u4E03\u5BF9\u3002"
-          },
-          {
-            "yiType": 502110071,
-            "gameType": 5021,
-            "calcYiType": 1007,
-            "endId": 2125,
-            "languageId": 2125,
-            "describeId": 2126,
-            "yiTypeShow": [
-              111,
-              111,
-              111,
-              0,
-              131,
-              131,
-              131,
-              0,
-              141,
-              141,
-              141,
-              0,
-              151,
-              151,
-              151,
-              0,
-              161,
-              0,
-              161
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_qjgd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 16,
-            "sizeType": 2,
-            "exceptYis": [
-              502110011,
-              502110051,
-              502110101,
-              502110111,
-              502110121,
-              502110041,
-              502110031,
-              502100131
-            ],
-            "name": "\u6E05\u91D1\u94A9\u9493",
-            "description": "\u7531\u6E05\u4E00\u8272\u548C\u91D1\u94A9\u9493\u7EC4\u6210\u7684\u80E1\u724C\u3002\n\u4E0D\u8BA1\u6E05\u4E00\u8272\u3001\u91D1\u94A9\u9493\u3001\u78B0\u78B0\u80E1\u3001\u6E05\u78B0\u3002"
-          },
-          {
-            "yiType": 502130051,
-            "gameType": 5021,
-            "calcYiType": 3005,
-            "endId": 2127,
-            "languageId": 2127,
-            "describeId": 2128,
-            "yiTypeShow": [
-              121,
-              121,
-              151,
-              151,
-              181,
-              181,
-              221,
-              221,
-              251,
-              251,
-              281,
-              281,
-              281,
-              281
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_jqd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 16,
-            "sizeType": 2,
-            "exceptYis": [
-              502130011,
-              502100121,
-              502130031
-            ],
-            "name": "\u5C06\u4E03\u5BF9",
-            "description": "\u5168\u90E8\u662F\u5E8F\u6570\u724C2\u30015\u30018\u7EC4\u6210\u7684\u4E03\u5BF9\u3002\n\u4E0D\u8BA1\u4E03\u5BF9\u3001\u9F99\u4E03\u5BF9\u3001\u65AD\u5E7A\u4E5D\u3002"
-          },
-          {
-            "yiType": 502130061,
-            "gameType": 5021,
-            "calcYiType": 3006,
-            "endId": 2129,
-            "languageId": 2129,
-            "describeId": 2130,
-            "yiTypeShow": [
-              161,
-              161,
-              161,
-              161,
-              211,
-              211,
-              211,
-              211,
-              231,
-              231,
-              261,
-              261,
-              291,
-              291
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_slqd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 16,
-            "sizeType": 2,
-            "exceptYis": [
-              502130011,
-              502130031,
-              502100071,
-              502100081
-            ],
-            "name": "\u53CC\u9F99\u4E03\u5BF9",
-            "description": "\u75317\u4E2A\u5BF9\u5B50\u7EC4\u6210\u7684\u80E1\u724C\uFF0C\u4E14\u624B\u4E0A\u67092\u7EC44\u5F20\u4E00\u6837\u7684\u724C\uFF0C\u4E0D\u80FD\u6760\u6216\u78B0\u51FA\u3002\n\u4E0D\u8BA1\u9F99\u4E03\u5BF9\u3001\u4E03\u5BF9\u3001\u6839\u3002"
-          },
-          {
-            "yiType": 502100021,
-            "gameType": 5021,
-            "calcYiType": 2,
-            "endId": 2131,
-            "languageId": 2131,
-            "describeId": 2132,
-            "yiTypeShow": [],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_dh.png",
-            "isOpen": 1,
-            "priority": 1,
-            "ruleOpen": 1,
-            "cantHuTypes": [
-              2,
-              3
-            ],
-            "beiType": 2,
-            "bei": 32,
-            "sizeType": 1,
-            "exceptYis": [
-              502100041,
-              502100042,
-              502100111
-            ],
-            "name": "\u5730\u80E1",
-            "description": "\u975E\u5E84\u5BB6\u7B2C\u4E00\u8F6E\u6478\u724C\u5C31\u80E1\u724C\uFF0C\u4E3A\u5730\u80E1\u3002"
-          },
-          {
-            "yiType": 502100011,
-            "gameType": 5021,
-            "calcYiType": 1,
-            "endId": 2133,
-            "languageId": 2133,
-            "describeId": 2134,
-            "yiTypeShow": [],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_th.png",
-            "isOpen": 1,
-            "priority": 1,
-            "ruleOpen": 1,
-            "cantHuTypes": [
-              2,
-              3
-            ],
-            "beiType": 2,
-            "bei": 32,
-            "sizeType": 1,
-            "exceptYis": [
-              502100041,
-              502100042,
-              502100111
-            ],
-            "name": "\u5929\u80E1",
-            "description": "\u5E84\u5BB6\u53D1\u5B8C\u724C\u540E\u7ACB\u5373\u80E1\u724C\uFF0C\u4E3A\u5929\u80E1\u3002"
-          },
-          {
-            "yiType": 502130071,
-            "gameType": 5021,
-            "calcYiType": 3007,
-            "endId": 2135,
-            "languageId": 2135,
-            "describeId": 2136,
-            "yiTypeShow": [
-              121,
-              121,
-              121,
-              121,
-              131,
-              131,
-              151,
-              151,
-              171,
-              171,
-              181,
-              181,
-              191,
-              191
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_qlqd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 32,
-            "sizeType": 1,
-            "exceptYis": [
-              502130041,
-              502130011,
-              502130031,
-              502100071,
-              502100131
-            ],
-            "name": "\u6E05\u9F99\u4E03\u5BF9",
-            "description": "\u7531\u6E05\u4E00\u8272\u548C\u9F99\u4E03\u5BF9\u7EC4\u6210\u7684\u80E1\u724C\u3002\n\u4E0D\u8BA1\u6E05\u4E00\u8272\u3001\u9F99\u4E03\u5BF9\u3001\u4E03\u5BF9\u3001\u6E05\u4E03\u5BF9\u3001\u6839\u3002"
-          },
-          {
-            "yiType": 502130081,
-            "gameType": 5021,
-            "calcYiType": 3008,
-            "endId": 2137,
-            "languageId": 2137,
-            "describeId": 2138,
-            "yiTypeShow": [
-              161,
-              161,
-              161,
-              161,
-              211,
-              211,
-              211,
-              211,
-              261,
-              261,
-              261,
-              261,
-              291,
-              291
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_sanlqd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 32,
-            "sizeType": 1,
-            "exceptYis": [
-              502130011,
-              502130031,
-              502130061,
-              502100071,
-              502100081,
-              502100091
-            ],
-            "name": "\u4E09\u9F99\u4E03\u5BF9",
-            "description": "\u75317\u4E2A\u5BF9\u5B50\u7EC4\u6210\u7684\u80E1\u724C\uFF0C\u4E14\u624B\u4E0A\u67093\u7EC44\u5F20\u4E00\u6837\u7684\u724C\uFF0C\u4E0D\u80FD\u6760\u6216\u78B0\u51FA\u3002\n\u4E0D\u8BA1\u4E03\u5BF9\u3001\u9F99\u4E03\u5BF9\u3001\u53CC\u9F99\u4E03\u5BF9\u3001\u6839\u3002"
-          },
-          {
-            "yiType": 502130091,
-            "gameType": 5021,
-            "calcYiType": 3009,
-            "endId": 2139,
-            "languageId": 2139,
-            "describeId": 2140,
-            "yiTypeShow": [
-              121,
-              121,
-              121,
-              121,
-              151,
-              151,
-              151,
-              151,
-              221,
-              221,
-              251,
-              251,
-              281,
-              281
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_jslqd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 64,
-            "sizeType": 1,
-            "exceptYis": [
-              502130011,
-              502130031,
-              502130051,
-              502130061,
-              502100121,
-              502100071,
-              502100081
-            ],
-            "name": "\u5C06\u53CC\u9F99\u4E03\u5BF9",
-            "description": "\u5168\u90E8\u662F\u5E8F\u6570\u724C2\u30015\u30018\u7EC4\u6210\u7684\u53CC\u9F99\u4E03\u5BF9\u3002\n\u4E0D\u8BA1\u4E03\u5BF9\u3001\u5C06\u4E03\u5BF9\u3001\u9F99\u4E03\u5BF9\u3001\u53CC\u9F99\u4E03\u5BF9\u3001\u65AD\u5E7A\u4E5D\u3001\u6839\u3002"
-          },
-          {
-            "yiType": 502110081,
-            "gameType": 5021,
-            "calcYiType": 1008,
-            "endId": 2141,
-            "languageId": 2141,
-            "describeId": 2142,
-            "yiTypeShow": [
-              111,
-              111,
-              111,
-              111,
-              0,
-              161,
-              161,
-              161,
-              161,
-              0,
-              221,
-              221,
-              221,
-              221,
-              0,
-              271,
-              271,
-              271,
-              271,
-              0,
-              281,
-              0,
-              281
-            ],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_sblh.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 64,
-            "sizeType": 1,
-            "exceptYis": [
-              502110011,
-              502110101,
-              502110111,
-              502110121,
-              502110041,
-              502110031,
-              502100071,
-              502100081,
-              502100091,
-              502100101
-            ],
-            "name": "\u5341\u516B\u7F57\u6C49",
-            "description": "\u91D1\u94A9\u9493\uFF0C\u4E14\u80E1\u724C\u65F6\u67094\u4E2A\u6760\u724C\u3002\n\u4E0D\u8BA14\u6839\u3001\u91D1\u94A9\u9493\u3001\u78B0\u78B0\u80E1\u3002"
-          },
-          {
-            "yiType": 502130101,
-            "gameType": 5021,
-            "calcYiType": 3010,
-            "endId": 2143,
-            "languageId": 2143,
-            "describeId": 2144,
-            "yiTypeShow": [
-              121,
-              121,
-              121,
-              121,
-              151,
-              151,
-              151,
-              151,
-              221,
-              221,
-              221,
-              221,
-              281,
-              281
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_jshlqd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 126,
-            "sizeType": 1,
-            "exceptYis": [
-              502130011,
-              502130031,
-              502130051,
-              502130061,
-              502130081,
-              502130091,
-              502100121,
-              502100071,
-              502100081,
-              502100091
-            ],
-            "name": "\u5C06\u4E09\u9F99\u4E03\u5BF9",
-            "description": "\u5168\u90E8\u662F\u5E8F\u6570\u724C2\u30015\u30018\u7EC4\u6210\u7684\u4E09\u9F99\u4E03\u5BF9\u3002\n\u4E0D\u8BA1\u4E03\u5BF9\u3001\u5C06\u4E03\u5BF9\u3001\u9F99\u4E03\u5BF9\u3001\u53CC\u9F99\u4E03\u5BF9\u3001\u5C06\u53CC\u9F99\u4E03\u5BF9\u3001\u4E09\u9F99\u4E03\u5BF9\u3001\u6839\u3001\u65AD\u5E7A\u4E5D\u3002"
-          },
-          {
-            "yiType": 502110091,
-            "gameType": 5021,
-            "calcYiType": 1009,
-            "endId": 2145,
-            "languageId": 2145,
-            "describeId": 2146,
-            "yiTypeShow": [
-              111,
-              111,
-              111,
-              111,
-              0,
-              121,
-              121,
-              121,
-              121,
-              0,
-              161,
-              161,
-              161,
-              161,
-              0,
-              171,
-              171,
-              171,
-              171,
-              0,
-              181,
-              0,
-              181
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_qsblh.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 256,
-            "sizeType": 1,
-            "exceptYis": [
-              502110011,
-              502110101,
-              502110111,
-              502110121,
-              502110041,
-              502110031,
-              502100071,
-              502100081,
-              502100091,
-              502100101,
-              502100131,
-              502110051,
-              502110071,
-              502110081
-            ],
-            "name": "\u6E05\u5341\u516B\u7F57\u6C49",
-            "description": "\u7531\u6E05\u4E00\u8272\u548C\u5341\u516B\u7F57\u6C49\u7EC4\u6210\u7684\u80E1\u724C\u3002\n\u4E0D\u8BA1\u5341\u516B\u7F57\u6C49\u3001\u91D1\u94A9\u9493\u3001\u78B0\u78B0\u80E1\u3001\u6E05\u4E00\u8272\u3001\u6E05\u78B0\u30014\u6839\u3002"
-          }
-        ],
-        "rooms": [
-          {
-            "id": 502101,
-            "gameType": 5021,
-            "nameId": 1782,
-            "name": "\u514D\u8D39\u573A",
-            "ruleTags": [
-              0,
-              3
-            ],
-            "moneyNeedMin": 0,
-            "moneyNeedMax": 1700,
-            "moneyCost": 0,
-            "moneyBase": 30,
-            "topBei": 128,
-            "superDoubleLimit": 0,
-            "noRobot": 0,
-            "lockId": 38
-          },
-          {
-            "id": 502102,
-            "gameType": 5021,
-            "nameId": 1800,
-            "name": "\u542F\u822A",
-            "ruleTags": [
-              0
-            ],
-            "moneyNeedMin": 850,
-            "moneyNeedMax": 6e4,
-            "moneyCost": 100,
-            "moneyBase": 150,
-            "topBei": 256,
-            "superDoubleLimit": 0,
-            "noRobot": 0,
-            "lockId": 3
-          },
-          {
-            "id": 502103,
-            "gameType": 5021,
-            "nameId": 1801,
-            "name": "\u9010\u68A6",
-            "ruleTags": [
-              0
-            ],
-            "moneyNeedMin": 4e3,
-            "moneyNeedMax": 25e4,
-            "moneyCost": 350,
-            "moneyBase": 400,
-            "topBei": 256,
-            "superDoubleLimit": 0,
-            "noRobot": 0,
-            "lockId": 4
-          },
-          {
-            "id": 502104,
-            "gameType": 5021,
-            "nameId": 1802,
-            "name": "\u4E58\u98CE",
-            "ruleTags": [
-              0
-            ],
-            "moneyNeedMin": 15e3,
-            "moneyNeedMax": 0,
-            "moneyCost": 1250,
-            "moneyBase": 1250,
-            "topBei": 256,
-            "superDoubleLimit": 0,
-            "noRobot": 0,
-            "lockId": 5
-          },
-          {
-            "id": 502105,
-            "gameType": 5021,
-            "nameId": 2037,
-            "name": "\u51CC\u9704",
-            "ruleTags": [
-              0
-            ],
-            "moneyNeedMin": 33e3,
-            "moneyNeedMax": 0,
-            "moneyCost": 5e3,
-            "moneyBase": 5e3,
-            "topBei": 256,
-            "superDoubleLimit": 0,
-            "noRobot": 0,
-            "lockId": 6
-          },
-          {
-            "id": 502106,
-            "gameType": 5021,
-            "nameId": 2038,
-            "name": "\u94F8\u661F",
-            "ruleTags": [
-              0
-            ],
-            "moneyNeedMin": 83e3,
-            "moneyNeedMax": 0,
-            "moneyCost": 15e3,
-            "moneyBase": 12500,
-            "topBei": 256,
-            "superDoubleLimit": 0,
-            "noRobot": 0,
-            "lockId": 7
-          },
-          {
-            "id": 502107,
-            "gameType": 5021,
-            "nameId": 1803,
-            "name": "\u5FA1\u9F99",
-            "ruleTags": [
-              0
-            ],
-            "moneyNeedMin": 25e4,
-            "moneyNeedMax": 0,
-            "moneyCost": 4e4,
-            "moneyBase": 3e4,
-            "topBei": 256,
-            "superDoubleLimit": 0,
-            "noRobot": 0,
-            "lockId": 8
-          },
-          {
-            "id": 502108,
-            "gameType": 5021,
-            "nameId": 1800,
-            "name": "\u542F\u822A",
-            "ruleTags": [
-              1
-            ],
-            "moneyNeedMin": 850,
-            "moneyNeedMax": 6e4,
-            "moneyCost": 160,
-            "moneyBase": 150,
-            "topBei": 256,
-            "superDoubleLimit": 0,
-            "noRobot": 0,
-            "lockId": 9
-          },
-          {
-            "id": 502109,
-            "gameType": 5021,
-            "nameId": 1801,
-            "name": "\u9010\u68A6",
-            "ruleTags": [
-              1
-            ],
-            "moneyNeedMin": 4e3,
-            "moneyNeedMax": 25e4,
-            "moneyCost": 625,
-            "moneyBase": 600,
-            "topBei": 256,
-            "superDoubleLimit": 0,
-            "noRobot": 0,
-            "lockId": 10
-          }
-        ]
-      },
-      "5022": {
-        "name": "\u8840\u6218\u9EBB\u5C06",
-        "rules": [
-          {
-            "ruleId": 502201,
-            "gameType": 5022,
-            "tab": 1,
-            "titleId": 2088,
-            "contentId": 2089,
-            "title": "\u7528\u724C",
-            "content": "\xB71-9\u4E07\u30011-9\u7B52\u30011-9\u6761\uFF0C\u5171108\u5F20\u724C\n\xB7\u53EF\u4EE5\u78B0\uFF0C\u6760\uFF0C\u4E0D\u80FD\u5403"
-          },
-          {
-            "ruleId": 502202,
-            "gameType": 5022,
-            "tab": 1,
-            "titleId": 2090,
-            "contentId": 2094,
-            "title": "\u80E1\u724C\u89C4\u5219",
-            "content": "\xB7\u5141\u8BB8\u4E00\u70AE\u591A\u54CD\n\xB7\u4E00\u4E2A\u73A9\u5BB6\u80E1\u724C\u540E\uFF0C\u724C\u5C40\u7EE7\u7EED\uFF0C\u76F4\u81F3\u6709\u4E09\u4E2A\u4EBA\u90FD\u80E1\u724C\u6216\u6478\u5B8C\u6240\u6709\u624B\u724C\uFF0C\u5BF9\u5C40\u7ED3\u675F"
-          },
-          {
-            "ruleId": 502203,
-            "gameType": 5022,
-            "tab": 1,
-            "titleId": 2092,
-            "contentId": 2093,
-            "title": "\u5B9A\u7F3A",
-            "content": "\xB7\u80E1\u724C\u65F6\uFF0C\u624B\u724C\u4E2D\u4E0D\u80FD\u8D85\u8FC72\u95E8\u82B1\u8272\n\xB7\u9009\u62E9\u4E00\u95E8\u82B1\u8272\u505A\u4E3A\u7F3A\u724C\uFF0C\u6478\u5230\u8FD9\u95E8\u82B1\u8272\u7684\u724C\u4E00\u5B9A\u8981\u6253\u51FA\u3002\u5BF9\u5C40\u4E2D\u4E0D\u53EF\u66F4\u6539\u7F3A"
-          },
-          {
-            "ruleId": 502204,
-            "gameType": 5022,
-            "tab": 1,
-            "titleId": 2040,
-            "contentId": 2095,
-            "title": "\u6362\u4E09\u5F20",
-            "content": "\xB7\u53D1\u5B8C\u624B\u724C\u540E\uFF0C\u6BCF\u4F4D\u73A9\u5BB6\u9009\u62E93\u5F20\u540C\u82B1\u8272\u7684\u724C\uFF0C\u968F\u673A\u4E0E\u5176\u4ED61\u4F4D\u73A9\u5BB6\u4EA4\u6362"
-          },
-          {
-            "ruleId": 502205,
-            "gameType": 5022,
-            "tab": 1,
-            "titleId": 2096,
-            "contentId": 2097,
-            "title": "\u6760\u724C",
-            "content": "\xB7\u3010\u522E\u98CE\u3011\u660E\u6760\uFF0C\u6536\u53D6\u653E\u6760\u80052\u500D\u5E95\u5206\n\xB7\u3010\u8865\u6760\u3011\u6536\u53D6\u5176\u4ED6\u73A9\u5BB61\u500D\u5E95\u5206\n\xB7\u3010\u4E0B\u96E8\u3011\u6697\u6760\uFF0C\u6536\u53D6\u5176\u4ED6\u73A9\u5BB62\u500D\u5E95\u5206\n\xB7\u82E5\u53EF\u660E\u6760\u60C5\u51B5\u4E0B\uFF0C\u5148\u78B0\u518D\u8865\u6760\u4E0D\u6536\u53D6\u5E95\u5206"
-          },
-          {
-            "ruleId": 502206,
-            "gameType": 5022,
-            "tab": 1,
-            "titleId": 2087,
-            "contentId": 2098,
-            "title": "\u547C\u53EB\u8F6C\u79FB",
-            "content": "\xB7\u73A9\u5BB6\u6760\u4E0A\u70AE\uFF0C\u9700\u5C06\u6760\u724C\u6240\u5E94\u5206\u6570\u8F6C\u7ED9\u80E1\u724C\u73A9\u5BB6\n\xB7\u6760\u4E0A\u70AE\u81F4\u4E00\u70AE\u591A\u54CD\uFF0C\u4E0D\u89E6\u53D1\u547C\u53EB\u8F6C\u79FB"
-          },
-          {
-            "ruleId": 502207,
-            "gameType": 5022,
-            "tab": 1,
-            "titleId": 2099,
-            "contentId": 2100,
-            "title": "\u5BF9\u5C40\u7ED3\u675F",
-            "content": "\xB7\u6478\u5B8C\u6240\u6709\u624B\u724C\u65F6\uFF0C\u672A\u542C\u724C\u3001\u82B1\u732A\u73A9\u5BB6\u9700\u8981\u63A5\u53D7\u989D\u5916\u60E9\u7F5A\n\xB7\u3010\u9000\u7A0E\u3011\u5BF9\u5C40\u7ED3\u675F\u65F6\uFF0C\u672A\u542C\u724C\u73A9\u5BB6\uFF0C\u9000\u56DE\u5168\u90E8\u6760\u724C\u6240\u5F97\n\xB7\u3010\u67E5\u5927\u53EB\u3011\u5BF9\u5C40\u7ED3\u675F\u65F6\uFF0C\u672A\u542C\u724C\u73A9\u5BB6\u8D54\u7ED9\u542C\u724C\u672A\u80E1\u724C\u73A9\u5BB6\u6700\u5927\u53EF\u80FD\u500D\u6570\uFF08\u4E0D\u5305\u542B\u81EA\u6478\u500D\u6570\uFF09\n\xB7\u3010\u67E5\u82B1\u732A\u3011\u5BF9\u5C40\u7ED3\u675F\u65F6\uFF0C\u624B\u724C\u4E0A\u82E5\u6709\u7F3A\u724C\u7684\u73A9\u5BB6\u4E3A\u82B1\u732A\uFF0C\u82B1\u732A\u73A9\u5BB6\u8D54\u7ED9\u5176\u4ED6\u73A9\u5BB6\u6BCF\u4EBA16\u500D\uFF08\u82E5\u5168\u7A0B\u6253\u7F3A\u724C\uFF0C\u65E0\u9700\u8D54\u4ED8\uFF09"
-          },
-          {
-            "ruleId": 502208,
-            "gameType": 5022,
-            "tab": 1,
-            "titleId": 3159,
-            "contentId": 3160,
-            "title": "\u8840\u6218\u5C01\u9876",
-            "content": "\u6362\u4E09\u5F20\uFF1A\n\xB7\u514D\u8D39~\u9010\u68A6\u573A\uFF1A128\u500D\n\xB7\u5176\u5B83\u573A\uFF1A256\u500D\n\n\u4E0D\u6362\u4E09\u5F20\uFF1A256\u500D"
-          }
-        ],
-        "yaku": [
-          {
-            "yiType": 502210011,
-            "gameType": 5022,
-            "calcYiType": 1001,
-            "endId": 2103,
-            "languageId": 2103,
-            "describeId": 2104,
-            "yiTypeShow": [
-              111,
-              121,
-              131,
-              141,
-              151,
-              161,
-              221,
-              231,
-              241,
-              251,
-              251,
-              251,
-              291,
-              0,
-              291
-            ],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_ph.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 1,
-            "sizeType": 3,
-            "exceptYis": [],
-            "name": "\u5E73\u80E1",
-            "description": "\u75314\u4E2A\u523B\u5B50\u6216\u987A\u5B50\u52A0\u5BF9\u5B50\u7EC4\u6210\u7684\u80E1\u724C\u3002"
-          },
-          {
-            "yiType": 502200071,
-            "gameType": 5022,
-            "calcYiType": 7,
-            "endId": 2266,
-            "languageId": 2153,
-            "describeId": 2154,
-            "yiTypeShow": [],
-            "picturePath": "",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [],
-            "name": "\u6839",
-            "description": "4\u5F20\u4E00\u6837\u7684\u724C\u4E3A1\u6839\uFF0C\u6BCF\u67091\u6839\uFF0C\u5219\u80E1\u724C\u65F6\u989D\u5916x2\u3002"
-          },
-          {
-            "yiType": 502200081,
-            "gameType": 5022,
-            "calcYiType": 8,
-            "endId": 2267,
-            "languageId": 0,
-            "describeId": 0,
-            "yiTypeShow": [],
-            "picturePath": "",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 0,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 4,
-            "sizeType": 3,
-            "exceptYis": [
-              502200071
-            ],
-            "name": "",
-            "description": ""
-          },
-          {
-            "yiType": 502200091,
-            "gameType": 5022,
-            "calcYiType": 9,
-            "endId": 2268,
-            "languageId": 0,
-            "describeId": 0,
-            "yiTypeShow": [],
-            "picturePath": "",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 0,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 8,
-            "sizeType": 3,
-            "exceptYis": [
-              502200071,
-              502200081
-            ],
-            "name": "",
-            "description": ""
-          },
-          {
-            "yiType": 502200101,
-            "gameType": 5022,
-            "calcYiType": 10,
-            "endId": 2269,
-            "languageId": 0,
-            "describeId": 0,
-            "yiTypeShow": [],
-            "picturePath": "",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 0,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 16,
-            "sizeType": 3,
-            "exceptYis": [
-              502200071,
-              502200081,
-              502200091
-            ],
-            "name": "",
-            "description": ""
-          },
-          {
-            "yiType": 502200041,
-            "gameType": 5022,
-            "calcYiType": 4,
-            "endId": 2155,
-            "languageId": 2155,
-            "describeId": 2156,
-            "yiTypeShow": [],
-            "picturePath": "",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [
-              2,
-              3
-            ],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [
-              502200041
-            ],
-            "name": "\u81EA\u6478",
-            "description": "\u81EA\u6478\u80E1\u724C\u3002"
-          },
-          {
-            "yiType": 502200061,
-            "gameType": 5022,
-            "calcYiType": 6,
-            "endId": 2149,
-            "languageId": 2149,
-            "describeId": 2150,
-            "yiTypeShow": [],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_gskh.png",
-            "isOpen": 1,
-            "priority": 1,
-            "ruleOpen": 1,
-            "cantHuTypes": [
-              2,
-              3
-            ],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [],
-            "name": "\u6760\u4E0A\u5F00\u82B1",
-            "description": "\u6760\u724C\u540E\uFF0C\u8865\u5F20\u81EA\u6478\u80E1\u724C\u3002"
-          },
-          {
-            "yiType": 502200031,
-            "gameType": 5022,
-            "calcYiType": 3,
-            "endId": 2151,
-            "languageId": 2151,
-            "describeId": 2152,
-            "yiTypeShow": [],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_qgh.png",
-            "isOpen": 1,
-            "priority": 1,
-            "ruleOpen": 1,
-            "cantHuTypes": [
-              1,
-              2
-            ],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [],
-            "name": "\u62A2\u6760\u80E1",
-            "description": "\u80E1\u5176\u4ED6\u4EBA\u8865\u6760\u7684\u90A3\u5F20\u724C\u3002"
-          },
-          {
-            "yiType": 502200051,
-            "gameType": 5022,
-            "calcYiType": 5,
-            "endId": 2147,
-            "languageId": 2147,
-            "describeId": 2148,
-            "yiTypeShow": [],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_hdly.png",
-            "isOpen": 1,
-            "priority": 1,
-            "ruleOpen": 1,
-            "cantHuTypes": [
-              2,
-              3
-            ],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [],
-            "name": "\u6D77\u5E95\u635E\u6708",
-            "description": "\u6478\u5230\u724C\u5899\u4E2D\u7684\u6700\u540E1\u5F20\u724C\u80E1\u724C\u3002"
-          },
-          {
-            "yiType": 502210031,
-            "gameType": 5022,
-            "calcYiType": 1003,
-            "endId": 2105,
-            "languageId": 2105,
-            "describeId": 2106,
-            "yiTypeShow": [
-              121,
-              121,
-              121,
-              0,
-              211,
-              211,
-              211,
-              0,
-              231,
-              231,
-              231,
-              0,
-              241,
-              241,
-              241,
-              0,
-              261,
-              261
-            ],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_pph.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [
-              502210011,
-              502210101,
-              502210111,
-              502210121
-            ],
-            "name": "\u78B0\u78B0\u80E1",
-            "description": "\u75314\u4E2A\u523B\u5B50\uFF08\u6216\u6760\u724C\uFF09\u548C\u5BF9\u5B50\u7EC4\u6210\u7684\u80E1\u724C\u3002"
-          },
-          {
-            "yiType": 502200121,
-            "gameType": 5022,
-            "calcYiType": 12,
-            "endId": 2107,
-            "languageId": 2107,
-            "describeId": 2108,
-            "yiTypeShow": [
-              121,
-              131,
-              141,
-              151,
-              161,
-              171,
-              221,
-              221,
-              221,
-              231,
-              241,
-              251,
-              261,
-              0,
-              261
-            ],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_dyj.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [],
-            "name": "\u65AD\u5E7A\u4E5D",
-            "description": "\u80E1\u724C\u65F6\uFF0C\u624B\u4E2D\u6CA1\u67091\u30019\u5E8F\u6570\u724C\u3002"
-          },
-          {
-            "yiType": 502210101,
-            "gameType": 5022,
-            "calcYiType": 1010,
-            "endId": 2107,
-            "languageId": 0,
-            "describeId": 0,
-            "yiTypeShow": [],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_dyj.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 0,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [
-              502210011,
-              502210111,
-              502210121,
-              502200121
-            ],
-            "name": "",
-            "description": ""
-          },
-          {
-            "yiType": 502200131,
-            "gameType": 5022,
-            "calcYiType": 13,
-            "endId": 2109,
-            "languageId": 2109,
-            "describeId": 2110,
-            "yiTypeShow": [
-              111,
-              121,
-              131,
-              141,
-              151,
-              161,
-              171,
-              171,
-              171,
-              181,
-              181,
-              181,
-              191,
-              0,
-              191
-            ],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_qys.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 4,
-            "sizeType": 3,
-            "exceptYis": [],
-            "name": "\u6E05\u4E00\u8272",
-            "description": "\u5168\u90E8\u7531\u4E07/\u7B52/\u6761\u4E2D\u7684\u67D0\u4E00\u79CD\u82B1\u8272\u7EC4\u6210\u7684\u80E1\u724C\u3002"
-          },
-          {
-            "yiType": 502210111,
-            "gameType": 5022,
-            "calcYiType": 1011,
-            "endId": 2109,
-            "languageId": 0,
-            "describeId": 0,
-            "yiTypeShow": [],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_qys.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 0,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 4,
-            "sizeType": 3,
-            "exceptYis": [
-              502210011,
-              502210101,
-              502210121,
-              502200131
-            ],
-            "name": "",
-            "description": ""
-          },
-          {
-            "yiType": 502230011,
-            "gameType": 5022,
-            "calcYiType": 3001,
-            "endId": 2111,
-            "languageId": 2111,
-            "describeId": 2112,
-            "yiTypeShow": [
-              121,
-              121,
-              161,
-              161,
-              221,
-              221,
-              241,
-              241,
-              251,
-              251,
-              271,
-              271,
-              291,
-              291
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_qd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 4,
-            "sizeType": 3,
-            "exceptYis": [
-              502230011,
-              502200071
-            ],
-            "name": "\u4E03\u5BF9",
-            "description": "\u7531\u4E03\u4E2A\u5BF9\u5B50\u7EC4\u6210\u7684\u80E1\u724C\u3002"
-          },
-          {
-            "yiType": 502210041,
-            "gameType": 5022,
-            "calcYiType": 1004,
-            "endId": 2113,
-            "languageId": 2113,
-            "describeId": 2114,
-            "yiTypeShow": [
-              121,
-              121,
-              121,
-              0,
-              211,
-              211,
-              211,
-              0,
-              231,
-              231,
-              231,
-              0,
-              241,
-              241,
-              241,
-              0,
-              291,
-              0,
-              291
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_jgd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 4,
-            "sizeType": 3,
-            "exceptYis": [
-              502210011,
-              502210101,
-              502210111,
-              502210121,
-              502210031
-            ],
-            "name": "\u91D1\u94A9\u9493",
-            "description": "\u80E1\u724C\u65F6\u5176\u4ED6\u724C\u90FD\u88AB\u78B0\u724C\u3001\u6760\u724C\u3002\u624B\u4E2D\u53EA\u5269\u4E00\u5F20\u724C\u5355\u9493\u80E1\u724C\u3002\n\u4E0D\u8BA1\u78B0\u78B0\u80E1\u3002"
-          },
-          {
-            "yiType": 502200141,
-            "gameType": 5022,
-            "calcYiType": 14,
-            "endId": 2115,
-            "languageId": 2115,
-            "describeId": 2116,
-            "yiTypeShow": [
-              111,
-              121,
-              131,
-              191,
-              191,
-              191,
-              211,
-              221,
-              231,
-              271,
-              281,
-              291,
-              291,
-              0,
-              291
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_yj.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 4,
-            "sizeType": 3,
-            "exceptYis": [],
-            "name": "\u5E7A\u4E5D",
-            "description": "\u80E1\u724C\u65F6\uFF0C\u6BCF\u4E00\u4E2A\u523B\u5B50\u3001\u987A\u5B50\u5C06\u90FD\u5305\u542B1\u30019\u5E8F\u6570\u724C\u3002"
-          },
-          {
-            "yiType": 502210121,
-            "gameType": 5022,
-            "calcYiType": 1012,
-            "endId": 2115,
-            "languageId": 0,
-            "describeId": 0,
-            "yiTypeShow": [],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_yj.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 0,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 4,
-            "sizeType": 3,
-            "exceptYis": [
-              502210011,
-              502210101,
-              502210111,
-              502200141
-            ],
-            "name": "",
-            "description": ""
-          },
-          {
-            "yiType": 502210051,
-            "gameType": 5022,
-            "calcYiType": 1005,
-            "endId": 2117,
-            "languageId": 2117,
-            "describeId": 2118,
-            "yiTypeShow": [
-              131,
-              131,
-              131,
-              0,
-              151,
-              151,
-              151,
-              0,
-              161,
-              161,
-              161,
-              0,
-              181,
-              181,
-              181,
-              0,
-              191,
-              191
-            ],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_qp.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 8,
-            "sizeType": 2,
-            "exceptYis": [
-              502210011,
-              502210101,
-              502210111,
-              502210121,
-              502210031,
-              502200131
-            ],
-            "name": "\u6E05\u78B0",
-            "description": "\u7531\u6E05\u4E00\u8272\u548C\u78B0\u78B0\u80E1\u7EC4\u6210\u7684\u80E1\u724C\u3002\n\u4E0D\u8BA1\u78B0\u78B0\u80E1\u3001\u6E05\u4E00\u8272\u3002"
-          },
-          {
-            "yiType": 502230031,
-            "gameType": 5022,
-            "calcYiType": 3003,
-            "endId": 2119,
-            "languageId": 2119,
-            "describeId": 2120,
-            "yiTypeShow": [
-              161,
-              161,
-              161,
-              161,
-              171,
-              171,
-              191,
-              191,
-              231,
-              231,
-              251,
-              251,
-              281,
-              281
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_lqd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 8,
-            "sizeType": 2,
-            "exceptYis": [
-              502230011,
-              502200071,
-              502230051
-            ],
-            "name": "\u9F99\u4E03\u5BF9",
-            "description": "\u75317\u4E2A\u5BF9\u5B50\u7EC4\u6210\u7684\u80E1\u724C\uFF0C\u4E14\u624B\u4E0A\u67091\u7EC44\u5F20\u4E00\u6837\u7684\u724C\uFF0C\u4E0D\u80FD\u6760\u6216\u78B0\u51FA\u3002\n\u4E0D\u8BA1\u4E03\u5BF9\u3001\u5C06\u4E03\u5BF9\u3001\u4E0D\u8BA11\u6839\u3002"
-          },
-          {
-            "yiType": 502210061,
-            "gameType": 5022,
-            "calcYiType": 1006,
-            "endId": 2121,
-            "languageId": 2121,
-            "describeId": 2122,
-            "yiTypeShow": [
-              121,
-              121,
-              121,
-              0,
-              151,
-              151,
-              151,
-              0,
-              181,
-              181,
-              181,
-              0,
-              221,
-              221,
-              221,
-              0,
-              251,
-              251
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_jd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 8,
-            "sizeType": 2,
-            "exceptYis": [
-              502210011,
-              502210101,
-              502210111,
-              502210121,
-              502210031,
-              502200121
-            ],
-            "name": "\u5C06\u5BF9",
-            "description": "\u624B\u724C\u5168\u90E8\u662F2\u30015\u30018\u7684\u78B0\u78B0\u80E1\u3002\n\u4E0D\u8BA1\u78B0\u78B0\u80E1\u3001\u65AD\u5E7A\u4E5D\u3002"
-          },
-          {
-            "yiType": 502230041,
-            "gameType": 5022,
-            "calcYiType": 3004,
-            "endId": 2123,
-            "languageId": 2123,
-            "describeId": 2124,
-            "yiTypeShow": [
-              111,
-              111,
-              131,
-              131,
-              141,
-              141,
-              151,
-              151,
-              161,
-              161,
-              171,
-              171,
-              191,
-              191
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_qqd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 16,
-            "sizeType": 2,
-            "exceptYis": [
-              502230011,
-              502200131
-            ],
-            "name": "\u6E05\u4E03\u5BF9",
-            "description": "\u7531\u6E05\u4E00\u8272\u548C\u4E03\u5BF9\u7EC4\u6210\u7684\u80E1\u724C\u3002\n\u4E0D\u8BA1\u6E05\u4E00\u8272\u3001\u4E03\u5BF9\u3002"
-          },
-          {
-            "yiType": 502210071,
-            "gameType": 5022,
-            "calcYiType": 1007,
-            "endId": 2125,
-            "languageId": 2125,
-            "describeId": 2126,
-            "yiTypeShow": [
-              111,
-              111,
-              111,
-              0,
-              131,
-              131,
-              131,
-              0,
-              141,
-              141,
-              141,
-              0,
-              151,
-              151,
-              151,
-              0,
-              161,
-              0,
-              161
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_qjgd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 16,
-            "sizeType": 2,
-            "exceptYis": [
-              502210011,
-              502210051,
-              502210101,
-              502210111,
-              502210121,
-              502210041,
-              502210031,
-              502200131
-            ],
-            "name": "\u6E05\u91D1\u94A9\u9493",
-            "description": "\u7531\u6E05\u4E00\u8272\u548C\u91D1\u94A9\u9493\u7EC4\u6210\u7684\u80E1\u724C\u3002\n\u4E0D\u8BA1\u6E05\u4E00\u8272\u3001\u91D1\u94A9\u9493\u3001\u78B0\u78B0\u80E1\u3001\u6E05\u78B0\u3002"
-          },
-          {
-            "yiType": 502230051,
-            "gameType": 5022,
-            "calcYiType": 3005,
-            "endId": 2127,
-            "languageId": 2127,
-            "describeId": 2128,
-            "yiTypeShow": [
-              121,
-              121,
-              151,
-              151,
-              181,
-              181,
-              221,
-              221,
-              251,
-              251,
-              281,
-              281,
-              281,
-              281
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_jqd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 16,
-            "sizeType": 2,
-            "exceptYis": [
-              502230011,
-              502200121,
-              502230031
-            ],
-            "name": "\u5C06\u4E03\u5BF9",
-            "description": "\u5168\u90E8\u662F\u5E8F\u6570\u724C2\u30015\u30018\u7EC4\u6210\u7684\u4E03\u5BF9\u3002\n\u4E0D\u8BA1\u4E03\u5BF9\u3001\u9F99\u4E03\u5BF9\u3001\u65AD\u5E7A\u4E5D\u3002"
-          },
-          {
-            "yiType": 502230061,
-            "gameType": 5022,
-            "calcYiType": 3006,
-            "endId": 2129,
-            "languageId": 2129,
-            "describeId": 2130,
-            "yiTypeShow": [
-              161,
-              161,
-              161,
-              161,
-              211,
-              211,
-              211,
-              211,
-              231,
-              231,
-              261,
-              261,
-              291,
-              291
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_slqd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 16,
-            "sizeType": 2,
-            "exceptYis": [
-              502230011,
-              502230031,
-              502200071,
-              502200081
-            ],
-            "name": "\u53CC\u9F99\u4E03\u5BF9",
-            "description": "\u75317\u4E2A\u5BF9\u5B50\u7EC4\u6210\u7684\u80E1\u724C\uFF0C\u4E14\u624B\u4E0A\u67092\u7EC44\u5F20\u4E00\u6837\u7684\u724C\uFF0C\u4E0D\u80FD\u6760\u6216\u78B0\u51FA\u3002\n\u4E0D\u8BA1\u9F99\u4E03\u5BF9\u3001\u4E03\u5BF9\u3001\u6839\u3002"
-          },
-          {
-            "yiType": 502200021,
-            "gameType": 5022,
-            "calcYiType": 2,
-            "endId": 2131,
-            "languageId": 2131,
-            "describeId": 2132,
-            "yiTypeShow": [],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_dh.png",
-            "isOpen": 1,
-            "priority": 1,
-            "ruleOpen": 1,
-            "cantHuTypes": [
-              2,
-              3
-            ],
-            "beiType": 2,
-            "bei": 32,
-            "sizeType": 1,
-            "exceptYis": [
-              502200041,
-              502200042,
-              502100111
-            ],
-            "name": "\u5730\u80E1",
-            "description": "\u975E\u5E84\u5BB6\u7B2C\u4E00\u8F6E\u6478\u724C\u5C31\u80E1\u724C\uFF0C\u4E3A\u5730\u80E1\u3002"
-          },
-          {
-            "yiType": 502200011,
-            "gameType": 5022,
-            "calcYiType": 1,
-            "endId": 2133,
-            "languageId": 2133,
-            "describeId": 2134,
-            "yiTypeShow": [],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_th.png",
-            "isOpen": 1,
-            "priority": 1,
-            "ruleOpen": 1,
-            "cantHuTypes": [
-              2,
-              3
-            ],
-            "beiType": 2,
-            "bei": 32,
-            "sizeType": 1,
-            "exceptYis": [
-              502200041,
-              502200042,
-              502100111
-            ],
-            "name": "\u5929\u80E1",
-            "description": "\u5E84\u5BB6\u53D1\u5B8C\u724C\u540E\u7ACB\u5373\u80E1\u724C\uFF0C\u4E3A\u5929\u80E1\u3002"
-          },
-          {
-            "yiType": 502230071,
-            "gameType": 5022,
-            "calcYiType": 3007,
-            "endId": 2135,
-            "languageId": 2135,
-            "describeId": 2136,
-            "yiTypeShow": [
-              121,
-              121,
-              121,
-              121,
-              131,
-              131,
-              151,
-              151,
-              171,
-              171,
-              181,
-              181,
-              191,
-              191
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_qlqd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 32,
-            "sizeType": 1,
-            "exceptYis": [
-              502230041,
-              502230011,
-              502230031,
-              502200071,
-              502200131
-            ],
-            "name": "\u6E05\u9F99\u4E03\u5BF9",
-            "description": "\u7531\u6E05\u4E00\u8272\u548C\u9F99\u4E03\u5BF9\u7EC4\u6210\u7684\u80E1\u724C\u3002\n\u4E0D\u8BA1\u6E05\u4E00\u8272\u3001\u9F99\u4E03\u5BF9\u3001\u4E03\u5BF9\u3001\u6E05\u4E03\u5BF9\u3001\u6839\u3002"
-          },
-          {
-            "yiType": 502230081,
-            "gameType": 5022,
-            "calcYiType": 3008,
-            "endId": 2137,
-            "languageId": 2137,
-            "describeId": 2138,
-            "yiTypeShow": [
-              161,
-              161,
-              161,
-              161,
-              211,
-              211,
-              211,
-              211,
-              261,
-              261,
-              261,
-              261,
-              291,
-              291
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_sanlqd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 32,
-            "sizeType": 1,
-            "exceptYis": [
-              502230011,
-              502230031,
-              502230061,
-              502200071,
-              502200081,
-              502200091
-            ],
-            "name": "\u4E09\u9F99\u4E03\u5BF9",
-            "description": "\u75317\u4E2A\u5BF9\u5B50\u7EC4\u6210\u7684\u80E1\u724C\uFF0C\u4E14\u624B\u4E0A\u67093\u7EC44\u5F20\u4E00\u6837\u7684\u724C\uFF0C\u4E0D\u80FD\u6760\u6216\u78B0\u51FA\u3002\n\u4E0D\u8BA1\u4E03\u5BF9\u3001\u9F99\u4E03\u5BF9\u3001\u53CC\u9F99\u4E03\u5BF9\u3001\u6839\u3002"
-          },
-          {
-            "yiType": 502230091,
-            "gameType": 5022,
-            "calcYiType": 3009,
-            "endId": 2139,
-            "languageId": 2139,
-            "describeId": 2140,
-            "yiTypeShow": [
-              121,
-              121,
-              121,
-              121,
-              151,
-              151,
-              151,
-              151,
-              221,
-              221,
-              251,
-              251,
-              281,
-              281
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_jslqd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 64,
-            "sizeType": 1,
-            "exceptYis": [
-              502230011,
-              502230031,
-              502230051,
-              502230061,
-              502200121,
-              502200071,
-              502200081
-            ],
-            "name": "\u5C06\u53CC\u9F99\u4E03\u5BF9",
-            "description": "\u5168\u90E8\u662F\u5E8F\u6570\u724C2\u30015\u30018\u7EC4\u6210\u7684\u53CC\u9F99\u4E03\u5BF9\u3002\n\u4E0D\u8BA1\u4E03\u5BF9\u3001\u5C06\u4E03\u5BF9\u3001\u9F99\u4E03\u5BF9\u3001\u53CC\u9F99\u4E03\u5BF9\u3001\u65AD\u5E7A\u4E5D\u3001\u6839\u3002"
-          },
-          {
-            "yiType": 502210081,
-            "gameType": 5022,
-            "calcYiType": 1008,
-            "endId": 2141,
-            "languageId": 2141,
-            "describeId": 2142,
-            "yiTypeShow": [
-              111,
-              111,
-              111,
-              111,
-              0,
-              161,
-              161,
-              161,
-              161,
-              0,
-              221,
-              221,
-              221,
-              221,
-              0,
-              271,
-              271,
-              271,
-              271,
-              0,
-              281,
-              0,
-              281
-            ],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_sblh.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 64,
-            "sizeType": 1,
-            "exceptYis": [
-              502210011,
-              502210101,
-              502210111,
-              502210121,
-              502210041,
-              502210031,
-              502200071,
-              502200081,
-              502200091,
-              502200101
-            ],
-            "name": "\u5341\u516B\u7F57\u6C49",
-            "description": "\u91D1\u94A9\u9493\uFF0C\u4E14\u80E1\u724C\u65F6\u67094\u4E2A\u6760\u724C\u3002\n\u4E0D\u8BA14\u6839\u3001\u91D1\u94A9\u9493\u3001\u78B0\u78B0\u80E1\u3002"
-          },
-          {
-            "yiType": 502230101,
-            "gameType": 5022,
-            "calcYiType": 3010,
-            "endId": 2143,
-            "languageId": 2143,
-            "describeId": 2144,
-            "yiTypeShow": [
-              121,
-              121,
-              121,
-              121,
-              151,
-              151,
-              151,
-              151,
-              221,
-              221,
-              221,
-              221,
-              281,
-              281
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_jshlqd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 126,
-            "sizeType": 1,
-            "exceptYis": [
-              502230011,
-              502230031,
-              502230051,
-              502230061,
-              502230081,
-              502230091,
-              502200121,
-              502200071,
-              502200081,
-              502200091
-            ],
-            "name": "\u5C06\u4E09\u9F99\u4E03\u5BF9",
-            "description": "\u5168\u90E8\u662F\u5E8F\u6570\u724C2\u30015\u30018\u7EC4\u6210\u7684\u4E09\u9F99\u4E03\u5BF9\u3002\n\u4E0D\u8BA1\u4E03\u5BF9\u3001\u5C06\u4E03\u5BF9\u3001\u9F99\u4E03\u5BF9\u3001\u53CC\u9F99\u4E03\u5BF9\u3001\u5C06\u53CC\u9F99\u4E03\u5BF9\u3001\u4E09\u9F99\u4E03\u5BF9\u3001\u6839\u3001\u65AD\u5E7A\u4E5D\u3002"
-          },
-          {
-            "yiType": 502210091,
-            "gameType": 5022,
-            "calcYiType": 1009,
-            "endId": 2145,
-            "languageId": 2145,
-            "describeId": 2146,
-            "yiTypeShow": [
-              111,
-              111,
-              111,
-              111,
-              0,
-              121,
-              121,
-              121,
-              121,
-              0,
-              161,
-              161,
-              161,
-              161,
-              0,
-              171,
-              171,
-              171,
-              171,
-              0,
-              181,
-              0,
-              181
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_qsblh.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 256,
-            "sizeType": 1,
-            "exceptYis": [
-              502210011,
-              502210101,
-              502210111,
-              502210121,
-              502210041,
-              502210031,
-              502200071,
-              502200081,
-              502200091,
-              502200101,
-              502200131,
-              502210051,
-              502210071,
-              502210081
-            ],
-            "name": "\u6E05\u5341\u516B\u7F57\u6C49",
-            "description": "\u7531\u6E05\u4E00\u8272\u548C\u5341\u516B\u7F57\u6C49\u7EC4\u6210\u7684\u80E1\u724C\u3002\n\u4E0D\u8BA1\u5341\u516B\u7F57\u6C49\u3001\u91D1\u94A9\u9493\u3001\u78B0\u78B0\u80E1\u3001\u6E05\u4E00\u8272\u3001\u6E05\u78B0\u30014\u6839\u3002"
-          }
-        ],
-        "rooms": [
-          {
-            "id": 502201,
-            "gameType": 5022,
-            "nameId": 1782,
-            "name": "\u514D\u8D39\u573A",
-            "ruleTags": [
-              0,
-              3
-            ],
-            "moneyNeedMin": 0,
-            "moneyNeedMax": 1700,
-            "moneyCost": 0,
-            "moneyBase": 30,
-            "topBei": 128,
-            "superDoubleLimit": 0,
-            "noRobot": 0,
-            "lockId": 39
-          },
-          {
-            "id": 502202,
-            "gameType": 5022,
-            "nameId": 1800,
-            "name": "\u542F\u822A",
-            "ruleTags": [
-              0
-            ],
-            "moneyNeedMin": 850,
-            "moneyNeedMax": 4e4,
-            "moneyCost": 100,
-            "moneyBase": 150,
-            "topBei": 128,
-            "superDoubleLimit": 0,
-            "noRobot": 0,
-            "lockId": 12
-          },
-          {
-            "id": 502203,
-            "gameType": 5022,
-            "nameId": 1801,
-            "name": "\u9010\u68A6",
-            "ruleTags": [
-              0
-            ],
-            "moneyNeedMin": 2e3,
-            "moneyNeedMax": 125e3,
-            "moneyCost": 350,
-            "moneyBase": 400,
-            "topBei": 128,
-            "superDoubleLimit": 0,
-            "noRobot": 0,
-            "lockId": 13
-          },
-          {
-            "id": 502204,
-            "gameType": 5022,
-            "nameId": 1802,
-            "name": "\u4E58\u98CE",
-            "ruleTags": [
-              0
-            ],
-            "moneyNeedMin": 8e3,
-            "moneyNeedMax": 0,
-            "moneyCost": 1250,
-            "moneyBase": 1250,
-            "topBei": 256,
-            "superDoubleLimit": 0,
-            "noRobot": 0,
-            "lockId": 14
-          },
-          {
-            "id": 502205,
-            "gameType": 5022,
-            "nameId": 2037,
-            "name": "\u51CC\u9704",
-            "ruleTags": [
-              0
-            ],
-            "moneyNeedMin": 21e3,
-            "moneyNeedMax": 0,
-            "moneyCost": 3750,
-            "moneyBase": 3750,
-            "topBei": 256,
-            "superDoubleLimit": 0,
-            "noRobot": 0,
-            "lockId": 15
-          },
-          {
-            "id": 502206,
-            "gameType": 5022,
-            "nameId": 2038,
-            "name": "\u94F8\u661F",
-            "ruleTags": [
-              0
-            ],
-            "moneyNeedMin": 62e3,
-            "moneyNeedMax": 0,
-            "moneyCost": 15e3,
-            "moneyBase": 12500,
-            "topBei": 256,
-            "superDoubleLimit": 0,
-            "noRobot": 0,
-            "lockId": 16
-          },
-          {
-            "id": 502207,
-            "gameType": 5022,
-            "nameId": 1803,
-            "name": "\u5FA1\u9F99",
-            "ruleTags": [
-              0
-            ],
-            "moneyNeedMin": 167e3,
-            "moneyNeedMax": 0,
-            "moneyCost": 4e4,
-            "moneyBase": 33500,
-            "topBei": 256,
-            "superDoubleLimit": 0,
-            "noRobot": 0,
-            "lockId": 17
-          },
-          {
-            "id": 502208,
-            "gameType": 5022,
-            "nameId": 1800,
-            "name": "\u542F\u822A",
-            "ruleTags": [
-              1
-            ],
-            "moneyNeedMin": 850,
-            "moneyNeedMax": 6e4,
-            "moneyCost": 80,
-            "moneyBase": 150,
-            "topBei": 256,
-            "superDoubleLimit": 0,
-            "noRobot": 0,
-            "lockId": 18
-          },
-          {
-            "id": 502209,
-            "gameType": 5022,
-            "nameId": 1801,
-            "name": "\u9010\u68A6",
-            "ruleTags": [
-              1
-            ],
-            "moneyNeedMin": 2e3,
-            "moneyNeedMax": 125e3,
-            "moneyCost": 500,
-            "moneyBase": 600,
-            "topBei": 256,
-            "superDoubleLimit": 0,
-            "noRobot": 0,
-            "lockId": 19
-          }
-        ]
-      },
-      "5023": {
-        "name": "\u7EA2\u4E2D\u8840\u6D41",
-        "rules": [
-          {
-            "ruleId": 502301,
-            "gameType": 5023,
-            "tab": 1,
-            "titleId": 2088,
-            "contentId": 2749,
-            "title": "\u7528\u724C",
-            "content": "\xB71-9\u4E07\u30011-9\u7B52\u30011-9\u6761\uFF0C6\u5F20\u8D56\u5B50\u724C\uFF0C\u5171114\u5F20\u724C\n\xB7\u8D56\u5B50\u724C\uFF1A\u589E\u52A06\u5F20\u7EA2\u4E2D\u8D56\u5B50\uFF0C\u4F5C\u4E3A\u4E07\u80FD\u724C\uFF0C\u53EF\u4EE3\u66FF\u5176\u4ED6\u4EFB\u610F\u57FA\u7840\u724C\n\xB7\u53EF\u4EE5\u78B0\uFF0C\u6760\uFF0C\u4E0D\u80FD\u5403"
-          },
-          {
-            "ruleId": 502302,
-            "gameType": 5023,
-            "tab": 1,
-            "titleId": 2090,
-            "contentId": 2750,
-            "title": "\u80E1\u724C\u89C4\u5219",
-            "content": "\xB7\u5141\u8BB8\u4E00\u70AE\u591A\u54CD\n\xB7\u6BCF\u4E2A\u73A9\u5BB6\u53EF\u591A\u6B21\u80E1\u724C\uFF0C\u76F4\u81F3\u6478\u5B8C\u6240\u6709\u624B\u724C\uFF0C\u80E1\u724C\u65F6\u76F4\u63A5\u7ED3\u7B97\n\xB7\u7EA2\u4E2D\u8D56\u5B50\u4E0D\u80FD\u505A\u5C06\u724C\u5355\u540A\u80E1\u724C\n\xB7\u80E1\u724C\u4E0D\u6539\u53D8\u884C\u724C\u987A\u5E8F\uFF0C\u5403\u80E1\u540E\u4E3A\u70B9\u70AE\u73A9\u5BB6\u7684\u4E0B\u5BB6\u6478\u724C"
-          },
-          {
-            "ruleId": 502303,
-            "gameType": 5023,
-            "tab": 1,
-            "titleId": 2092,
-            "contentId": 2093,
-            "title": "\u5B9A\u7F3A",
-            "content": "\xB7\u80E1\u724C\u65F6\uFF0C\u624B\u724C\u4E2D\u4E0D\u80FD\u8D85\u8FC72\u95E8\u82B1\u8272\n\xB7\u9009\u62E9\u4E00\u95E8\u82B1\u8272\u505A\u4E3A\u7F3A\u724C\uFF0C\u6478\u5230\u8FD9\u95E8\u82B1\u8272\u7684\u724C\u4E00\u5B9A\u8981\u6253\u51FA\u3002\u5BF9\u5C40\u4E2D\u4E0D\u53EF\u66F4\u6539\u7F3A"
-          },
-          {
-            "ruleId": 502304,
-            "gameType": 5023,
-            "tab": 1,
-            "titleId": 2040,
-            "contentId": 2751,
-            "title": "\u6362\u4E09\u5F20",
-            "content": "\xB7\u53D1\u5B8C\u624B\u724C\u540E\uFF0C\u73A9\u5BB6\u987B\u9009\u62E93\u5F20\u624B\u724C\uFF0C\u968F\u673A\u4E0E\u5176\u4ED61\u4F4D\u73A9\u5BB6\u4EA4\u6362"
-          },
-          {
-            "ruleId": 502305,
-            "gameType": 5023,
-            "tab": 1,
-            "titleId": 2096,
-            "contentId": 2752,
-            "title": "\u6760\u724C",
-            "content": "\xB7\u3010\u522E\u98CE\u3011\u660E\u6760\uFF0C\u6536\u53D6\u653E\u6760\u80052\u500D\u5E95\u5206\n\xB7\u3010\u8865\u6760\u3011\u6536\u53D6\u5176\u4ED6\u73A9\u5BB61\u500D\u5E95\u5206\n\xB7\u3010\u4E0B\u96E8\u3011\u6697\u6760\uFF0C\u6536\u53D6\u5176\u4ED6\u73A9\u5BB62\u500D\u5E95\u5206\n\xB7\u82E5\u53EF\u660E\u6760\u60C5\u51B5\u4E0B\uFF0C\u5148\u78B0\u518D\u8865\u6760\u4E0D\u6536\u53D6\u5E95\u5206\n\xB7\u7EA2\u4E2D\u8D56\u5B50\u6253\u51FA\u7B97\u6760\u724C(\u4E0D\u6536\u53D6\u5E95\u5206)\uFF0C\u7B97\u4F5C\u7EA2\u4E2D\u6760\uFF0C\u53EF\u4EE5\u89E6\u53D1\u6760\u4E0A\u5F00\u82B1\u548C\u6760\u4E0A\u70AE\uFF0C\u4E0D\u89E6\u53D1\u62A2\u6760\u80E1"
-          },
-          {
-            "ruleId": 502306,
-            "gameType": 5023,
-            "tab": 1,
-            "titleId": 2087,
-            "contentId": 2098,
-            "title": "\u547C\u53EB\u8F6C\u79FB",
-            "content": "\xB7\u73A9\u5BB6\u6760\u4E0A\u70AE\uFF0C\u9700\u5C06\u6760\u724C\u6240\u5E94\u5206\u6570\u8F6C\u7ED9\u80E1\u724C\u73A9\u5BB6\n\xB7\u6760\u4E0A\u70AE\u81F4\u4E00\u70AE\u591A\u54CD\uFF0C\u4E0D\u89E6\u53D1\u547C\u53EB\u8F6C\u79FB"
-          },
-          {
-            "ruleId": 502307,
-            "gameType": 5023,
-            "tab": 1,
-            "titleId": 2099,
-            "contentId": 2100,
-            "title": "\u5BF9\u5C40\u7ED3\u675F",
-            "content": "\xB7\u6478\u5B8C\u6240\u6709\u624B\u724C\u65F6\uFF0C\u672A\u542C\u724C\u3001\u82B1\u732A\u73A9\u5BB6\u9700\u8981\u63A5\u53D7\u989D\u5916\u60E9\u7F5A\n\xB7\u3010\u9000\u7A0E\u3011\u5BF9\u5C40\u7ED3\u675F\u65F6\uFF0C\u672A\u542C\u724C\u73A9\u5BB6\uFF0C\u9000\u56DE\u5168\u90E8\u6760\u724C\u6240\u5F97\n\xB7\u3010\u67E5\u5927\u53EB\u3011\u5BF9\u5C40\u7ED3\u675F\u65F6\uFF0C\u672A\u542C\u724C\u73A9\u5BB6\u8D54\u7ED9\u542C\u724C\u672A\u80E1\u724C\u73A9\u5BB6\u6700\u5927\u53EF\u80FD\u500D\u6570\uFF08\u4E0D\u5305\u542B\u81EA\u6478\u500D\u6570\uFF09\n\xB7\u3010\u67E5\u82B1\u732A\u3011\u5BF9\u5C40\u7ED3\u675F\u65F6\uFF0C\u624B\u724C\u4E0A\u82E5\u6709\u7F3A\u724C\u7684\u73A9\u5BB6\u4E3A\u82B1\u732A\uFF0C\u82B1\u732A\u73A9\u5BB6\u8D54\u7ED9\u5176\u4ED6\u73A9\u5BB6\u6BCF\u4EBA16\u500D\uFF08\u82E5\u5168\u7A0B\u6253\u7F3A\u724C\uFF0C\u65E0\u9700\u8D54\u4ED8\uFF09"
-          }
-        ],
-        "yaku": [
-          {
-            "yiType": 502310011,
-            "gameType": 5023,
-            "calcYiType": 1001,
-            "endId": 2103,
-            "languageId": 2103,
-            "describeId": 2104,
-            "yiTypeShow": [
-              111,
-              121,
-              131,
-              141,
-              151,
-              161,
-              221,
-              231,
-              241,
-              251,
-              251,
-              251,
-              291,
-              0,
-              291
-            ],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_ph.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 1,
-            "sizeType": 3,
-            "exceptYis": [],
-            "name": "\u5E73\u80E1",
-            "description": "\u75314\u4E2A\u523B\u5B50\u6216\u987A\u5B50\u52A0\u5BF9\u5B50\u7EC4\u6210\u7684\u80E1\u724C\u3002"
-          },
-          {
-            "yiType": 502300071,
-            "gameType": 5023,
-            "calcYiType": 7,
-            "endId": 2266,
-            "languageId": 2153,
-            "describeId": 2154,
-            "yiTypeShow": [],
-            "picturePath": "",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [],
-            "name": "\u6839",
-            "description": "4\u5F20\u4E00\u6837\u7684\u724C\u4E3A1\u6839\uFF0C\u6BCF\u67091\u6839\uFF0C\u5219\u80E1\u724C\u65F6\u989D\u5916x2\u3002"
-          },
-          {
-            "yiType": 502300081,
-            "gameType": 5023,
-            "calcYiType": 8,
-            "endId": 2267,
-            "languageId": 0,
-            "describeId": 0,
-            "yiTypeShow": [],
-            "picturePath": "",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 0,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 4,
-            "sizeType": 3,
-            "exceptYis": [
-              502300071
-            ],
-            "name": "",
-            "description": ""
-          },
-          {
-            "yiType": 502300091,
-            "gameType": 5023,
-            "calcYiType": 9,
-            "endId": 2268,
-            "languageId": 0,
-            "describeId": 0,
-            "yiTypeShow": [],
-            "picturePath": "",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 0,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 8,
-            "sizeType": 3,
-            "exceptYis": [
-              502300071,
-              502300081
-            ],
-            "name": "",
-            "description": ""
-          },
-          {
-            "yiType": 502300101,
-            "gameType": 5023,
-            "calcYiType": 10,
-            "endId": 2269,
-            "languageId": 0,
-            "describeId": 0,
-            "yiTypeShow": [],
-            "picturePath": "",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 0,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 16,
-            "sizeType": 3,
-            "exceptYis": [
-              502300071,
-              502300081,
-              502300091
-            ],
-            "name": "",
-            "description": ""
-          },
-          {
-            "yiType": 502300041,
-            "gameType": 5023,
-            "calcYiType": 4,
-            "endId": 2155,
-            "languageId": 2155,
-            "describeId": 2156,
-            "yiTypeShow": [],
-            "picturePath": "",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [
-              2,
-              3
-            ],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [
-              502300041
-            ],
-            "name": "\u81EA\u6478",
-            "description": "\u81EA\u6478\u80E1\u724C\u3002"
-          },
-          {
-            "yiType": 502300061,
-            "gameType": 5023,
-            "calcYiType": 6,
-            "endId": 2149,
-            "languageId": 2149,
-            "describeId": 2150,
-            "yiTypeShow": [],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_gskh.png",
-            "isOpen": 1,
-            "priority": 1,
-            "ruleOpen": 1,
-            "cantHuTypes": [
-              2,
-              3
-            ],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [],
-            "name": "\u6760\u4E0A\u5F00\u82B1",
-            "description": "\u6760\u724C\u540E\uFF0C\u8865\u5F20\u81EA\u6478\u80E1\u724C\u3002"
-          },
-          {
-            "yiType": 502300031,
-            "gameType": 5023,
-            "calcYiType": 3,
-            "endId": 2151,
-            "languageId": 2151,
-            "describeId": 2152,
-            "yiTypeShow": [],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_qgh.png",
-            "isOpen": 1,
-            "priority": 1,
-            "ruleOpen": 1,
-            "cantHuTypes": [
-              1,
-              2
-            ],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [],
-            "name": "\u62A2\u6760\u80E1",
-            "description": "\u80E1\u5176\u4ED6\u4EBA\u8865\u6760\u7684\u90A3\u5F20\u724C\u3002"
-          },
-          {
-            "yiType": 502300231,
-            "gameType": 5023,
-            "calcYiType": 23,
-            "endId": 2741,
-            "languageId": 2741,
-            "describeId": 2742,
-            "yiTypeShow": [],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_gsp.png",
-            "isOpen": 1,
-            "priority": 1,
-            "ruleOpen": 1,
-            "cantHuTypes": [
-              1,
-              3
-            ],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [],
-            "name": "\u6760\u4E0A\u70AE",
-            "description": "\u6760\u724C\u540E\uFF0C\u6253\u51FA\u7684\u724C\u9020\u6210\u5176\u4ED6\u73A9\u5BB6\u70B9\u70AE\u80E1\u724C\u3002"
-          },
-          {
-            "yiType": 502300241,
-            "gameType": 5023,
-            "calcYiType": 24,
-            "endId": 2743,
-            "languageId": 2743,
-            "describeId": 2744,
-            "yiTypeShow": [],
-            "picturePath": "",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [],
-            "name": "\u7EA2\u4E2D\u6760",
-            "description": "\u6253\u51FA\u7EA2\u4E2D\uFF0C\u7B97\u4F5C\u6760\u3002"
-          },
-          {
-            "yiType": 502300251,
-            "gameType": 5023,
-            "calcYiType": 25,
-            "endId": 2743,
-            "languageId": 0,
-            "describeId": 0,
-            "yiTypeShow": [],
-            "picturePath": "",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 0,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 4,
-            "sizeType": 3,
-            "exceptYis": [
-              502300241
-            ],
-            "name": "",
-            "description": ""
-          },
-          {
-            "yiType": 502300261,
-            "gameType": 5023,
-            "calcYiType": 26,
-            "endId": 2743,
-            "languageId": 0,
-            "describeId": 0,
-            "yiTypeShow": [],
-            "picturePath": "",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 0,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 6,
-            "sizeType": 3,
-            "exceptYis": [
-              502300241,
-              502300251
-            ],
-            "name": "",
-            "description": ""
-          },
-          {
-            "yiType": 502300271,
-            "gameType": 5023,
-            "calcYiType": 27,
-            "endId": 2743,
-            "languageId": 0,
-            "describeId": 0,
-            "yiTypeShow": [],
-            "picturePath": "",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 0,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 8,
-            "sizeType": 3,
-            "exceptYis": [
-              502300241,
-              502300251,
-              502300261
-            ],
-            "name": "",
-            "description": ""
-          },
-          {
-            "yiType": 502300281,
-            "gameType": 5023,
-            "calcYiType": 28,
-            "endId": 2743,
-            "languageId": 0,
-            "describeId": 0,
-            "yiTypeShow": [],
-            "picturePath": "",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 0,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 10,
-            "sizeType": 3,
-            "exceptYis": [
-              502300241,
-              502300251,
-              502300261,
-              502300271
-            ],
-            "name": "",
-            "description": ""
-          },
-          {
-            "yiType": 502300291,
-            "gameType": 5023,
-            "calcYiType": 29,
-            "endId": 2743,
-            "languageId": 0,
-            "describeId": 0,
-            "yiTypeShow": [],
-            "picturePath": "",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 0,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 12,
-            "sizeType": 3,
-            "exceptYis": [
-              502300241,
-              502300251,
-              502300261,
-              502300271,
-              502300281
-            ],
-            "name": "",
-            "description": ""
-          },
-          {
-            "yiType": 502300051,
-            "gameType": 5023,
-            "calcYiType": 5,
-            "endId": 2147,
-            "languageId": 2147,
-            "describeId": 2148,
-            "yiTypeShow": [],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_hdly.png",
-            "isOpen": 1,
-            "priority": 1,
-            "ruleOpen": 1,
-            "cantHuTypes": [
-              2,
-              3
-            ],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [],
-            "name": "\u6D77\u5E95\u635E\u6708",
-            "description": "\u6478\u5230\u724C\u5899\u4E2D\u7684\u6700\u540E1\u5F20\u724C\u80E1\u724C\u3002"
-          },
-          {
-            "yiType": 502310031,
-            "gameType": 5023,
-            "calcYiType": 1003,
-            "endId": 2105,
-            "languageId": 2105,
-            "describeId": 2106,
-            "yiTypeShow": [
-              121,
-              121,
-              121,
-              0,
-              211,
-              211,
-              211,
-              0,
-              231,
-              231,
-              231,
-              0,
-              241,
-              241,
-              241,
-              0,
-              261,
-              261
-            ],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_pph.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [
-              502310011,
-              502310101,
-              502310111,
-              502310121
-            ],
-            "name": "\u78B0\u78B0\u80E1",
-            "description": "\u75314\u4E2A\u523B\u5B50\uFF08\u6216\u6760\u724C\uFF09\u548C\u5BF9\u5B50\u7EC4\u6210\u7684\u80E1\u724C\u3002"
-          },
-          {
-            "yiType": 502300121,
-            "gameType": 5023,
-            "calcYiType": 12,
-            "endId": 2107,
-            "languageId": 2107,
-            "describeId": 2108,
-            "yiTypeShow": [
-              121,
-              131,
-              141,
-              151,
-              161,
-              171,
-              221,
-              221,
-              221,
-              231,
-              241,
-              251,
-              261,
-              0,
-              261
-            ],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_dyj.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [],
-            "name": "\u65AD\u5E7A\u4E5D",
-            "description": "\u80E1\u724C\u65F6\uFF0C\u624B\u4E2D\u6CA1\u67091\u30019\u5E8F\u6570\u724C\u3002"
-          },
-          {
-            "yiType": 502310101,
-            "gameType": 5023,
-            "calcYiType": 1010,
-            "endId": 2107,
-            "languageId": 0,
-            "describeId": 0,
-            "yiTypeShow": [],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_dyj.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 0,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [
-              502310011,
-              502310111,
-              502310121,
-              502300121
-            ],
-            "name": "",
-            "description": ""
-          },
-          {
-            "yiType": 502310131,
-            "gameType": 5023,
-            "calcYiType": 1013,
-            "endId": 2717,
-            "languageId": 2717,
-            "describeId": 2718,
-            "yiTypeShow": [
-              121,
-              131,
-              141,
-              151,
-              161,
-              171,
-              241,
-              251,
-              261,
-              271,
-              281,
-              291,
-              211,
-              0,
-              211
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_ll.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [
-              502310011,
-              502310101,
-              502310111,
-              502310121
-            ],
-            "name": "\u8FDE\u516D",
-            "description": "\u80E1\u724C\u65F6\uFF0C\u6709\u4E00\u79CD\u82B1\u82726\u5F20\u76F8\u8FDE\u63A5\u7684\u724C\u3002"
-          },
-          {
-            "yiType": 502310141,
-            "gameType": 5023,
-            "calcYiType": 1014,
-            "endId": 2719,
-            "languageId": 2719,
-            "describeId": 2720,
-            "yiTypeShow": [
-              121,
-              121,
-              121,
-              0,
-              221,
-              221,
-              221,
-              0,
-              231,
-              241,
-              251,
-              0,
-              277,
-              277,
-              277,
-              0,
-              291,
-              291
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_stk.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 2,
-            "sizeType": 3,
-            "exceptYis": [
-              502310011,
-              502310101,
-              502310111,
-              502310121
-            ],
-            "name": "\u53CC\u540C\u523B",
-            "description": "\u80E1\u724C\u65F6\uFF0C\u67092\u4E2A\u70B9\u6570\u76F8\u540C\u7684\u523B\u5B50\u3002"
-          },
-          {
-            "yiType": 502300131,
-            "gameType": 5023,
-            "calcYiType": 13,
-            "endId": 2109,
-            "languageId": 2109,
-            "describeId": 2110,
-            "yiTypeShow": [
-              111,
-              121,
-              131,
-              141,
-              151,
-              161,
-              171,
-              171,
-              171,
-              181,
-              181,
-              181,
-              191,
-              0,
-              191
-            ],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_qys.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 4,
-            "sizeType": 3,
-            "exceptYis": [],
-            "name": "\u6E05\u4E00\u8272",
-            "description": "\u5168\u90E8\u7531\u4E07/\u7B52/\u6761\u4E2D\u7684\u67D0\u4E00\u79CD\u82B1\u8272\u7EC4\u6210\u7684\u80E1\u724C\u3002"
-          },
-          {
-            "yiType": 502310111,
-            "gameType": 5023,
-            "calcYiType": 1011,
-            "endId": 2109,
-            "languageId": 0,
-            "describeId": 0,
-            "yiTypeShow": [],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_qys.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 0,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 4,
-            "sizeType": 3,
-            "exceptYis": [
-              502310011,
-              502310101,
-              502310121,
-              502300131
-            ],
-            "name": "",
-            "description": ""
-          },
-          {
-            "yiType": 502330011,
-            "gameType": 5023,
-            "calcYiType": 3001,
-            "endId": 2111,
-            "languageId": 2111,
-            "describeId": 2112,
-            "yiTypeShow": [
-              121,
-              121,
-              161,
-              161,
-              221,
-              221,
-              241,
-              241,
-              251,
-              251,
-              271,
-              271,
-              291,
-              291
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_qd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 4,
-            "sizeType": 3,
-            "exceptYis": [
-              502330011,
-              502300071
-            ],
-            "name": "\u4E03\u5BF9",
-            "description": "\u7531\u4E03\u4E2A\u5BF9\u5B50\u7EC4\u6210\u7684\u80E1\u724C\u3002"
-          },
-          {
-            "yiType": 502310041,
-            "gameType": 5023,
-            "calcYiType": 1004,
-            "endId": 2113,
-            "languageId": 2113,
-            "describeId": 2114,
-            "yiTypeShow": [
-              121,
-              121,
-              121,
-              0,
-              211,
-              211,
-              211,
-              0,
-              231,
-              231,
-              231,
-              0,
-              241,
-              241,
-              241,
-              0,
-              291,
-              0,
-              291
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_jgd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 4,
-            "sizeType": 3,
-            "exceptYis": [
-              502310011,
-              502310101,
-              502310111,
-              502310121,
-              502310031
-            ],
-            "name": "\u91D1\u94A9\u9493",
-            "description": "\u80E1\u724C\u65F6\u5176\u4ED6\u724C\u90FD\u88AB\u78B0\u724C\u3001\u6760\u724C\u3002\u624B\u4E2D\u53EA\u5269\u4E00\u5F20\u724C\u5355\u9493\u80E1\u724C\u3002\n\u4E0D\u8BA1\u78B0\u78B0\u80E1\u3002"
-          },
-          {
-            "yiType": 502300141,
-            "gameType": 5023,
-            "calcYiType": 14,
-            "endId": 2115,
-            "languageId": 2115,
-            "describeId": 2116,
-            "yiTypeShow": [
-              111,
-              121,
-              131,
-              191,
-              191,
-              191,
-              211,
-              221,
-              231,
-              271,
-              281,
-              291,
-              291,
-              0,
-              291
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_yj.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 4,
-            "sizeType": 3,
-            "exceptYis": [],
-            "name": "\u5E7A\u4E5D",
-            "description": "\u80E1\u724C\u65F6\uFF0C\u6BCF\u4E00\u4E2A\u523B\u5B50\u3001\u987A\u5B50\u5C06\u90FD\u5305\u542B1\u30019\u5E8F\u6570\u724C\u3002"
-          },
-          {
-            "yiType": 502310121,
-            "gameType": 5023,
-            "calcYiType": 1012,
-            "endId": 2115,
-            "languageId": 0,
-            "describeId": 0,
-            "yiTypeShow": [],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_yj.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 0,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 4,
-            "sizeType": 3,
-            "exceptYis": [
-              502310011,
-              502310101,
-              502310111,
-              502300141
-            ],
-            "name": "",
-            "description": ""
-          },
-          {
-            "yiType": 502310151,
-            "gameType": 5023,
-            "calcYiType": 1015,
-            "endId": 2721,
-            "languageId": 2721,
-            "describeId": 2722,
-            "yiTypeShow": [
-              121,
-              121,
-              121,
-              161,
-              161,
-              161,
-              171,
-              171,
-              171,
-              231,
-              241,
-              251,
-              291,
-              0,
-              291
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_sak.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 4,
-            "sizeType": 3,
-            "exceptYis": [
-              502310011,
-              502310101,
-              502310111,
-              502310121
-            ],
-            "name": "\u4E09\u6697\u523B",
-            "description": "\u80E1\u724C\u65F6\uFF0C\u624B\u724C\u4E2D\u67093\u4E2A\u6697\u523B\u6216\u6697\u6760\u3002"
-          },
-          {
-            "yiType": 502310161,
-            "gameType": 5023,
-            "calcYiType": 1016,
-            "endId": 2723,
-            "languageId": 2723,
-            "describeId": 2724,
-            "yiTypeShow": [
-              111,
-              121,
-              131,
-              141,
-              151,
-              161,
-              171,
-              181,
-              191,
-              221,
-              231,
-              241,
-              251,
-              0,
-              251
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_ytl.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 4,
-            "sizeType": 3,
-            "exceptYis": [
-              502310011,
-              502310101,
-              502310111,
-              502310121,
-              502310131
-            ],
-            "name": "\u4E00\u6761\u9F99",
-            "description": "\u80E1\u724C\u65F6\uFF0C\u6709\u4E00\u79CD\u82B1\u82721-9\u76F8\u8FDE\u63A5\u7684\u5E8F\u6570\u724C\u3002\n\u4E0D\u8BA1\u8FDE\u516D\u3002"
-          },
-          {
-            "yiType": 502310171,
-            "gameType": 5023,
-            "calcYiType": 1017,
-            "endId": 2725,
-            "languageId": 2725,
-            "describeId": 2726,
-            "yiTypeShow": [
-              151,
-              151,
-              151,
-              0,
-              161,
-              161,
-              161,
-              0,
-              171,
-              171,
-              171,
-              0,
-              211,
-              221,
-              231,
-              0,
-              261,
-              261
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_slk.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 4,
-            "sizeType": 3,
-            "exceptYis": [
-              502310011,
-              502310101,
-              502310111,
-              502310121
-            ],
-            "name": "\u4E09\u8FDE\u523B",
-            "description": "\u80E1\u724C\u65F6\uFF0C\u6709\u4E00\u79CD\u82B1\u82723\u526F\u4F9D\u6B21\u9012\u589E\u4E00\u4F4D\u6570\u5B57\u7684\u523B\u5B50\u3002"
-          },
-          {
-            "yiType": 502310051,
-            "gameType": 5023,
-            "calcYiType": 1005,
-            "endId": 2117,
-            "languageId": 2117,
-            "describeId": 2118,
-            "yiTypeShow": [
-              131,
-              131,
-              131,
-              0,
-              151,
-              151,
-              151,
-              0,
-              161,
-              161,
-              161,
-              0,
-              181,
-              181,
-              181,
-              0,
-              191,
-              191
-            ],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_qp.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 8,
-            "sizeType": 2,
-            "exceptYis": [
-              502310011,
-              502310101,
-              502310111,
-              502310121,
-              502310031,
-              502300131
-            ],
-            "name": "\u6E05\u78B0",
-            "description": "\u7531\u6E05\u4E00\u8272\u548C\u78B0\u78B0\u80E1\u7EC4\u6210\u7684\u80E1\u724C\u3002\n\u4E0D\u8BA1\u78B0\u78B0\u80E1\u3001\u6E05\u4E00\u8272\u3002"
-          },
-          {
-            "yiType": 502330031,
-            "gameType": 5023,
-            "calcYiType": 3003,
-            "endId": 2119,
-            "languageId": 2119,
-            "describeId": 2120,
-            "yiTypeShow": [
-              161,
-              161,
-              161,
-              161,
-              171,
-              171,
-              191,
-              191,
-              231,
-              231,
-              251,
-              251,
-              281,
-              281
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_lqd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 8,
-            "sizeType": 2,
-            "exceptYis": [
-              502330011,
-              502300071,
-              502330051
-            ],
-            "name": "\u9F99\u4E03\u5BF9",
-            "description": "\u75317\u4E2A\u5BF9\u5B50\u7EC4\u6210\u7684\u80E1\u724C\uFF0C\u4E14\u624B\u4E0A\u67091\u7EC44\u5F20\u4E00\u6837\u7684\u724C\uFF0C\u4E0D\u80FD\u6760\u6216\u78B0\u51FA\u3002\n\u4E0D\u8BA1\u4E03\u5BF9\u3001\u5C06\u4E03\u5BF9\u3001\u4E0D\u8BA11\u6839\u3002"
-          },
-          {
-            "yiType": 502310061,
-            "gameType": 5023,
-            "calcYiType": 1006,
-            "endId": 2121,
-            "languageId": 2121,
-            "describeId": 2122,
-            "yiTypeShow": [
-              121,
-              121,
-              121,
-              0,
-              151,
-              151,
-              151,
-              0,
-              181,
-              181,
-              181,
-              0,
-              221,
-              221,
-              221,
-              0,
-              251,
-              251
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_jd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 8,
-            "sizeType": 2,
-            "exceptYis": [
-              502310011,
-              502310101,
-              502310111,
-              502310121,
-              502310031,
-              502300121
-            ],
-            "name": "\u5C06\u5BF9",
-            "description": "\u624B\u724C\u5168\u90E8\u662F2\u30015\u30018\u7684\u78B0\u78B0\u80E1\u3002\n\u4E0D\u8BA1\u78B0\u78B0\u80E1\u3001\u65AD\u5E7A\u4E5D\u3002"
-          },
-          {
-            "yiType": 502310181,
-            "gameType": 5023,
-            "calcYiType": 1018,
-            "endId": 2727,
-            "languageId": 2727,
-            "describeId": 2728,
-            "yiTypeShow": [
-              121,
-              121,
-              121,
-              0,
-              141,
-              141,
-              141,
-              0,
-              161,
-              161,
-              161,
-              0,
-              181,
-              181,
-              181,
-              0,
-              221,
-              221
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_qsk.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 8,
-            "sizeType": 2,
-            "exceptYis": [
-              502310011,
-              502310101,
-              502310111,
-              502310121,
-              502310031,
-              502300121
-            ],
-            "name": "\u5168\u53CC\u523B",
-            "description": "\u75312\u30014\u30016\u30018\u5E8F\u6570\u724C\u7684\u523B\u5B50\u3001\u5C06\u724C\u7EC4\u6210\u7684\u80E1\u724C\u3002\n\u4E0D\u8BA1\u78B0\u78B0\u80E1\u3001\u65AD\u5E7A\u4E5D\u3002"
-          },
-          {
-            "yiType": 502310191,
-            "gameType": 5023,
-            "calcYiType": 1019,
-            "endId": 2729,
-            "languageId": 2729,
-            "describeId": 2730,
-            "yiTypeShow": [
-              121,
-              121,
-              121,
-              121,
-              0,
-              131,
-              131,
-              131,
-              131,
-              0,
-              251,
-              251,
-              251,
-              251,
-              0,
-              261,
-              271,
-              281,
-              0,
-              291,
-              291
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_sejc.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 8,
-            "sizeType": 2,
-            "exceptYis": [
-              502310011,
-              502310101,
-              502310111,
-              502310121,
-              502300071,
-              502300081,
-              502300091,
-              502300101
-            ],
-            "name": "\u5341\u4E8C\u91D1\u9497",
-            "description": "\u80E1\u724C\u65F6\uFF0C\u67093\u4E2A\u6760\u724C\u3002\n\u4E0D\u8BA1\u6839\u3002"
-          },
-          {
-            "yiType": 502330041,
-            "gameType": 5023,
-            "calcYiType": 3004,
-            "endId": 2123,
-            "languageId": 2123,
-            "describeId": 2124,
-            "yiTypeShow": [
-              111,
-              111,
-              131,
-              131,
-              141,
-              141,
-              151,
-              151,
-              161,
-              161,
-              171,
-              171,
-              191,
-              191
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_qqd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 16,
-            "sizeType": 2,
-            "exceptYis": [
-              502330011,
-              502300131
-            ],
-            "name": "\u6E05\u4E03\u5BF9",
-            "description": "\u7531\u6E05\u4E00\u8272\u548C\u4E03\u5BF9\u7EC4\u6210\u7684\u80E1\u724C\u3002\n\u4E0D\u8BA1\u6E05\u4E00\u8272\u3001\u4E03\u5BF9\u3002"
-          },
-          {
-            "yiType": 502310071,
-            "gameType": 5023,
-            "calcYiType": 1007,
-            "endId": 2125,
-            "languageId": 2125,
-            "describeId": 2126,
-            "yiTypeShow": [
-              111,
-              111,
-              111,
-              0,
-              131,
-              131,
-              131,
-              0,
-              141,
-              141,
-              141,
-              0,
-              151,
-              151,
-              151,
-              0,
-              161,
-              0,
-              161
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_qjgd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 16,
-            "sizeType": 2,
-            "exceptYis": [
-              502310011,
-              502310051,
-              502310101,
-              502310111,
-              502310121,
-              502310041,
-              502310031,
-              502300131
-            ],
-            "name": "\u6E05\u91D1\u94A9\u9493",
-            "description": "\u7531\u6E05\u4E00\u8272\u548C\u91D1\u94A9\u9493\u7EC4\u6210\u7684\u80E1\u724C\u3002\n\u4E0D\u8BA1\u6E05\u4E00\u8272\u3001\u91D1\u94A9\u9493\u3001\u78B0\u78B0\u80E1\u3001\u6E05\u78B0\u3002"
-          },
-          {
-            "yiType": 502310201,
-            "gameType": 5023,
-            "calcYiType": 1020,
-            "endId": 2731,
-            "languageId": 2731,
-            "describeId": 2732,
-            "yiTypeShow": [
-              161,
-              161,
-              161,
-              0,
-              171,
-              171,
-              171,
-              0,
-              181,
-              181,
-              181,
-              0,
-              191,
-              191,
-              191,
-              0,
-              211,
-              211
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_silk.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 16,
-            "sizeType": 2,
-            "exceptYis": [
-              502310011,
-              502310101,
-              502310111,
-              502310121,
-              502310031,
-              502310171
-            ],
-            "name": "\u56DB\u8FDE\u523B",
-            "description": "\u4E00\u79CD\u82B1\u82724\u526F\u4F9D\u6B21\u9012\u589E\u4E00\u4F4D\u6570\u7684\u523B\u5B50\u3002\n\u4E0D\u8BA1\u4E09\u8FDE\u523B\u3001\u78B0\u78B0\u80E1\u3002"
-          },
-          {
-            "yiType": 502310211,
-            "gameType": 5023,
-            "calcYiType": 1021,
-            "endId": 2733,
-            "languageId": 2733,
-            "describeId": 2734,
-            "yiTypeShow": [
-              111,
-              111,
-              111,
-              121,
-              121,
-              121,
-              171,
-              171,
-              171,
-              181,
-              181,
-              181,
-              211,
-              0,
-              211
-            ],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_siak.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 16,
-            "sizeType": 2,
-            "exceptYis": [
-              502310011,
-              502310101,
-              502310111,
-              502310121,
-              502310031,
-              502310151
-            ],
-            "name": "\u56DB\u6697\u523B",
-            "description": "\u80E1\u724C\u65F6\uFF0C\u624B\u724C\u4E2D\u67094\u4E2A\u6697\u523B\u6216\u6697\u6760\u3002\n\u4E0D\u8BA1\u78B0\u78B0\u80E1\u3001\u4E09\u6697\u523B\u3002"
-          },
-          {
-            "yiType": 502330051,
-            "gameType": 5023,
-            "calcYiType": 3005,
-            "endId": 2127,
-            "languageId": 2127,
-            "describeId": 2128,
-            "yiTypeShow": [
-              121,
-              121,
-              151,
-              151,
-              181,
-              181,
-              221,
-              221,
-              251,
-              251,
-              281,
-              281,
-              281,
-              281
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_jqd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 16,
-            "sizeType": 2,
-            "exceptYis": [
-              502330011,
-              502300121,
-              502330031
-            ],
-            "name": "\u5C06\u4E03\u5BF9",
-            "description": "\u5168\u90E8\u662F\u5E8F\u6570\u724C2\u30015\u30018\u7EC4\u6210\u7684\u4E03\u5BF9\u3002\n\u4E0D\u8BA1\u4E03\u5BF9\u3001\u9F99\u4E03\u5BF9\u3001\u65AD\u5E7A\u4E5D\u3002"
-          },
-          {
-            "yiType": 502310221,
-            "gameType": 5023,
-            "calcYiType": 1022,
-            "endId": 2735,
-            "languageId": 2735,
-            "describeId": 2736,
-            "yiTypeShow": [
-              111,
-              111,
-              111,
-              0,
-              141,
-              141,
-              141,
-              0,
-              171,
-              171,
-              171,
-              0,
-              221,
-              221,
-              221,
-              0,
-              450,
-              0,
-              450
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_hzjgd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [
-              2,
-              3
-            ],
-            "beiType": 2,
-            "bei": 16,
-            "sizeType": 2,
-            "exceptYis": [
-              502310011,
-              502310101,
-              502310111,
-              502310121,
-              502310031,
-              502310041
-            ],
-            "name": "\u7EA2\u4E2D\u91D1\u94A9\u9493",
-            "description": "\u80E1\u724C\u65F6\u5176\u4ED6\u724C\u90FD\u88AB\u78B0\u724C\u3001\u6760\u724C\uFF0C\u624B\u724C\u4E2D\u53EA\u5269\u4E0B\u4E00\u5F20\u7EA2\u4E2D\u5355\u9493\u80E1\u724C\u3002\n\u4E0D\u8BA1\u78B0\u78B0\u80E1\u3001\u91D1\u94A9\u9493\u3002"
-          },
-          {
-            "yiType": 502330061,
-            "gameType": 5023,
-            "calcYiType": 3006,
-            "endId": 2129,
-            "languageId": 2129,
-            "describeId": 2130,
-            "yiTypeShow": [
-              161,
-              161,
-              161,
-              161,
-              211,
-              211,
-              211,
-              211,
-              231,
-              231,
-              261,
-              261,
-              291,
-              291
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_slqd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 16,
-            "sizeType": 2,
-            "exceptYis": [
-              502330011,
-              502330031,
-              502300071,
-              502300081
-            ],
-            "name": "\u53CC\u9F99\u4E03\u5BF9",
-            "description": "\u75317\u4E2A\u5BF9\u5B50\u7EC4\u6210\u7684\u80E1\u724C\uFF0C\u4E14\u624B\u4E0A\u67092\u7EC44\u5F20\u4E00\u6837\u7684\u724C\uFF0C\u4E0D\u80FD\u6760\u6216\u78B0\u51FA\u3002\n\u4E0D\u8BA1\u9F99\u4E03\u5BF9\u3001\u4E03\u5BF9\u3001\u6839\u3002"
-          },
-          {
-            "yiType": 502300021,
-            "gameType": 5023,
-            "calcYiType": 2,
-            "endId": 2131,
-            "languageId": 2131,
-            "describeId": 2132,
-            "yiTypeShow": [],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_dh.png",
-            "isOpen": 1,
-            "priority": 1,
-            "ruleOpen": 1,
-            "cantHuTypes": [
-              2,
-              3
-            ],
-            "beiType": 2,
-            "bei": 32,
-            "sizeType": 1,
-            "exceptYis": [
-              502300041,
-              502300042,
-              502100111
-            ],
-            "name": "\u5730\u80E1",
-            "description": "\u975E\u5E84\u5BB6\u7B2C\u4E00\u8F6E\u6478\u724C\u5C31\u80E1\u724C\uFF0C\u4E3A\u5730\u80E1\u3002"
-          },
-          {
-            "yiType": 502300011,
-            "gameType": 5023,
-            "calcYiType": 1,
-            "endId": 2133,
-            "languageId": 2133,
-            "describeId": 2134,
-            "yiTypeShow": [],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_th.png",
-            "isOpen": 1,
-            "priority": 1,
-            "ruleOpen": 1,
-            "cantHuTypes": [
-              2,
-              3
-            ],
-            "beiType": 2,
-            "bei": 32,
-            "sizeType": 1,
-            "exceptYis": [
-              502300041,
-              502300042,
-              502100111
-            ],
-            "name": "\u5929\u80E1",
-            "description": "\u5E84\u5BB6\u53D1\u5B8C\u724C\u540E\u7ACB\u5373\u80E1\u724C\uFF0C\u4E3A\u5929\u80E1\u3002"
-          },
-          {
-            "yiType": 502330071,
-            "gameType": 5023,
-            "calcYiType": 3007,
-            "endId": 2135,
-            "languageId": 2135,
-            "describeId": 2136,
-            "yiTypeShow": [
-              121,
-              121,
-              121,
-              121,
-              131,
-              131,
-              151,
-              151,
-              171,
-              171,
-              181,
-              181,
-              191,
-              191
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_qlqd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 32,
-            "sizeType": 1,
-            "exceptYis": [
-              502330041,
-              502330011,
-              502330031,
-              502300071,
-              502300131
-            ],
-            "name": "\u6E05\u9F99\u4E03\u5BF9",
-            "description": "\u7531\u6E05\u4E00\u8272\u548C\u9F99\u4E03\u5BF9\u7EC4\u6210\u7684\u80E1\u724C\u3002\n\u4E0D\u8BA1\u6E05\u4E00\u8272\u3001\u9F99\u4E03\u5BF9\u3001\u4E03\u5BF9\u3001\u6E05\u4E03\u5BF9\u3001\u6839\u3002"
-          },
-          {
-            "yiType": 502330081,
-            "gameType": 5023,
-            "calcYiType": 3008,
-            "endId": 2137,
-            "languageId": 2137,
-            "describeId": 2138,
-            "yiTypeShow": [
-              161,
-              161,
-              161,
-              161,
-              211,
-              211,
-              211,
-              211,
-              261,
-              261,
-              261,
-              261,
-              291,
-              291
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_sanlqd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 32,
-            "sizeType": 1,
-            "exceptYis": [
-              502330011,
-              502330031,
-              502330061,
-              502300071,
-              502300081,
-              502300091
-            ],
-            "name": "\u4E09\u9F99\u4E03\u5BF9",
-            "description": "\u75317\u4E2A\u5BF9\u5B50\u7EC4\u6210\u7684\u80E1\u724C\uFF0C\u4E14\u624B\u4E0A\u67093\u7EC44\u5F20\u4E00\u6837\u7684\u724C\uFF0C\u4E0D\u80FD\u6760\u6216\u78B0\u51FA\u3002\n\u4E0D\u8BA1\u4E03\u5BF9\u3001\u9F99\u4E03\u5BF9\u3001\u53CC\u9F99\u4E03\u5BF9\u3001\u6839\u3002"
-          },
-          {
-            "yiType": 502310231,
-            "gameType": 5023,
-            "calcYiType": 1023,
-            "endId": 2737,
-            "languageId": 2737,
-            "describeId": 2738,
-            "yiTypeShow": [
-              111,
-              121,
-              131,
-              111,
-              121,
-              131,
-              171,
-              181,
-              191,
-              171,
-              181,
-              191,
-              151,
-              151
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_ysslh.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 32,
-            "sizeType": 1,
-            "exceptYis": [
-              502310011,
-              502310101,
-              502310111,
-              502310121,
-              502300131
-            ],
-            "name": "\u4E00\u8272\u53CC\u9F99\u4F1A",
-            "description": "\u4E00\u79CD\u82B1\u8272\u7684\u4E24\u4E2A\u8001\u5C11\u526F\uFF0C5\u4E3A\u5C06\u724C\u3002\n\u4E0D\u8BA1\u4E03\u5BF9\u3001\u6E05\u4E00\u8272\u3002"
-          },
-          {
-            "yiType": 502330091,
-            "gameType": 5023,
-            "calcYiType": 3009,
-            "endId": 2139,
-            "languageId": 2139,
-            "describeId": 2140,
-            "yiTypeShow": [
-              121,
-              121,
-              121,
-              121,
-              151,
-              151,
-              151,
-              151,
-              221,
-              221,
-              251,
-              251,
-              281,
-              281
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_jslqd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 64,
-            "sizeType": 1,
-            "exceptYis": [
-              502330011,
-              502330031,
-              502330051,
-              502330061,
-              502300121,
-              502300071,
-              502300081
-            ],
-            "name": "\u5C06\u53CC\u9F99\u4E03\u5BF9",
-            "description": "\u5168\u90E8\u662F\u5E8F\u6570\u724C2\u30015\u30018\u7EC4\u6210\u7684\u53CC\u9F99\u4E03\u5BF9\u3002\n\u4E0D\u8BA1\u4E03\u5BF9\u3001\u5C06\u4E03\u5BF9\u3001\u9F99\u4E03\u5BF9\u3001\u53CC\u9F99\u4E03\u5BF9\u3001\u65AD\u5E7A\u4E5D\u3001\u6839\u3002"
-          },
-          {
-            "yiType": 502310241,
-            "gameType": 5023,
-            "calcYiType": 1024,
-            "endId": 2739,
-            "languageId": 2739,
-            "describeId": 2740,
-            "yiTypeShow": [
-              111,
-              111,
-              111,
-              121,
-              131,
-              141,
-              151,
-              161,
-              171,
-              181,
-              191,
-              191,
-              191,
-              0,
-              171
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_jlbd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 64,
-            "sizeType": 1,
-            "exceptYis": [
-              502310011,
-              502310101,
-              502310111,
-              502310121,
-              502300131
-            ],
-            "name": "\u4E5D\u83B2\u5B9D\u706F",
-            "description": "\u95E8\u6E05\u4E0B\u7531\u4E00\u79CD\u82B1\u8272\u5E8F\u6570\u724C\u5B50\u7EC4\u6210\u7684\u7279\u5B9A\u724C\u578B\uFF0C\u89C1\u540C\u82B1\u8272\u4EFB\u4F551\u5F20\u5E8F\u6570\u724C\u5373\u6210\u80E1\u724C\u3002\n\u4E0D\u8BA1\u6E05\u4E00\u8272\u3002"
-          },
-          {
-            "yiType": 502310081,
-            "gameType": 5023,
-            "calcYiType": 1008,
-            "endId": 2141,
-            "languageId": 2141,
-            "describeId": 2747,
-            "yiTypeShow": [
-              111,
-              111,
-              111,
-              111,
-              0,
-              161,
-              161,
-              161,
-              161,
-              0,
-              221,
-              221,
-              221,
-              221,
-              0,
-              271,
-              271,
-              271,
-              271,
-              0,
-              281,
-              0,
-              281
-            ],
-            "picturePath": "Assets/ArtAB/mjab/co/ui/common/image/win/ui_settlement_img_sblh.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 64,
-            "sizeType": 1,
-            "exceptYis": [
-              502310011,
-              502310101,
-              502310111,
-              502310121,
-              502310041,
-              502310031,
-              502300071,
-              502300081,
-              502300091,
-              502300101,
-              502310191
-            ],
-            "name": "\u5341\u516B\u7F57\u6C49",
-            "description": "\u91D1\u94A9\u9493\uFF0C\u4E14\u80E1\u724C\u65F6\u67094\u4E2A\u6760\u724C\u3002\n\u4E0D\u8BA14\u6839\u3001\u91D1\u94A9\u9493\u3001\u78B0\u78B0\u80E1\u3001\u5341\u4E8C\u91D1\u9497\u3002"
-          },
-          {
-            "yiType": 502330101,
-            "gameType": 5023,
-            "calcYiType": 3010,
-            "endId": 2143,
-            "languageId": 2143,
-            "describeId": 2144,
-            "yiTypeShow": [
-              121,
-              121,
-              121,
-              121,
-              151,
-              151,
-              151,
-              151,
-              221,
-              221,
-              221,
-              221,
-              281,
-              281
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_jshlqd.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 126,
-            "sizeType": 1,
-            "exceptYis": [
-              502330011,
-              502330031,
-              502330051,
-              502330061,
-              502330081,
-              502330091,
-              502300121,
-              502300071,
-              502300081,
-              502300091
-            ],
-            "name": "\u5C06\u4E09\u9F99\u4E03\u5BF9",
-            "description": "\u5168\u90E8\u662F\u5E8F\u6570\u724C2\u30015\u30018\u7EC4\u6210\u7684\u4E09\u9F99\u4E03\u5BF9\u3002\n\u4E0D\u8BA1\u4E03\u5BF9\u3001\u5C06\u4E03\u5BF9\u3001\u9F99\u4E03\u5BF9\u3001\u53CC\u9F99\u4E03\u5BF9\u3001\u5C06\u53CC\u9F99\u4E03\u5BF9\u3001\u4E09\u9F99\u4E03\u5BF9\u3001\u6839\u3001\u65AD\u5E7A\u4E5D\u3002"
-          },
-          {
-            "yiType": 502310091,
-            "gameType": 5023,
-            "calcYiType": 1009,
-            "endId": 2145,
-            "languageId": 2145,
-            "describeId": 2748,
-            "yiTypeShow": [
-              111,
-              111,
-              111,
-              111,
-              0,
-              121,
-              121,
-              121,
-              121,
-              0,
-              161,
-              161,
-              161,
-              161,
-              0,
-              171,
-              171,
-              171,
-              171,
-              0,
-              181,
-              0,
-              181
-            ],
-            "picturePath": "Assets/ArtAB/mjab/sic/ui/sicingame/image/win/ui_settlement_img_qsblh.png",
-            "isOpen": 1,
-            "priority": 0,
-            "ruleOpen": 1,
-            "cantHuTypes": [],
-            "beiType": 2,
-            "bei": 256,
-            "sizeType": 1,
-            "exceptYis": [
-              502310011,
-              502310101,
-              502310111,
-              502310121,
-              502310041,
-              502310031,
-              502300071,
-              502300081,
-              502300091,
-              502300101,
-              502300131,
-              502310051,
-              502310071,
-              502310081,
-              502310191
-            ],
-            "name": "\u6E05\u5341\u516B\u7F57\u6C49",
-            "description": "\u7531\u6E05\u4E00\u8272\u548C\u5341\u516B\u7F57\u6C49\u7EC4\u6210\u7684\u80E1\u724C\u3002\n\u4E0D\u8BA1\u5341\u516B\u7F57\u6C49\u3001\u91D1\u94A9\u9493\u3001\u78B0\u78B0\u80E1\u3001\u6E05\u4E00\u8272\u3001\u6E05\u78B0\u30014\u6839\u3001\u5341\u4E8C\u91D1\u9497\u3002"
-          }
-        ],
-        "rooms": [
-          {
-            "id": 502301,
-            "gameType": 5023,
-            "nameId": 1782,
-            "name": "\u514D\u8D39\u573A",
-            "ruleTags": [
-              2
-            ],
-            "moneyNeedMin": 0,
-            "moneyNeedMax": 0,
-            "moneyCost": 0,
-            "moneyBase": 1,
-            "topBei": 0,
-            "superDoubleLimit": 0,
-            "noRobot": 0,
-            "lockId": 40
-          },
-          {
-            "id": 502302,
-            "gameType": 5023,
-            "nameId": 1800,
-            "name": "\u542F\u822A",
-            "ruleTags": [
-              2
-            ],
-            "moneyNeedMin": 850,
-            "moneyNeedMax": 42e3,
-            "moneyCost": 100,
-            "moneyBase": 20,
-            "topBei": 128,
-            "superDoubleLimit": 0,
-            "noRobot": 0,
-            "lockId": 21
-          },
-          {
-            "id": 502303,
-            "gameType": 5023,
-            "nameId": 1801,
-            "name": "\u9010\u68A6",
-            "ruleTags": [
-              2
-            ],
-            "moneyNeedMin": 850,
-            "moneyNeedMax": 125e3,
-            "moneyCost": 200,
-            "moneyBase": 100,
-            "topBei": 128,
-            "superDoubleLimit": 0,
-            "noRobot": 0,
-            "lockId": 22
-          },
-          {
-            "id": 502304,
-            "gameType": 5023,
-            "nameId": 1802,
-            "name": "\u4E58\u98CE",
-            "ruleTags": [
-              2
-            ],
-            "moneyNeedMin": 12500,
-            "moneyNeedMax": 835e3,
-            "moneyCost": 1500,
-            "moneyBase": 600,
-            "topBei": 256,
-            "superDoubleLimit": 0,
-            "noRobot": 0,
-            "lockId": 23
-          },
-          {
-            "id": 502305,
-            "gameType": 5023,
-            "nameId": 2037,
-            "name": "\u51CC\u9704",
-            "ruleTags": [
-              2
-            ],
-            "moneyNeedMin": 125e3,
-            "moneyNeedMax": 625e4,
-            "moneyCost": 7500,
-            "moneyBase": 3e3,
-            "topBei": 256,
-            "superDoubleLimit": 0,
-            "noRobot": 0,
-            "lockId": 24
-          },
-          {
-            "id": 502306,
-            "gameType": 5023,
-            "nameId": 1803,
-            "name": "\u5FA1\u9F99",
-            "ruleTags": [
-              2
-            ],
-            "moneyNeedMin": 42e4,
-            "moneyNeedMax": 0,
-            "moneyCost": 42e3,
-            "moneyBase": 15e3,
-            "topBei": 256,
-            "superDoubleLimit": 0,
-            "noRobot": 0,
-            "lockId": 25
-          }
-        ]
-      }
-    }
-  };
-
-  // mockjs/sichuan_score.mjs
-  var catalogs = new Map([5021, 5022, 5023].map((gameType) => [
-    gameType,
-    new Map(SICHUAN_CATALOG.games[gameType].yaku.map((item) => [item.calcYiType, item]))
-  ]));
-  function checkRules(gameType, topBei) {
-    if (!catalogs.has(gameType)) throw new RangeError("\u6B64\u8BA1\u5206\u5668\u4EC5\u652F\u6301\u8840\u6218\u3001\u8840\u6D41\u4E0E\u7EA2\u4E2D\u8840\u6D41");
-    if (![128, 256].includes(topBei)) throw new RangeError("\u5FC5\u987B\u7531\u623F\u95F4\u89C4\u5219\u660E\u786E\u6307\u5B9A\u5408\u6CD5\u5C01\u9876\u500D\u6570");
-  }
-  function yaku(gameType, calcYiType) {
-    const rule = catalogs.get(gameType).get(calcYiType);
-    if (!rule || rule.beiType !== 2) throw new Error(`\u672A\u6838\u9A8C\u7684\u56DB\u5DDD\u756A\u578B ${calcYiType}`);
-    return { yiType: rule.yiType, name: rule.name, bei: rule.bei };
-  }
-  var terminal = (kind) => kind % 9 === 0 || kind % 9 === 8;
-  var isWildGame = (gameType) => gameType === 5023;
-  function shapeKinds(shape) {
-    if (shape.type === "sevenPairs") return shape.pairs.flatMap((kind) => [kind, kind]);
-    const kinds = [shape.pair, shape.pair];
-    for (const group of shape.groups) {
-      if (group.type === "sequence") kinds.push(group.kind, group.kind + 1, group.kind + 2);
-      else kinds.push(...Array(group.type === "quad" ? 4 : 3).fill(group.kind));
-    }
-    return kinds;
-  }
-  function shapeYaku(shape, melds, kinds, rootCount) {
-    const pure = new Set(kinds.map((kind) => Math.floor(kind / 9))).size === 1;
-    const simple = kinds.every((kind) => !terminal(kind));
-    const jiang = kinds.every((kind) => [1, 4, 7].includes(kind % 9));
-    const ids = [];
-    let includedPure = false;
-    let consumedRoots = 0;
-    if (shape.type === "sevenPairs") {
-      const dragons = shape.quadKinds.length;
-      consumedRoots = dragons;
-      if (jiang) {
-        ids.push(dragons === 3 ? 3010 : dragons === 2 ? 3009 : 3005);
-      } else if (pure && dragons <= 1) {
-        ids.push(dragons ? 3007 : 3004);
-        includedPure = true;
-      } else {
-        ids.push([3001, 3003, 3006, 3008][dragons]);
-      }
-    } else {
-      const triplets = shape.groups.every((group) => group.type !== "sequence");
-      const singleWait = melds.length === 4;
-      const fourKongs = singleWait && shape.groups.every((group) => group.type === "quad");
-      if (fourKongs) {
-        ids.push(pure ? 1009 : 1008);
-        includedPure = pure;
-        consumedRoots = 4;
-        if (jiang) ids.push(1006);
-      } else if (singleWait) {
-        ids.push(pure ? 1007 : 1004);
-        includedPure = pure;
-        if (jiang) ids.push(1006);
-      } else if (triplets) {
-        ids.push(pure ? 1005 : jiang ? 1006 : 1003);
-        includedPure = pure;
-      }
-      if (terminal(shape.pair) && shape.groups.every((group) => group.type === "sequence" ? group.kind % 9 === 0 || group.kind % 9 === 6 : terminal(group.kind))) ids.push(14);
-    }
-    if (pure && !includedPure) ids.push(13);
-    if (simple && !jiang) ids.push(12);
-    return { ids, countedRoots: rootCount - consumedRoots, pure };
-  }
-  function wildShapeYaku(shape, melds, { ids, countedRoots, pure }, { winType, winTile }) {
-    const remove = /* @__PURE__ */ new Set();
-    const add2 = [];
-    if (shape.type === "standard") {
-      const groups = shape.groups;
-      const sequences = groups.filter((group) => group.type === "sequence").map((group) => group.kind);
-      const triplets = groups.filter((group) => group.type !== "sequence");
-      const hasSequence = (kind) => sequences.includes(kind);
-      const sameSuit = (a, b) => Math.floor(a / 9) === Math.floor(b / 9);
-      if ([0, 9, 18].some((base2) => hasSequence(base2) && hasSequence(base2 + 3) && hasSequence(base2 + 6))) {
-        add2.push(1016);
-      } else if (sequences.some((kind) => kind % 9 <= 3 && hasSequence(kind + 3) && sameSuit(kind, kind + 3))) add2.push(1013);
-      const ranks = triplets.map((group) => group.kind % 9);
-      if (triplets.some((a, index) => triplets.some((b, other) => other !== index && a.kind % 9 === b.kind % 9 && !sameSuit(a.kind, b.kind)))) add2.push(1014);
-      let run = 0;
-      const tripletKinds = new Set(triplets.map((group) => group.kind));
-      for (const kind of tripletKinds) {
-        let length = 1;
-        while (tripletKinds.has(kind + length) && sameSuit(kind, kind + length)) length += 1;
-        run = Math.max(run, length);
-      }
-      if (run >= 4) {
-        add2.push(1020);
-        remove.add(1003);
-      } else if (run === 3) add2.push(1017);
-      let concealed = triplets.filter((group) => !group.open).length;
-      if (winType !== "tsumo" && winTile !== null && !isRedZhong(winTile)) {
-        const winKind = sichuanKind(winTile);
-        const elsewhere = shape.pair === winKind || sequences.some((kind) => winKind >= kind && winKind <= kind + 2 && sameSuit(kind, winKind));
-        if (!elsewhere && triplets.some((group) => !group.open && group.kind === winKind && group.type === "triplet")) concealed -= 1;
-      }
-      if (concealed >= 4) {
-        add2.push(1021);
-        remove.add(1003);
-      } else if (concealed === 3) add2.push(1015);
-      if (!sequences.length && ranks.every((rank) => rank % 2 === 1) && shape.pair % 9 % 2 === 1) {
-        add2.push(1018);
-        remove.add(1003).add(12);
-      }
-      const kongs = melds.filter((meld) => meld.type !== "pon").length;
-      if (kongs === 3) add2.push(1019);
-      if (pure && sequences.length === 4 && shape.pair % 9 === 4) {
-        const base2 = Math.floor(shape.pair / 9) * 9;
-        const sorted = [...sequences].sort((a, b) => a - b);
-        if (sorted.join() === [base2, base2, base2 + 6, base2 + 6].join()) {
-          add2.push(1023);
-          remove.add(13);
-        }
-      }
-      if (melds.length === 4 && shape.pairWild === 2 && isRedZhong(winTile)) {
-        if (ids.includes(1004)) {
-          remove.add(1004).add(1003);
-          add2.push(1022);
-        } else if (ids.includes(1007)) {
-          remove.add(1007).add(1003);
-          add2.push(1022, 13);
-        }
-      }
-    }
-    if (!melds.length) {
-      const counts = Array(9).fill(0);
-      const kinds = shapeKinds(shape);
-      if (pure) {
-        for (const kind of kinds) counts[kind % 9] += 1;
-        const base2 = [3, 1, 1, 1, 1, 1, 1, 1, 3];
-        if (counts.every((count, rank) => count >= base2[rank])) {
-          add2.push(1024);
-          remove.add(13);
-        }
-      }
-    }
-    if (add2.includes(1016)) remove.add(1013);
-    if (add2.includes(1020)) remove.add(1017);
-    if (add2.includes(1021)) remove.add(1015);
-    let roots = countedRoots;
-    if (add2.includes(1019)) roots = 0;
-    const merged = [...ids.filter((id) => !remove.has(id)), ...add2.filter((id) => !remove.has(id))];
-    return { ids: merged, countedRoots: roots };
-  }
-  function scoreSichuanHand(hand, {
-    melds = [],
-    missingSuit,
-    gameType = 5022,
-    topBei,
-    winType = "ron",
-    afterKong = false,
-    lastTile = false,
-    opening = null,
-    kongDiscard = false,
-    redKongs = 0,
-    winTile = hand.at(-1) ?? null
-  } = {}) {
-    checkRules(gameType, topBei);
-    const wild = isWildGame(gameType);
-    if (!["ron", "tsumo", "robKong"].includes(winType) || ![null, "heaven", "earth"].includes(opening) || typeof afterKong !== "boolean" || typeof lastTile !== "boolean" || typeof kongDiscard !== "boolean" || !Number.isInteger(redKongs) || redKongs < 0 || redKongs > 6) throw new RangeError("\u65E0\u6548\u7684\u56DB\u5DDD\u548C\u724C\u60C5\u5883");
-    if (!wild && (kongDiscard || redKongs)) throw new RangeError("\u6760\u4E0A\u70AE\u4E0E\u7EA2\u4E2D\u6760\u53EA\u5C5E\u4E8E\u7EA2\u4E2D\u8840\u6D41");
-    if ((afterKong || lastTile || opening) && winType !== "tsumo") throw new RangeError("\u81EA\u6478\u60C5\u5883\u4E0D\u80FD\u7528\u4E8E\u8363\u548C\u6216\u62A2\u6760");
-    if (kongDiscard && winType !== "ron") throw new RangeError("\u6760\u4E0A\u70AE\u53EA\u80FD\u7528\u4E8E\u8363\u548C");
-    if (opening && (afterKong || lastTile || melds.length || redKongs)) throw new RangeError("\u5929\u80E1/\u5730\u80E1\u4E0D\u80FD\u4E0E\u6760\u3001\u6D77\u5E95\u6216\u5DF2\u6709\u526F\u9732\u6DF7\u7528");
-    if (winTile !== null && !hand.includes(winTile)) throw new RangeError("\u548C\u724C\u5F20\u5FC5\u987B\u5728\u624B\u724C\u4E2D");
-    const shapes = analyzeSichuanHand(hand, { melds, missingSuit, wild, winTile });
-    if (afterKong && !redKongs && !melds.some((meld) => ["kan", "ankan"].includes(meld.type))) throw new RangeError("\u6760\u4E0A\u5F00\u82B1\u5FC5\u987B\u6709\u5B9E\u9645\u6760\u724C");
-    if (!shapes.length) return null;
-    const counts = Array(27).fill(0);
-    for (const id of [...hand, ...melds.flatMap((meld) => meld.tiles)]) {
-      const kind = sichuanKind(id, wild);
-      if (kind !== RED_ZHONG_KIND) counts[kind] += 1;
-    }
-    const rootCount = counts.filter((count) => count === 4).length;
-    let best = null;
-    for (const shape of shapes) {
-      let base2 = shapeYaku(shape, melds, shapeKinds(shape), rootCount);
-      if (wild) base2 = { ...base2, ...wildShapeYaku(shape, melds, base2, { winType, winTile }) };
-      const { ids, countedRoots } = base2;
-      if (!ids.length) ids.push(1001);
-      if (countedRoots > 0) ids.push(6 + countedRoots);
-      if (opening) ids.push(opening === "heaven" ? 1 : 2);
-      else if (winType === "tsumo") ids.push(4);
-      if (afterKong) ids.push(6);
-      if (lastTile) ids.push(5);
-      if (winType === "robKong") ids.push(3);
-      if (kongDiscard) ids.push(23);
-      if (redKongs) ids.push(23 + redKongs);
-      const items = ids.map((id) => yaku(gameType, id));
-      if (countedRoots > 0) {
-        const item = items.find((entry) => entry.yiType === yaku(gameType, 6 + countedRoots).yiType);
-        item.name = countedRoots === 1 ? "\u6839" : `${countedRoots}\u6839`;
-      }
-      if (redKongs > 1) items.find((entry) => entry.yiType === yaku(gameType, 23 + redKongs).yiType).name = `\u7EA2\u4E2D\u6760\xD7${redKongs}`;
-      const rawBei = items.reduce((total, item) => total * item.bei, 1);
-      if (!Number.isSafeInteger(rawBei)) throw new RangeError("\u56DB\u5DDD\u500D\u6570\u6EA2\u51FA");
-      const result = {
-        gameType,
-        winType,
-        rawBei,
-        bei: Math.min(rawBei, topBei),
-        capped: rawBei > topBei,
-        rootCount,
-        countedRoots,
-        yaku: items,
-        shape
-      };
-      if (!best || rawBei > best.rawBei) best = result;
-    }
-    return best;
-  }
-  function maxSichuanReadyScore(hand, { melds = [], missingSuit, gameType = 5022, topBei } = {}) {
-    checkRules(gameType, topBei);
-    const wild = isWildGame(gameType);
-    const waits = sichuanWaitKinds(hand, { melds, missingSuit, wild });
-    const used = /* @__PURE__ */ new Set([...hand, ...melds.flatMap((meld) => meld.tiles)]);
-    let best = null;
-    for (const kind of waits) {
-      let copy = 1;
-      const suit = Math.floor(kind / 9) + 1;
-      const rank = kind % 9 + 1;
-      while (used.has(tileId(suit, rank, copy))) copy += 1;
-      const tile = tileId(suit, rank, copy);
-      const score2 = scoreSichuanHand([...hand, tile], { melds, missingSuit, gameType, topBei, winTile: tile });
-      if (score2 && (!best || score2.rawBei > best.rawBei)) best = { ...score2, waitKind: kind };
-    }
-    return best;
-  }
-  function seatsAndBase(activeSeats2, seat, baseScore) {
-    if (!Array.isArray(activeSeats2) || activeSeats2.length < 2 || activeSeats2.length > 4 || new Set(activeSeats2).size !== activeSeats2.length || !activeSeats2.includes(seat) || ![...activeSeats2].every((value) => Number.isInteger(value) && value >= 0 && value < 4)) throw new RangeError("\u65E0\u6548\u7684\u5728\u5C40\u5EA7\u4F4D");
-    if (!Number.isSafeInteger(baseScore) || baseScore <= 0) throw new RangeError("\u5E95\u5206\u5FC5\u987B\u4E3A\u5B89\u5168\u6B63\u6574\u6570");
-  }
-  function payments(payers, receiver, units, baseScore) {
-    const amount = units * baseScore;
-    if (!Number.isSafeInteger(amount) || !Number.isSafeInteger(amount * payers.length)) throw new RangeError("\u652F\u4ED8\u91D1\u989D\u6EA2\u51FA");
-    const delta = [0, 0, 0, 0];
-    const transfers = payers.map((from) => ({ from, to: receiver, amount }));
-    for (const transfer of transfers) {
-      delta[transfer.from] -= transfer.amount;
-      delta[transfer.to] += transfer.amount;
-    }
-    return { delta, transfers };
-  }
-  function sichuanWinPayments({ winner, loser = null, activeSeats: activeSeats2, bei, baseScore }) {
-    seatsAndBase(activeSeats2, winner, baseScore);
-    if (!Number.isSafeInteger(bei) || bei <= 0) throw new RangeError("\u548C\u724C\u500D\u6570\u5FC5\u987B\u4E3A\u5B89\u5168\u6B63\u6574\u6570");
-    if (loser !== null && (!activeSeats2.includes(loser) || loser === winner)) throw new RangeError("\u65E0\u6548\u7684\u653E\u94F3\u5EA7\u4F4D");
-    return payments(loser === null ? activeSeats2.filter((seat) => seat !== winner) : [loser], winner, bei, baseScore);
-  }
-  function sichuanKongPayments({ seat, kind, from = null, activeSeats: activeSeats2, baseScore, waived = false }) {
-    seatsAndBase(activeSeats2, seat, baseScore);
-    if (!["exposed", "added", "concealed"].includes(kind) || typeof waived !== "boolean") throw new RangeError("\u65E0\u6548\u7684\u6760\u7C7B\u578B");
-    if (waived && kind !== "added") throw new RangeError("\u5148\u78B0\u540E\u8865\u514D\u6760\u8D39\u53EA\u80FD\u7528\u4E8E\u8865\u6760");
-    if (kind === "exposed" ? !activeSeats2.includes(from) || from === seat : from !== null) throw new RangeError("\u65E0\u6548\u7684\u653E\u6760\u5EA7\u4F4D");
-    if (waived) return { delta: [0, 0, 0, 0], transfers: [] };
-    return payments(
-      kind === "exposed" ? [from] : activeSeats2.filter((value) => value !== seat),
-      seat,
-      kind === "added" ? 1 : 2,
-      baseScore
-    );
-  }
-
-  // mockjs/sichuan_settlement.mjs
-  function settleSichuanDraw(players, kongs, { gameType = 5022, topBei, baseScore }) {
-    if (!Array.isArray(players) || players.length !== 4 || !Array.isArray(kongs) || ![128, 256].includes(topBei) || !Number.isSafeInteger(baseScore) || baseScore <= 0) {
-      throw new RangeError("\u65E0\u6548\u7684\u56DB\u5DDD\u8352\u724C\u6E05\u7B97\u53C2\u6570");
-    }
-    const used = /* @__PURE__ */ new Set();
-    const status = Array.from(players, (player) => {
-      if (!player || typeof player.won !== "boolean" || typeof player.allDiscardsMissing !== "boolean" || !Number.isSafeInteger(player.discardCount) || player.discardCount < 0) throw new RangeError("\u65E0\u6548\u7684\u73A9\u5BB6\u6E05\u7B97\u8BB0\u5F55");
-      analyzeSichuanHand(player.hand, { melds: player.melds, missingSuit: player.missingSuit, wild: gameType === 5023 });
-      for (const tile of [...player.hand, ...player.melds.flatMap((meld) => meld.tiles)]) {
-        if (used.has(tile)) throw new RangeError("\u73A9\u5BB6\u4E4B\u95F4\u91CD\u590D\u5B9E\u4F53\u724C");
-        used.add(tile);
-      }
-      if (player.won) return { type: "won", bei: 0 };
-      if (player.hand.length !== 13 - 3 * player.melds.length) throw new RangeError("\u8352\u724C\u65F6\u624B\u724C\u5F20\u6570\u4E0D\u7B26");
-      const flower = player.hand.some((tile) => !isRedZhong(tile) && Math.floor(sichuanKind(tile) / 9) + 1 === player.missingSuit);
-      if (flower) return { type: "flower", bei: 0, exempt: player.discardCount > 0 && player.allDiscardsMissing };
-      const score2 = maxSichuanReadyScore(player.hand, { melds: player.melds, missingSuit: player.missingSuit, gameType, topBei });
-      return { type: score2 ? "ready" : "notReady", bei: score2?.bei ?? 0 };
-    });
-    const delta = [0, 0, 0, 0];
-    const transfers = [];
-    const add2 = (from, to, amount, reason, kongIndex = null) => {
-      if (![from, to].every((seat) => Number.isInteger(seat) && seat >= 0 && seat < 4) || from === to || !Number.isSafeInteger(amount) || amount <= 0) throw new RangeError("\u65E0\u6548\u7684\u6E05\u7B97\u8F6C\u8D26");
-      if (!Number.isSafeInteger(delta[from] - amount) || !Number.isSafeInteger(delta[to] + amount)) throw new RangeError("\u6E05\u7B97\u6EA2\u51FA");
-      delta[from] -= amount;
-      delta[to] += amount;
-      transfers.push({ from, to, amount, reason, kongIndex });
-    };
-    for (const [index, kong] of kongs.entries()) {
-      if (!kong || !Number.isInteger(kong.seat) || !status[kong.seat] || typeof kong.transferred !== "boolean" || !Array.isArray(kong.transfers)) throw new RangeError("\u65E0\u6548\u7684\u6760\u8D39\u8BB0\u5F55");
-      const payers = /* @__PURE__ */ new Set();
-      for (const transfer of kong.transfers) {
-        if (!transfer || transfer.to !== kong.seat || !Number.isInteger(transfer.from) || !status[transfer.from] || transfer.from === kong.seat || payers.has(transfer.from) || !Number.isSafeInteger(transfer.amount) || transfer.amount <= 0) throw new RangeError("\u65E0\u6548\u7684\u539F\u59CB\u6760\u8D39");
-        payers.add(transfer.from);
-        if (!kong.transferred && ["notReady", "flower"].includes(status[kong.seat].type)) {
-          add2(kong.seat, transfer.from, transfer.amount, "refund", index);
-        }
-      }
-    }
-    for (let from = 0; from < 4; from += 1) {
-      for (let to = 0; to < 4; to += 1) {
-        if (from === to) continue;
-        if (status[from].type === "flower" && !status[from].exempt && status[to].type !== "flower") {
-          add2(from, to, 16 * baseScore, "flower");
-        } else if (status[from].type === "notReady" && status[to].type === "ready") {
-          add2(from, to, status[to].bei * baseScore, "ready");
-        }
-      }
-    }
-    return { status, delta, transfers };
-  }
-
-  // mockjs/sichuan_ai.mjs
-  function countsOf2(hand, missingSuit = 0, wild = false) {
-    const counts = Array(34).fill(0);
-    for (const id of hand) {
-      const kind = sichuanKind(id, wild);
-      if (kind !== RED_ZHONG_KIND && Math.floor(kind / 9) + 1 !== missingSuit) counts[kind] += 1;
-    }
-    return counts;
-  }
-  var wildCount = (hand, wild) => wild ? hand.filter(isRedZhong).length : 0;
-  function estimate(counts, meldCount, wilds = 0) {
-    const usable = counts.reduce((sum, count) => sum + count, 0);
-    let result = Math.max(stdShanten(counts, meldCount) - wilds, 13 - 3 * meldCount - usable - wilds);
-    if (!meldCount) {
-      const pairs = counts.reduce((sum, count) => sum + Math.floor(count / 2), 0);
-      const singles = counts.filter((count) => count % 2 === 1).length;
-      const matched = Math.min(wilds, singles);
-      const effective = Math.min(7, pairs + matched + Math.floor((wilds - matched) / 2));
-      result = Math.min(result, 13 - 2 * effective - Math.min(7 - effective, singles - matched));
-    }
-    return Math.max(result, -1);
-  }
-  function checkHolding(hand, melds, missingSuit, wild = false) {
-    analyzeSichuanHand(hand, { melds, missingSuit, wild, limit: 1 });
-    if (![13 - 3 * melds.length, 14 - 3 * melds.length].includes(hand.length)) throw new RangeError("AI\u624B\u724C\u5F20\u6570\u4E0E\u9762\u5B50\u6570\u4E0D\u7B26");
-    if (melds.some((meld) => meld.tiles.some((id) => Math.floor(sichuanKind(id, wild) / 9) + 1 === missingSuit))) {
-      throw new RangeError("AI\u526F\u9732\u4E0D\u80FD\u542B\u5B9A\u7F3A\u82B1\u8272");
-    }
-  }
-  function sichuanShanten(hand, { melds = [], missingSuit, wild = false } = {}) {
-    checkHolding(hand, melds, missingSuit, wild);
-    const shanten = estimate(countsOf2(hand, missingSuit, wild), melds.length, wildCount(hand, wild));
-    if (shanten <= 0 && hand.length === 13 - 3 * melds.length) {
-      return sichuanWaitKinds(hand, { melds, missingSuit, wild }).length ? 0 : 1;
-    }
-    if (shanten === 0) {
-      const candidates = [...new Map(legalSichuanDiscards(hand, missingSuit, wild).map((id) => [sichuanKind(id, wild), id])).values()].map((id) => hand.filter((tile) => tile !== id));
-      if (!candidates.some((tiles) => sichuanWaitKinds(tiles, { melds, missingSuit, wild }).length)) return 1;
-    }
-    return shanten;
-  }
-  function checkInitialHand(hand, wild) {
-    legalSichuanDiscards(hand, 1, wild);
-    if (![13, 14].includes(hand.length)) throw new RangeError("\u6362\u724C/\u5B9A\u7F3A\u9700\u8981\u5B8C\u6574\u8D77\u624B\u724C");
-  }
-  var suitOf = (id, wild) => Math.floor(sichuanKind(id, wild) / 9) + 1;
-  function chooseSichuanMissingSuit(hand, wild = false) {
-    checkInitialHand(hand, wild);
-    const suits = [1, 2, 3].map((suit) => ({
-      suit,
-      count: hand.filter((id) => suitOf(id, wild) === suit).length,
-      shanten: estimate(countsOf2(hand, suit, wild), 0, wildCount(hand, wild))
-    }));
-    suits.sort((a, b) => a.count - b.count || a.shanten - b.shanten || a.suit - b.suit);
-    return suits[0].suit;
-  }
-  function chooseSichuanExchange(hand, wild = false) {
-    checkInitialHand(hand, wild);
-    const suits = [1, 2, 3].map((suit) => hand.filter((id) => suitOf(id, wild) === suit).sort((a, b) => a - b)).filter((tiles) => tiles.length >= 3);
-    const smallest = Math.min(...suits.map((tiles) => tiles.length));
-    let best = null;
-    for (const tiles of suits.filter((tiles2) => tiles2.length === smallest)) {
-      for (let a = 0; a < tiles.length - 2; a += 1) {
-        for (let b = a + 1; b < tiles.length - 1; b += 1) {
-          for (let c = b + 1; c < tiles.length; c += 1) {
-            const selected = [tiles[a], tiles[b], tiles[c]];
-            const retained = hand.filter((id) => !selected.includes(id));
-            const shanten = estimate(countsOf2(retained, 0, wild), 0, wildCount(retained, wild));
-            if (!best || shanten < best.shanten) best = { tiles: selected, shanten };
-          }
-        }
-      }
-    }
-    return best.tiles;
-  }
-  function knownTiles(hand, melds, visibleTiles, wild) {
-    if (!Array.isArray(visibleTiles) || visibleTiles.length > (wild ? 114 : 108)) throw new RangeError("\u65E0\u6548\u7684\u516C\u5F00\u5B9E\u4F53\u724C\u5217\u8868");
-    const seen = /* @__PURE__ */ new Set();
-    const counts = Array(28).fill(0);
-    for (const id of [...hand, ...melds.flatMap((meld) => meld.tiles), ...visibleTiles]) {
-      const kind = sichuanKind(id, wild);
-      if (seen.has(id)) throw new RangeError("AI\u53EF\u89C1\u4FE1\u606F\u4E2D\u51FA\u73B0\u91CD\u590D\u5B9E\u4F53\u724C");
-      seen.add(id);
-      counts[kind] += 1;
-    }
-    return { seen, counts };
-  }
-  function improvements(hand, melds, missingSuit, shanten, known, wild) {
-    const waits = [];
-    let ukeire = 0;
-    for (let kind = 0; kind < (wild ? 28 : 27); kind += 1) {
-      const copies = kind === RED_ZHONG_KIND ? 6 : 4;
-      if (Math.floor(kind / 9) + 1 === missingSuit || known.counts[kind] === copies) continue;
-      const suit = kind === RED_ZHONG_KIND ? 4 : Math.floor(kind / 9) + 1;
-      const rank = kind === RED_ZHONG_KIND ? 5 : kind % 9 + 1;
-      let copy = 1;
-      while (known.seen.has(tileId(suit, rank, copy))) copy += 1;
-      const tile = tileId(suit, rank, copy);
-      const drawn = [...hand, tile];
-      const improves = shanten === 0 ? analyzeSichuanHand(drawn, { melds, missingSuit, wild, winTile: tile, limit: 1 }).length > 0 : sichuanShanten(drawn, { melds, missingSuit, wild }) < shanten;
-      if (improves) {
-        waits.push(kind);
-        ukeire += copies - known.counts[kind];
-      }
-    }
-    return { waits, ukeire };
-  }
-  function chooseSichuanDiscard({ hand, melds = [], missingSuit, visibleTiles = [], wild = false }) {
-    checkHolding(hand, melds, missingSuit, wild);
-    if (hand.length !== 14 - 3 * melds.length) throw new RangeError("\u5F53\u524D\u4E0D\u662F\u53EF\u51FA\u724C\u5F20\u6570");
-    const known = knownTiles(hand, melds, visibleTiles, wild);
-    const legal = legalSichuanDiscards(hand, missingSuit, wild).sort((a, b) => a - b);
-    const byKind = /* @__PURE__ */ new Map();
-    for (const tile of legal) if (!byKind.has(sichuanKind(tile, wild))) byKind.set(sichuanKind(tile, wild), tile);
-    const choices = [...byKind.values()].map((tile) => {
-      const remaining = hand.filter((id) => id !== tile);
-      return { tile, remaining, shanten: sichuanShanten(remaining, { melds, missingSuit, wild }) };
-    });
-    const bestShanten = Math.min(...choices.map((choice) => choice.shanten));
-    let best = null;
-    for (const choice of choices.filter((entry) => entry.shanten === bestShanten)) {
-      const { waits, ukeire } = improvements(choice.remaining, melds, missingSuit, choice.shanten, known, wild);
-      if (!best || ukeire > best.ukeire) best = { tile: choice.tile, shanten: choice.shanten, waits, ukeire };
-    }
-    return best;
-  }
-  function chooseSichuanClaim({ hand, melds = [], missingSuit, visibleTiles = [], wild = false }, { tile, canHu = false, canPon = false, canKong = false }) {
-    checkHolding(hand, melds, missingSuit, wild);
-    if (hand.length !== 13 - 3 * melds.length) throw new RangeError("\u5F53\u524D\u4E0D\u662F\u53EF\u54CD\u5E94\u53EB\u724C\u7684\u5F20\u6570");
-    if (![canHu, canPon, canKong].every((value) => typeof value === "boolean")) throw new RangeError("\u65E0\u6548\u7684\u6743\u5A01\u52A8\u4F5C\u9009\u9879");
-    const kind = sichuanKind(tile);
-    if (hand.includes(tile) || melds.some((meld) => meld.tiles.includes(tile))) throw new RangeError("\u53EB\u724C\u4E0D\u80FD\u5DF2\u5728\u672C\u4EBA\u624B\u4E2D");
-    const publicTiles = visibleTiles.includes(tile) ? visibleTiles : [...visibleTiles, tile];
-    knownTiles(hand, melds, publicTiles, wild);
-    if (canHu) {
-      if (!analyzeSichuanHand([...hand, tile], { melds, missingSuit, wild, winTile: tile, limit: 1 }).length) {
-        throw new RangeError("\u80E1\u724C\u9009\u9879\u4E0E\u5B9E\u4F53\u624B\u724C\u4E0D\u7B26");
-      }
-      return { type: "hu", tiles: [] };
-    }
-    const matching = hand.filter((id) => sichuanKind(id, wild) === kind).sort((a, b) => a - b);
-    if ((canPon || canKong) && Math.floor(kind / 9) + 1 === missingSuit) throw new RangeError("\u4E0D\u80FD\u78B0\u6760\u5B9A\u7F3A\u82B1\u8272");
-    if (canPon && matching.length < 2 || canKong && matching.length !== 3) throw new RangeError("\u78B0\u6760\u9009\u9879\u4E0E\u5B9E\u4F53\u624B\u724C\u4E0D\u7B26");
-    const before = sichuanShanten(hand, { melds, missingSuit, wild });
-    if (canKong) {
-      const nextMelds = [...melds, { type: "kan", tiles: [...matching, tile] }];
-      if (sichuanShanten(hand.filter((id) => !matching.includes(id)), { melds: nextMelds, missingSuit, wild }) <= before) {
-        return { type: "kan", tiles: matching };
-      }
-    }
-    if (canPon) {
-      const ownTiles = matching.slice(0, 2);
-      const nextMelds = [...melds, { type: "pon", tiles: [...ownTiles, tile] }];
-      const after = chooseSichuanDiscard({
-        hand: hand.filter((id) => !ownTiles.includes(id)),
-        melds: nextMelds,
-        missingSuit,
-        visibleTiles: publicTiles.filter((id) => id !== tile),
-        wild
-      });
-      if (after.shanten < before) return { type: "pon", tiles: ownTiles };
-    }
-    return { type: "pass", tiles: [] };
-  }
-  function chooseSichuanRedKong({ hand, melds = [], missingSuit, visibleTiles = [], wild = false }, tile) {
-    if (!wild || !isRedZhong(tile) || !hand.includes(tile)) throw new RangeError("\u7EA2\u4E2D\u6760\u53EA\u80FD\u6253\u51FA\u672C\u4EBA\u624B\u4E2D\u7684\u7EA2\u4E2D");
-    const without = hand.filter((id) => id !== tile);
-    const best = chooseSichuanDiscard({ hand, melds, missingSuit, visibleTiles, wild });
-    return sichuanShanten(without, { melds, missingSuit, wild }) <= best.shanten;
-  }
-
-  // mockjs/sichuan_engine.mjs
-  var clone = (value) => structuredClone(value);
-  var kindOf3 = (tile) => sichuanKind(tile, true);
-  var suitOf2 = (tile) => Math.floor(kindOf3(tile) / 9) + 1;
-  var exited = (state, seat) => state.rules.gameType === 5022 && state.players[seat].won;
-  var activeSeats = (state) => [0, 1, 2, 3].filter((seat) => !exited(state, seat));
-  var action = (type, tiles = []) => ({ type, tiles });
-  var actionTypes = (options) => [...new Set(options.map((option) => option.type))];
-  function sameAction(a, b) {
-    if (a.type !== b.type || a.tiles.length !== b.tiles.length) return false;
-    const other = [...b.tiles].sort((x, y) => x - y);
-    return [...a.tiles].sort((x, y) => x - y).every((tile, index) => tile === other[index]);
-  }
-  function seededRandom(seed) {
-    let value = seed >>> 0;
-    return () => {
-      value += 1831565813;
-      let t = Math.imul(value ^ value >>> 15, 1 | value);
-      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-      return ((t ^ t >>> 14) >>> 0) / 4294967296;
-    };
-  }
-  function emit(state, type, details = {}) {
-    state.events.push({ index: state.events.length, type, ...clone(details) });
-  }
-  function setPhase(state, phase, turn = null) {
-    state.phase = phase;
-    state.turn = turn;
-    state.windowId += 1;
-  }
-  function turnInfo(state, seat) {
-    const options = ownOptions(state, seat);
-    const legal = new Set(options.filter((option) => ["discard", "redKong"].includes(option.type)).map((option) => option.tiles[0]));
-    return { actionTypes: actionTypes(options), cantPlays: state.players[seat].hand.filter((tile) => !legal.has(tile)) };
-  }
-  function score(state, seat, tile = null, winType = "ron", kongDiscard = false) {
-    const player = state.players[seat];
-    let opening = null;
-    if (winType === "tsumo" && !state.interrupted && player.discardCount === 0 && !player.melds.length) {
-      if (seat === state.dealer && player.drawCount === 0) opening = "heaven";
-      else if (seat !== state.dealer && player.drawCount === 1) opening = "earth";
-    }
-    return scoreSichuanHand(tile === null ? player.hand : [...player.hand, tile], {
-      melds: player.melds,
-      missingSuit: player.missingSuit,
-      gameType: state.rules.gameType,
-      topBei: state.rules.topBei,
-      winType,
-      opening,
-      afterKong: winType === "tsumo" && state.turnSource === "kong",
-      lastTile: winType === "tsumo" && state.wall.length === 0,
-      winTile: tile ?? state.drawnTile,
-      ...state.rules.wild ? { kongDiscard, redKongs: player.redKongs.length } : {}
-    });
-  }
-  var locked = (state, seat) => state.rules.gameType !== 5022 && state.players[seat].won;
-  function waitKey(state, hand, player, melds = player.melds) {
-    return sichuanWaitKinds(hand, { melds, missingSuit: player.missingSuit, wild: state.rules.wild }).join(",");
-  }
-  function lockedKongKeepsWaits(state, player, before, remove, meld) {
-    const after = waitKey(state, player.hand.filter((tile) => !remove.includes(tile)), player, meld);
-    return after !== "" && after === before;
-  }
-  var redKongOption = (state, tile) => state.rules.wild && isRedZhong(tile) && state.wall.length > 0;
-  function ownOptions(state, seat) {
-    const player = state.players[seat];
-    const isLocked = locked(state, seat);
-    const options = isLocked ? [action(redKongOption(state, state.drawnTile) ? "redKong" : "discard", [state.drawnTile])] : legalSichuanDiscards(player.hand, player.missingSuit, state.rules.wild).filter((tile) => !redKongOption(state, tile)).map((tile) => action("discard", [tile]));
-    const holdsMissing = player.hand.some((tile) => !isRedZhong(tile) && suitOf2(tile) === player.missingSuit);
-    if (!isLocked && !holdsMissing) {
-      for (const tile of player.hand) if (redKongOption(state, tile)) options.push(action("redKong", [tile]));
-    }
-    if (state.turnSource !== "pon" && score(state, seat, null, "tsumo")) options.push(action("hu"));
-    if (state.turnSource === "pon" || !state.wall.length) return options;
-    const groups = /* @__PURE__ */ new Map();
-    for (const tile of player.hand) {
-      if (suitOf2(tile) === player.missingSuit || isRedZhong(tile)) continue;
-      const kind = kindOf3(tile);
-      if (!groups.has(kind)) groups.set(kind, []);
-      groups.get(kind).push(tile);
-    }
-    const before = isLocked ? waitKey(state, player.hand.filter((tile) => tile !== state.drawnTile), player) : null;
-    const allowed = (tiles, melds) => !isLocked || tiles.includes(state.drawnTile) && lockedKongKeepsWaits(state, player, before, tiles, melds);
-    for (const tiles of groups.values()) {
-      if (tiles.length === 4 && allowed(tiles, [...player.melds, { type: "ankan", tiles }])) options.push(action("ankan", tiles));
-    }
-    for (const meld of player.melds.filter((item) => item.type === "pon")) {
-      const tiles = groups.get(kindOf3(meld.tiles[0]));
-      if (tiles?.length === 1 && allowed(tiles, player.melds.map((item) => item === meld ? { ...item, type: "kan", tiles: [...item.tiles, ...tiles] } : item))) options.push(action("kakan", tiles));
-    }
-    return options;
-  }
-  function optionsFor(state, seat) {
-    if (!Number.isInteger(seat) || seat < 0 || seat > 3) throw new RangeError("\u65E0\u6548\u5EA7\u4F4D");
-    const player = state.players[seat];
-    if (state.phase === "ended" || exited(state, seat)) return [];
-    if (state.phase === "exchange") {
-      if (state.exchanges[seat] !== null) return [];
-      const options = [];
-      if (state.rules.wild) {
-        const tiles = player.hand;
-        for (let a = 0; a < tiles.length - 2; a += 1) {
-          for (let b = a + 1; b < tiles.length - 1; b += 1) {
-            for (let c = b + 1; c < tiles.length; c += 1) options.push(action("exchange", [tiles[a], tiles[b], tiles[c]]));
-          }
-        }
-        return options;
-      }
-      for (let suit = 1; suit <= 3; suit += 1) {
-        const tiles = player.hand.filter((tile) => suitOf2(tile) === suit);
-        for (let a = 0; a < tiles.length - 2; a += 1) {
-          for (let b = a + 1; b < tiles.length - 1; b += 1) {
-            for (let c = b + 1; c < tiles.length; c += 1) options.push(action("exchange", [tiles[a], tiles[b], tiles[c]]));
-          }
-        }
-      }
-      return options;
-    }
-    if (state.phase === "missing") return player.missingSuit === null ? [1, 2, 3].map((suit) => action("missing", [suit])) : [];
-    if (state.phase === "turn") return state.turn === seat ? ownOptions(state, seat) : [];
-    const pending = state.pending;
-    return pending?.offers[seat] && pending.responses[seat] === null ? pending.offers[seat].options : [];
-  }
-  function applyTransfers(state, transfers, reason) {
-    const applied = [];
-    for (const transfer of transfers) {
-      const { from, to } = transfer;
-      let { amount } = transfer;
-      if (!Number.isSafeInteger(amount) || amount <= 0 || from === to || !state.players[from] || !state.players[to]) throw new RangeError("\u65E0\u6548\u79EF\u5206\u8F6C\u79FB");
-      if (state.rules.lossCap !== null) amount = Math.min(amount, Math.max(0, state.rules.lossCap + state.scores[from]));
-      if (!amount) continue;
-      if (!Number.isSafeInteger(state.scores[from] - amount) || !Number.isSafeInteger(state.scores[to] + amount)) throw new RangeError("\u79EF\u5206\u6EA2\u51FA");
-      state.scores[from] -= amount;
-      state.scores[to] += amount;
-      state.transfers.push({ ...transfer, amount, reason });
-      applied.push({ ...transfer, amount });
-    }
-    return applied;
-  }
-  function deltaOf(transfers) {
-    const delta = [0, 0, 0, 0];
-    for (const { from, to, amount } of transfers) {
-      delta[from] -= amount;
-      delta[to] += amount;
-    }
-    return delta;
-  }
-  function finish(state, reason) {
-    state.pending = null;
-    if (reason === "wall") {
-      const settlement = settleSichuanDraw(state.players, state.kongs, state.rules);
-      const transfers = settlement.transfers.flatMap((transfer) => applyTransfers(state, [transfer], transfer.reason));
-      state.settlement = { ...settlement, transfers, delta: deltaOf(transfers) };
-    }
-    setPhase(state, "ended");
-    state.endReason = reason;
-    emit(state, "end", { reason, scores: state.scores, settlement: state.settlement });
-  }
-  function draw(state, seat, source = "draw", kongIndex = null) {
-    if (!state.wall.length) return finish(state, "wall");
-    const player = state.players[seat];
-    const tile = source === "kong" ? state.wall.pop() : state.wall.shift();
-    player.hand.push(tile);
-    player.drawCount += 1;
-    player.passBei = 0;
-    state.turnSource = source;
-    state.lastKong = kongIndex;
-    state.drawnTile = tile;
-    setPhase(state, "turn", seat);
-    emit(state, "draw", { seat, tile, source, remaining: state.wall.length, actionTypes: actionTypes(ownOptions(state, seat)) });
-  }
-  function nextDraw(state, from) {
-    if (activeSeats(state).length <= 1) return finish(state, "threeWinners");
-    for (let step = 1; step < 4; step += 1) {
-      const seat = (from + step) % 4;
-      if (!exited(state, seat)) return draw(state, seat);
-    }
-    throw new Error("\u6CA1\u6709\u4E0B\u4E00\u884C\u52A8\u8005");
-  }
-  function commitKong(state, seat, kind, tiles, from = null, meldIndex = null) {
-    const player = state.players[seat];
-    let waived = false;
-    if (kind === "added") {
-      const meld = player.melds[meldIndex];
-      waived = meld.waiveAdded;
-      meld.type = "kan";
-      meld.tiles.push(...tiles);
-      meld.kongKind = kind;
-    } else {
-      player.melds.push({ type: kind === "concealed" ? "ankan" : "kan", kongKind: kind, tiles: [...tiles], from, waiveAdded: false });
-    }
-    player.hand = player.hand.filter((tile) => !tiles.includes(tile));
-    const payment = sichuanKongPayments({ seat, kind, from, activeSeats: activeSeats(state), baseScore: state.rules.baseScore, waived });
-    const transfers = applyTransfers(state, payment.transfers, "kong");
-    state.kongs.push({ seat, kind, transfers, transferred: false });
-    state.pending = null;
-    state.interrupted = true;
-    emit(state, "kong", { seat, kind, tiles, from, waived, delta: deltaOf(transfers), scores: state.scores, baseScore: state.rules.baseScore });
-    draw(state, seat, "kong", state.kongs.length - 1);
-  }
-  function commitRedKong(state, seat, tile) {
-    const player = state.players[seat];
-    player.hand = player.hand.filter((id) => id !== tile);
-    player.redKongs.push(tile);
-    state.kongs.push({ seat, kind: "red", transfers: [], transferred: false });
-    state.pending = null;
-    state.interrupted = true;
-    emit(state, "redKong", { seat, tile, count: player.redKongs.length });
-    draw(state, seat, "kong", state.kongs.length - 1);
-  }
-  function win(state, winners, from = null) {
-    const pending = state.pending;
-    const active = activeSeats(state);
-    const winType = from === null ? "tsumo" : pending.kind === "added" ? "robKong" : "ron";
-    const tile = from === null ? state.drawnTile : pending.tile;
-    if (winType === "robKong") {
-      state.players[from].hand = state.players[from].hand.filter((id) => id !== tile);
-      state.robbedTiles.push(tile);
-    }
-    const results = [];
-    for (const seat of winners) {
-      const player = state.players[seat];
-      const result = from === null ? score(state, seat, null, winType) : pending.offers[seat].score;
-      const payment = sichuanWinPayments({ winner: seat, loser: from, activeSeats: active, bei: result.bei, baseScore: state.rules.baseScore });
-      const transfers = applyTransfers(state, payment.transfers, "win");
-      if (from === null && state.rules.gameType !== 5022) player.hand = player.hand.filter((id) => id !== tile);
-      player.won = true;
-      player.win = { tile, from, score: result };
-      player.wins.push({ tile, from, score: result });
-      state.winners.push(seat);
-      results.push({ seat, tile, from, score: result, delta: deltaOf(transfers), scores: [...state.scores] });
-    }
-    let callTransfer = null;
-    if (from !== null && pending.kind === "discard") {
-      state.players[from].river[pending.riverIndex].winners = [...winners];
-      if (winners.length === 1 && pending.kongIndex !== null) {
-        const kong = state.kongs[pending.kongIndex];
-        const amount = kong.transfers.reduce((sum, transfer) => sum + transfer.amount, 0);
-        if (amount > 0 && !kong.transferred) {
-          const [applied] = applyTransfers(state, [{ from, to: winners[0], amount }], "callTransfer");
-          kong.transferred = true;
-          if (applied) callTransfer = { from, to: winners[0], amount: applied.amount, scores: [...state.scores] };
-        }
-      }
-    }
-    state.pending = null;
-    state.interrupted = true;
-    emit(state, "win", { results, winType, callTransfer, baseScore: state.rules.baseScore });
-    nextDraw(state, from === null ? winners[0] : from);
-  }
-  function resolveClaims(state) {
-    const pending = state.pending;
-    if (pending.offers.some((offer, seat) => offer !== null && pending.responses[seat] === null)) return;
-    const seats4 = [1, 2, 3].map((step) => (pending.from + step) % 4);
-    const winners = seats4.filter((seat) => pending.responses[seat]?.type === "hu");
-    if (winners.length) return win(state, winners, pending.from);
-    if (pending.kind === "added") return commitKong(state, pending.from, "added", [pending.tile], null, pending.meldIndex);
-    const caller = seats4.find((seat) => ["pon", "kan"].includes(pending.responses[seat]?.type));
-    if (caller !== void 0) {
-      const chosen = pending.responses[caller];
-      const player = state.players[caller];
-      state.players[pending.from].river[pending.riverIndex].claimed = true;
-      const tiles = [...chosen.tiles, pending.tile];
-      if (chosen.type === "kan") return commitKong(state, caller, "exposed", tiles, pending.from);
-      player.hand = player.hand.filter((tile) => !chosen.tiles.includes(tile));
-      player.melds.push({
-        type: "pon",
-        tiles,
-        from: pending.from,
-        waiveAdded: pending.offers[caller].options.some((option) => option.type === "kan")
-      });
-      state.pending = null;
-      state.interrupted = true;
-      state.turnSource = "pon";
-      state.lastKong = null;
-      state.drawnTile = null;
-      setPhase(state, "turn", caller);
-      emit(state, "pon", { seat: caller, from: pending.from, tiles, tile: pending.tile, ...turnInfo(state, caller) });
-      return;
-    }
-    state.pending = null;
-    emit(state, "claimPassed", { from: pending.from, tile: pending.tile });
-    nextDraw(state, pending.from);
-  }
-  function openClaims(state, pending) {
-    pending.offers = [null, null, null, null];
-    pending.responses = [null, null, null, null];
-    for (const seat of activeSeats(state)) {
-      if (seat === pending.from) continue;
-      const player = state.players[seat];
-      const options = [action("pass")];
-      if (isRedZhong(pending.tile)) continue;
-      const result = score(
-        state,
-        seat,
-        pending.tile,
-        pending.kind === "added" ? "robKong" : "ron",
-        pending.kind === "discard" && pending.kongIndex !== null
-      );
-      if (result && result.bei > player.passBei) options.push(action("hu"));
-      const matching = player.hand.filter((tile) => !isRedZhong(tile) && kindOf3(tile) === kindOf3(pending.tile));
-      if (pending.kind === "discard" && state.wall.length && suitOf2(pending.tile) !== player.missingSuit) {
-        if (locked(state, seat)) {
-          const tiles = [...matching, pending.tile];
-          if (matching.length === 3 && lockedKongKeepsWaits(
-            state,
-            player,
-            waitKey(state, player.hand, player),
-            matching,
-            [...player.melds, { type: "kan", tiles }]
-          )) options.push(action("kan", matching));
-        } else {
-          for (let a = 0; a < matching.length - 1; a += 1) {
-            for (let b = a + 1; b < matching.length; b += 1) options.push(action("pon", [matching[a], matching[b]]));
-          }
-          if (matching.length === 3) options.push(action("kan", matching));
-        }
-      }
-      if (options.length > 1) pending.offers[seat] = { options, score: result };
-    }
-    state.pending = pending;
-    setPhase(state, "claim");
-    emit(state, "claimWindow", {
-      kind: pending.kind,
-      from: pending.from,
-      tile: pending.tile,
-      actionTypes: pending.offers.map((offer) => offer === null ? [] : actionTypes(offer.options))
-    });
-    resolveClaims(state);
-  }
-  function applyAction(state, seat, chosen) {
-    const player = state.players[seat];
-    if (state.phase === "exchange") {
-      state.exchanges[seat] = [...chosen.tiles];
-      if (state.exchanges.every((tiles) => tiles !== null)) {
-        for (let target = 0; target < 4; target += 1) {
-          const source = (target - state.exchangeOffset + 4) % 4;
-          state.players[target].hand = state.players[target].hand.filter((tile2) => !state.exchanges[target].includes(tile2)).concat(state.exchanges[source]);
-        }
-        if (!state.players[state.dealer].hand.includes(state.drawnTile)) state.drawnTile = state.players[state.dealer].hand.at(-1);
-        emit(state, "exchange", { offset: state.exchangeOffset, selections: state.exchanges });
-        setPhase(state, "missing");
-      }
-      return;
-    }
-    if (state.phase === "missing") {
-      player.missingSuit = chosen.tiles[0];
-      if (state.players.every((entry) => entry.missingSuit !== null)) {
-        setPhase(state, "turn", state.dealer);
-        emit(state, "missing", { suits: state.players.map((entry) => entry.missingSuit) });
-      }
-      return;
-    }
-    if (state.phase === "claim") {
-      const offer = state.pending.offers[seat];
-      if (chosen.type !== "hu" && offer.options.some((option) => option.type === "hu")) player.passBei = Math.max(player.passBei, offer.score.bei);
-      state.pending.responses[seat] = clone(chosen);
-      emit(state, "claimResponse", { seat, action: chosen.type, tiles: chosen.tiles });
-      resolveClaims(state);
-      return;
-    }
-    if (chosen.type === "hu") return win(state, [seat]);
-    if (chosen.type === "redKong") return commitRedKong(state, seat, chosen.tiles[0]);
-    if (chosen.type === "ankan") return commitKong(state, seat, "concealed", chosen.tiles);
-    if (chosen.type === "kakan") {
-      const tile2 = chosen.tiles[0];
-      const meldIndex = player.melds.findIndex((meld) => meld.type === "pon" && kindOf3(meld.tiles[0]) === kindOf3(tile2));
-      openClaims(state, { kind: "added", from: seat, tile: tile2, meldIndex });
-      return;
-    }
-    const tile = chosen.tiles[0];
-    const declinedWin = state.turnSource === "pon" ? null : score(state, seat, null, "tsumo");
-    if (declinedWin) player.passBei = Math.max(player.passBei, declinedWin.bei);
-    player.hand = player.hand.filter((id) => id !== tile);
-    player.discardCount += 1;
-    player.allDiscardsMissing && (player.allDiscardsMissing = suitOf2(tile) === player.missingSuit);
-    player.river.push({ tile, claimed: false, winners: [] });
-    emit(state, "discard", {
-      seat,
-      tile,
-      isMoQie: ["draw", "kong"].includes(state.turnSource) && state.drawnTile === tile
-    });
-    openClaims(state, {
-      kind: "discard",
-      from: seat,
-      tile,
-      riverIndex: player.river.length - 1,
-      kongIndex: state.turnSource === "kong" ? state.lastKong : null
-    });
-  }
-  var _state;
-  var SichuanEngine = class {
-    constructor({ gameType = 5022, seed = 1, dealer = 0, exchange = true, topBei = 128, baseScore = 1, wall = null } = {}) {
-      __privateAdd(this, _state);
-      if (![5021, 5022, 5023].includes(gameType) || !Number.isSafeInteger(seed) || !Number.isInteger(dealer) || dealer < 0 || dealer > 3 || typeof exchange !== "boolean" || ![128, 256].includes(topBei) || !exchange && topBei !== 256 || !Number.isSafeInteger(baseScore) || baseScore <= 0 || baseScore > Math.floor(Number.MAX_SAFE_INTEGER / (256 * 1024))) throw new RangeError("\u65E0\u6548\u7684\u56DB\u5DDD\u623F\u95F4\u89C4\u5219");
-      const rng = seededRandom(seed);
-      const wild = gameType === 5023;
-      const size = wild ? 114 : 108;
-      const source = wall === null ? shuffle(buildSichuanWall({ wild }), rng) : [...wall];
-      if (source.length !== size || new Set(source).size !== size) throw new RangeError(`\u724C\u5C71\u5FC5\u987B\u5305\u542B${size}\u5F20\u552F\u4E00\u5B9E\u4F53\u724C`);
-      source.forEach((tile) => sichuanKind(tile, wild));
-      const players = Array.from({ length: 4 }, () => ({
-        hand: source.splice(0, 13),
-        melds: [],
-        river: [],
-        missingSuit: null,
-        won: false,
-        win: null,
-        wins: [],
-        passBei: 0,
-        drawCount: 0,
-        discardCount: 0,
-        allDiscardsMissing: true,
-        redKongs: []
-      }));
-      const drawnTile = source.shift();
-      players[dealer].hand.push(drawnTile);
-      const lossCap = gameType === 5021 ? 40 * topBei * baseScore : null;
-      __privateSet(this, _state, {
-        rules: { gameType, topBei, baseScore, exchange, lossCap, wild },
-        seed,
-        dealer,
-        players,
-        wall: source,
-        phase: exchange ? "exchange" : "missing",
-        windowId: 1,
-        turn: null,
-        turnSource: "initial",
-        drawnTile,
-        exchanges: [null, null, null, null],
-        exchangeOffset: 1 + Math.floor(rng() * 3),
-        interrupted: false,
-        pending: null,
-        lastKong: null,
-        kongs: [],
-        robbedTiles: [],
-        scores: [0, 0, 0, 0],
-        transfers: [],
-        winners: [],
-        endReason: null,
-        settlement: null,
-        events: []
-      });
-      emit(__privateGet(this, _state), "start", { dealer, remaining: source.length });
-    }
-    get phase() {
-      return __privateGet(this, _state).phase;
-    }
-    get windowId() {
-      return __privateGet(this, _state).windowId;
-    }
-    snapshot() {
-      return clone(__privateGet(this, _state));
-    }
-    legalActions(seat) {
-      return clone(optionsFor(__privateGet(this, _state), seat));
-    }
-    submit(seat, chosen, windowId) {
-      if (windowId !== __privateGet(this, _state).windowId || !Number.isSafeInteger(windowId)) return { ok: false, error: "staleWindow" };
-      if (!Number.isInteger(seat) || seat < 0 || seat > 3 || !chosen || typeof chosen !== "object" || Object.keys(chosen).some((key) => !["type", "tiles"].includes(key)) || !Array.isArray(chosen.tiles) || chosen.tiles.length > 4 || !chosen.tiles.every(Number.isSafeInteger) || new Set(chosen.tiles).size !== chosen.tiles.length) return { ok: false, error: "invalidAction" };
-      const legal = optionsFor(__privateGet(this, _state), seat).find((option) => sameAction(option, chosen));
-      if (!legal) return { ok: false, error: "illegalAction" };
-      const next = clone(__privateGet(this, _state));
-      applyAction(next, seat, legal);
-      __privateSet(this, _state, next);
-      return { ok: true, windowId: next.windowId };
-    }
-    view(seat) {
-      optionsFor(__privateGet(this, _state), seat);
-      const state = __privateGet(this, _state);
-      const player = state.players[seat];
-      const own = /* @__PURE__ */ new Set([...player.hand, ...player.melds.flatMap((meld) => meld.tiles)]);
-      const visible = new Set(state.robbedTiles);
-      for (const [other, entry] of state.players.entries()) {
-        for (const discard of entry.river) if (!discard.claimed) visible.add(discard.tile);
-        for (const record of entry.wins) visible.add(record.tile);
-        for (const tile of entry.redKongs) visible.add(tile);
-        if (other !== seat) {
-          for (const meld of entry.melds) if (meld.type !== "ankan" || state.phase === "ended") for (const tile of meld.tiles) visible.add(tile);
-          if (state.phase === "ended") for (const tile of entry.hand) visible.add(tile);
-        }
-      }
-      return clone({
-        seat,
-        phase: state.phase,
-        windowId: state.windowId,
-        turn: state.turn,
-        wild: state.rules.wild,
-        hand: player.hand,
-        melds: player.melds,
-        missingSuit: player.missingSuit,
-        visibleTiles: [...visible].filter((tile) => !own.has(tile)),
-        remaining: state.wall.length,
-        scores: state.scores,
-        winners: state.winners,
-        endReason: state.endReason,
-        missingSuits: state.players.map((entry) => state.phase === "missing" ? null : entry.missingSuit),
-        handCounts: state.players.map((entry) => entry.hand.length),
-        claimTile: state.pending?.tile ?? null,
-        options: optionsFor(state, seat)
-      });
-    }
-    chooseAction(seat) {
-      const view = this.view(seat);
-      if (!view.options.length) return null;
-      if (view.phase === "exchange") return action("exchange", chooseSichuanExchange(view.hand, view.wild));
-      if (view.phase === "missing") return action("missing", [chooseSichuanMissingSuit(view.hand, view.wild)]);
-      if (view.phase === "claim") {
-        const has = (type) => view.options.some((option) => option.type === type);
-        return chooseSichuanClaim(view, { tile: view.claimTile, canHu: has("hu"), canPon: has("pon"), canKong: has("kan") });
-      }
-      if (view.options.some((option) => option.type === "hu")) return action("hu");
-      const kong = view.options.find((option) => ["ankan", "kakan"].includes(option.type));
-      if (kong) return kong;
-      const discards = view.options.filter((option) => option.type === "discard");
-      const redKong = view.options.find((option) => option.type === "redKong");
-      if (redKong && (!discards.length || chooseSichuanRedKong(view, redKong.tiles[0]))) return redKong;
-      return discards.length === 1 ? discards[0] : action("discard", [chooseSichuanDiscard(view).tile]);
-    }
-  };
-  _state = new WeakMap();
-
-  // mockjs/sichuan_session.mjs
-  var DEFAULT_TIMEOUTS = Object.freeze({ prepare: 2e4, exchange: 2e4, missing: 15e3, turn: 15e3, claim: 1e4 });
-  var failed = (error) => ({ ok: false, error });
-  var _engine, _status, _humanSeat, _timeouts, _aiDelay, _clock, _jobs, _deadline, _prepareDeadline, _connectionId, _connected, _autoplay, _onUpdate, _onFinish, _onError, _result, _SichuanSession_instances, authorize_fn, call_fn, notify_fn, cancel_fn, cancelAll_fn, begin_fn, schedule_fn, timeoutAction_fn, refresh_fn;
-  var SichuanSession = class {
-    constructor({
-      humanSeat = 0,
-      aiDelayMs = 350,
-      timeoutsMs = {},
-      clock = {},
-      onUpdate = () => {
-      },
-      onFinish = () => {
-      },
-      onError = () => {
-      },
-      ...rules
-    } = {}) {
-      __privateAdd(this, _SichuanSession_instances);
-      __privateAdd(this, _engine);
-      __privateAdd(this, _status, "idle");
-      __privateAdd(this, _humanSeat);
-      __privateAdd(this, _timeouts);
-      __privateAdd(this, _aiDelay);
-      __privateAdd(this, _clock);
-      __privateAdd(this, _jobs, /* @__PURE__ */ new Map());
-      __privateAdd(this, _deadline, null);
-      __privateAdd(this, _prepareDeadline, null);
-      __privateAdd(this, _connectionId, 1);
-      __privateAdd(this, _connected, true);
-      __privateAdd(this, _autoplay, false);
-      __privateAdd(this, _onUpdate);
-      __privateAdd(this, _onFinish);
-      __privateAdd(this, _onError);
-      __privateAdd(this, _result, null);
-      if (!Number.isInteger(humanSeat) || humanSeat < 0 || humanSeat > 3 || !Number.isSafeInteger(aiDelayMs) || aiDelayMs < 0 || aiDelayMs > 6e4 || !timeoutsMs || typeof timeoutsMs !== "object" || Array.isArray(timeoutsMs) || Object.keys(timeoutsMs).some((phase) => !Object.hasOwn(DEFAULT_TIMEOUTS, phase))) {
-        throw new RangeError("\u65E0\u6548\u7684\u8840\u6218\u4F1A\u8BDD\u914D\u7F6E");
-      }
-      __privateSet(this, _timeouts, { ...DEFAULT_TIMEOUTS, ...timeoutsMs });
-      if (Object.values(__privateGet(this, _timeouts)).some((time) => !Number.isSafeInteger(time) || time <= 0 || time > 36e5)) {
-        throw new RangeError("\u65E0\u6548\u7684\u8840\u6218\u8D85\u65F6\u65F6\u95F4");
-      }
-      if (![onUpdate, onFinish, onError].every((callback) => typeof callback === "function")) throw new TypeError("\u65E0\u6548\u7684\u4F1A\u8BDD\u56DE\u8C03");
-      __privateSet(this, _clock, {
-        now: clock.now ?? (() => Date.now()),
-        setTimeout: clock.setTimeout ?? ((callback, delay) => setTimeout(callback, delay)),
-        clearTimeout: clock.clearTimeout ?? ((timer) => clearTimeout(timer))
-      });
-      if (!Object.values(__privateGet(this, _clock)).every((fn) => typeof fn === "function")) throw new TypeError("\u65E0\u6548\u7684\u4F1A\u8BDD\u65F6\u949F");
-      __privateSet(this, _engine, new SichuanEngine(rules));
-      __privateSet(this, _humanSeat, humanSeat);
-      __privateSet(this, _aiDelay, aiDelayMs);
-      __privateSet(this, _onUpdate, onUpdate);
-      __privateSet(this, _onFinish, onFinish);
-      __privateSet(this, _onError, onError);
-    }
-    get status() {
-      return __privateGet(this, _status);
-    }
-    get matchOver() {
-      return __privateGet(this, _status) === "ended";
-    }
-    get stopped() {
-      return __privateGet(this, _status) === "stopped" || __privateGet(this, _status) === "failed";
-    }
-    get result() {
-      return structuredClone(__privateGet(this, _result));
-    }
-    get timeoutsMs() {
-      return { ...__privateGet(this, _timeouts) };
-    }
-    /** 仅供服务端诊断及最终的协议适配，不得直接广播这个快照。 */
-    snapshot() {
-      return __privateGet(this, _engine).snapshot();
-    }
-    view() {
-      const game = __privateGet(this, _engine).view(__privateGet(this, _humanSeat));
-      const playing = __privateGet(this, _status) === "playing";
-      const expiresAt = __privateGet(this, _status) === "preparing" ? __privateGet(this, _prepareDeadline) : playing && game.options.length && __privateGet(this, _deadline)?.windowId === game.windowId ? __privateGet(this, _deadline).expiresAt : null;
-      return {
-        ...game,
-        options: playing ? game.options : [],
-        status: __privateGet(this, _status),
-        connectionId: __privateGet(this, _connectionId),
-        connected: __privateGet(this, _connected),
-        autoplay: __privateGet(this, _autoplay) || !__privateGet(this, _connected),
-        expiresAt,
-        remainingMs: expiresAt === null ? 0 : Math.max(0, expiresAt - __privateGet(this, _clock).now())
-      };
-    }
-    start() {
-      if (__privateGet(this, _status) !== "idle") return failed("alreadyStarted");
-      __privateSet(this, _status, "preparing");
-      __privateSet(this, _prepareDeadline, __privateGet(this, _clock).now() + __privateGet(this, _timeouts).prepare);
-      __privateMethod(this, _SichuanSession_instances, refresh_fn).call(this, "prepare");
-      return { ok: true };
-    }
-    prepare(connectionId) {
-      const denied = __privateMethod(this, _SichuanSession_instances, authorize_fn).call(this, connectionId);
-      if (denied) return denied;
-      if (__privateGet(this, _status) !== "preparing") return failed("invalidPhase");
-      __privateMethod(this, _SichuanSession_instances, begin_fn).call(this);
-      return { ok: true };
-    }
-    submit(chosen, { connectionId, windowId } = {}) {
-      const denied = __privateMethod(this, _SichuanSession_instances, authorize_fn).call(this, connectionId);
-      if (denied) return denied;
-      if (__privateGet(this, _status) !== "playing") return failed("invalidPhase");
-      if (__privateGet(this, _autoplay)) return failed("autoplay");
-      if (windowId !== __privateGet(this, _engine).windowId) return failed("staleWindow");
-      if (__privateGet(this, _deadline)?.windowId === windowId && __privateGet(this, _clock).now() >= __privateGet(this, _deadline).expiresAt) return failed("expiredWindow");
-      const result = __privateGet(this, _engine).submit(__privateGet(this, _humanSeat), chosen, windowId);
-      if (result.ok) __privateMethod(this, _SichuanSession_instances, refresh_fn).call(this, "action");
-      return result;
-    }
-    setAutoplay(enabled, connectionId) {
-      const denied = __privateMethod(this, _SichuanSession_instances, authorize_fn).call(this, connectionId);
-      if (denied) return denied;
-      if (typeof enabled !== "boolean") return failed("invalidAutoplay");
-      __privateSet(this, _autoplay, enabled);
-      __privateMethod(this, _SichuanSession_instances, refresh_fn).call(this, "autoplay");
-      return { ok: true };
-    }
-    /** 旧 socket 的迟到 close 不能让新连接进入托管。 */
-    detach(connectionId) {
-      if (connectionId !== __privateGet(this, _connectionId) || !__privateGet(this, _connected)) return failed("staleConnection");
-      if (this.stopped || this.matchOver) return failed("inactiveSession");
-      __privateSet(this, _connected, false);
-      __privateSet(this, _connectionId, __privateGet(this, _connectionId) + 1);
-      __privateMethod(this, _SichuanSession_instances, refresh_fn).call(this, "detach");
-      return { ok: true };
-    }
-    /** 同进程换连接：窗口及截止时间保留；主动托管与断线托管分开。 */
-    attach() {
-      if (this.stopped || this.matchOver || __privateGet(this, _status) === "idle") return failed("inactiveSession");
-      __privateSet(this, _connectionId, __privateGet(this, _connectionId) + 1);
-      __privateSet(this, _connected, true);
-      __privateMethod(this, _SichuanSession_instances, refresh_fn).call(this, "attach");
-      return { ok: true, view: this.view() };
-    }
-    stop() {
-      if (this.stopped || this.matchOver) return;
-      __privateSet(this, _status, "stopped");
-      __privateMethod(this, _SichuanSession_instances, cancelAll_fn).call(this);
-      __privateMethod(this, _SichuanSession_instances, notify_fn).call(this, "stop");
-    }
-  };
-  _engine = new WeakMap();
-  _status = new WeakMap();
-  _humanSeat = new WeakMap();
-  _timeouts = new WeakMap();
-  _aiDelay = new WeakMap();
-  _clock = new WeakMap();
-  _jobs = new WeakMap();
-  _deadline = new WeakMap();
-  _prepareDeadline = new WeakMap();
-  _connectionId = new WeakMap();
-  _connected = new WeakMap();
-  _autoplay = new WeakMap();
-  _onUpdate = new WeakMap();
-  _onFinish = new WeakMap();
-  _onError = new WeakMap();
-  _result = new WeakMap();
-  _SichuanSession_instances = new WeakSet();
-  authorize_fn = function(connectionId) {
-    if (!__privateGet(this, _connected) || connectionId !== __privateGet(this, _connectionId)) return failed("staleConnection");
-    if (this.stopped || this.matchOver || __privateGet(this, _status) === "idle") return failed("inactiveSession");
-    return null;
-  };
-  call_fn = function(callback, value) {
-    try {
-      callback(value);
-    } catch (error) {
-      try {
-        __privateGet(this, _onError).call(this, error);
-      } catch {
-      }
-    }
-  };
-  notify_fn = function(reason) {
-    __privateMethod(this, _SichuanSession_instances, call_fn).call(this, __privateGet(this, _onUpdate), { reason, view: this.view() });
-  };
-  cancel_fn = function(seat) {
-    const job = __privateGet(this, _jobs).get(seat);
-    if (job) {
-      __privateGet(this, _jobs).delete(seat);
-      __privateGet(this, _clock).clearTimeout(job.timer);
-    }
-  };
-  cancelAll_fn = function() {
-    for (const seat of __privateGet(this, _jobs).keys()) __privateMethod(this, _SichuanSession_instances, cancel_fn).call(this, seat);
-  };
-  begin_fn = function() {
-    __privateMethod(this, _SichuanSession_instances, cancelAll_fn).call(this);
-    __privateSet(this, _status, "playing");
-    __privateMethod(this, _SichuanSession_instances, refresh_fn).call(this, "start");
-  };
-  schedule_fn = function(seat, key, due, callback) {
-    const previous = __privateGet(this, _jobs).get(seat);
-    if (previous?.key === key && previous.due === due) return;
-    __privateMethod(this, _SichuanSession_instances, cancel_fn).call(this, seat);
-    const job = { key, due, timer: null };
-    __privateGet(this, _jobs).set(seat, job);
-    job.timer = __privateGet(this, _clock).setTimeout(() => {
-      if (__privateGet(this, _jobs).get(seat) !== job || this.stopped || this.matchOver) return;
-      __privateGet(this, _jobs).delete(seat);
-      try {
-        callback();
-      } catch (error) {
-        __privateSet(this, _status, "failed");
-        __privateMethod(this, _SichuanSession_instances, cancelAll_fn).call(this);
-        __privateMethod(this, _SichuanSession_instances, call_fn).call(this, __privateGet(this, _onError), error);
-      }
-    }, Math.max(0, due - __privateGet(this, _clock).now()));
-  };
-  timeoutAction_fn = function() {
-    const view = __privateGet(this, _engine).view(__privateGet(this, _humanSeat));
-    if (view.phase === "claim") return { type: "pass", tiles: [] };
-    if (view.phase === "turn") {
-      const drawnTile = __privateGet(this, _engine).snapshot().drawnTile;
-      const drawnDiscard = view.options.find((option) => ["discard", "redKong"].includes(option.type) && option.tiles[0] === drawnTile);
-      return drawnDiscard ?? { type: "discard", tiles: [chooseSichuanDiscard(view).tile] };
-    }
-    return __privateGet(this, _engine).chooseAction(__privateGet(this, _humanSeat));
-  };
-  refresh_fn = function(reason) {
-    if (this.stopped || this.matchOver || __privateGet(this, _status) === "idle") return;
-    const now = __privateGet(this, _clock).now();
-    if (__privateGet(this, _status) === "preparing") {
-      const automatic = !__privateGet(this, _connected) || __privateGet(this, _autoplay);
-      const due = automatic ? now : __privateGet(this, _prepareDeadline);
-      __privateMethod(this, _SichuanSession_instances, schedule_fn).call(this, -1, `prepare:${__privateGet(this, _connectionId)}:${automatic}`, due, () => __privateMethod(this, _SichuanSession_instances, begin_fn).call(this));
-      __privateMethod(this, _SichuanSession_instances, notify_fn).call(this, reason);
-      return;
-    }
-    if (__privateGet(this, _engine).phase === "ended") {
-      __privateMethod(this, _SichuanSession_instances, cancelAll_fn).call(this);
-      __privateSet(this, _status, "ended");
-      const state = __privateGet(this, _engine).snapshot();
-      __privateSet(this, _result, {
-        gameType: state.rules.gameType,
-        seed: state.seed,
-        rules: state.rules,
-        scores: state.scores,
-        winners: state.winners,
-        reason: state.endReason
-      });
-      __privateMethod(this, _SichuanSession_instances, notify_fn).call(this, "finish");
-      __privateMethod(this, _SichuanSession_instances, call_fn).call(this, __privateGet(this, _onFinish), this.result);
-      return;
-    }
-    const windowId = __privateGet(this, _engine).windowId;
-    const ownOptions2 = __privateGet(this, _engine).legalActions(__privateGet(this, _humanSeat));
-    if (ownOptions2.length && __privateGet(this, _deadline)?.windowId !== windowId) {
-      __privateSet(this, _deadline, { windowId, expiresAt: now + __privateGet(this, _timeouts)[__privateGet(this, _engine).phase] });
-    }
-    for (let seat = 0; seat < 4; seat += 1) {
-      if (!__privateGet(this, _engine).legalActions(seat).length) {
-        __privateMethod(this, _SichuanSession_instances, cancel_fn).call(this, seat);
-        continue;
-      }
-      const automatic = seat !== __privateGet(this, _humanSeat) || __privateGet(this, _autoplay) || !__privateGet(this, _connected);
-      const key = `${windowId}:${automatic}:${__privateGet(this, _connectionId)}`;
-      const delay = __privateGet(this, _connected) ? __privateGet(this, _aiDelay) : 0;
-      const previous = __privateGet(this, _jobs).get(seat);
-      const due = automatic ? previous?.key === key ? previous.due : now + delay : __privateGet(this, _deadline).expiresAt;
-      __privateMethod(this, _SichuanSession_instances, schedule_fn).call(this, seat, key, due, () => {
-        if (__privateGet(this, _engine).windowId !== windowId) return;
-        const chosen = automatic ? __privateGet(this, _engine).chooseAction(seat) : __privateMethod(this, _SichuanSession_instances, timeoutAction_fn).call(this);
-        const result = __privateGet(this, _engine).submit(seat, chosen, windowId);
-        if (!result.ok) throw new Error(`\u8840\u6218\u81EA\u52A8\u52A8\u4F5C\u88AB\u62D2\u7EDD seat=${seat} window=${windowId} error=${result.error}`);
-        __privateMethod(this, _SichuanSession_instances, refresh_fn).call(this, automatic ? "ai" : "timeout");
-      });
-    }
-    __privateMethod(this, _SichuanSession_instances, notify_fn).call(this, reason);
-  };
-
-  // mockjs/majiang_pb.mjs
-  var import_light2 = __toESM(require_light(), 1);
-
-  // mockjs/majiang_desc.mjs
-  var MAJIANG_DESCRIPTOR = {
-    "nested": {
-      "majiang": {
-        "options": {
-          "optimize_for": "SPEED",
-          "go_package": "gitlab.gg.com/riichi_mahjong/proto/go/client/game_logic/majiang",
-          "csharp_namespace": "Com.Framework.Protocol.Majiang"
-        },
-        "nested": {
-          "MoneyLogUserInfo": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              },
-              "bei": {
-                "type": "int32",
-                "id": 2
-              },
-              "money": {
-                "type": "int64",
-                "id": 3
-              },
-              "finalMoney": {
-                "type": "int64",
-                "id": 4
-              },
-              "fengDing": {
-                "type": "bool",
-                "id": 5
-              },
-              "yiTypes": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 6
-              },
-              "noMoney": {
-                "type": "bool",
-                "id": 7
-              },
-              "sysMoney": {
-                "type": "int64",
-                "id": 8
-              }
-            }
-          },
-          "MoneyLog": {
-            "fields": {
-              "type": {
-                "type": "int32",
-                "id": 1
-              },
-              "userInfos": {
-                "rule": "repeated",
-                "type": ".majiang.MoneyLogUserInfo",
-                "id": 2
-              }
-            }
-          },
-          "TingInfo": {
-            "fields": {
-              "play": {
-                "type": "int32",
-                "id": 1
-              },
-              "ting": {
-                "type": "int32",
-                "id": 2
-              },
-              "maxBei": {
-                "type": "int32",
-                "id": 5
-              }
-            }
-          },
-          "ToPrepareUserInfo": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              },
-              "userID": {
-                "type": "uint64",
-                "id": 2
-              }
-            }
-          },
-          "NtfToPrepare": {
-            "fields": {
-              "userInfos": {
-                "rule": "repeated",
-                "type": ".majiang.ToPrepareUserInfo",
-                "id": 1
-              }
-            }
-          },
-          "PrepareUserInfo": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              }
-            }
-          },
-          "NtfPrepare": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              },
-              "userInfos": {
-                "rule": "repeated",
-                "type": ".majiang.PrepareUserInfo",
-                "id": 2
-              }
-            }
-          },
-          "GameStartUserInfo": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              },
-              "score": {
-                "type": "int64",
-                "id": 2
-              },
-              "handCards": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 4
-              },
-              "tingInfos": {
-                "rule": "repeated",
-                "type": ".majiang.TingInfo",
-                "id": 5
-              },
-              "canPlayActions": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 6
-              },
-              "changeCardSuggest": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 7
-              },
-              "dingQueSuggest": {
-                "type": "int32",
-                "id": 8
-              },
-              "huaCards": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 9
-              },
-              "chuPai2Timeout": {
-                "type": "int32",
-                "id": 10
-              }
-            }
-          },
-          "NtfGameStart": {
-            "fields": {
-              "changWind": {
-                "type": "int32",
-                "id": 1
-              },
-              "juNum": {
-                "type": "int32",
-                "id": 2
-              },
-              "zhuangSeat": {
-                "type": "int32",
-                "id": 3
-              },
-              "remainDuiCardNum": {
-                "type": "int32",
-                "id": 4
-              },
-              "userInfos": {
-                "rule": "repeated",
-                "type": ".majiang.GameStartUserInfo",
-                "id": 5
-              },
-              "gameID": {
-                "type": "string",
-                "id": 6
-              },
-              "guiPreCards": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 7
-              },
-              "guiCards": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 8
-              },
-              "changeCardType": {
-                "type": "int32",
-                "id": 9
-              },
-              "baseScore": {
-                "type": "int64",
-                "id": 10
-              },
-              "topBei": {
-                "type": "int32",
-                "id": 11
-              },
-              "huanZhangTimeout": {
-                "type": "int32",
-                "id": 12
-              },
-              "dingQueTimeout": {
-                "type": "int32",
-                "id": 13
-              },
-              "chuPai1Timeout": {
-                "type": "int32",
-                "id": 14
-              },
-              "qiangPaiTimeout": {
-                "type": "int32",
-                "id": 15
-              },
-              "poChan1Timeout": {
-                "type": "int32",
-                "id": 16
-              },
-              "poChan2Timeout": {
-                "type": "int32",
-                "id": 17
-              },
-              "changeCardRule": {
-                "type": "int32",
-                "id": 18
-              },
-              "hasDingQue": {
-                "type": "bool",
-                "id": 19
-              },
-              "scoreType": {
-                "type": "int32",
-                "id": 20
-              },
-              "touzi1": {
-                "type": "int32",
-                "id": 21
-              },
-              "touzi2": {
-                "type": "int32",
-                "id": 22
-              },
-              "hasQuePaiBianShen": {
-                "type": "bool",
-                "id": 23
-              },
-              "totalJuNum": {
-                "type": "int32",
-                "id": 24
-              },
-              "specialCardNumMap": {
-                "keyType": "int32",
-                "type": "int32",
-                "id": 25
-              },
-              "jieSuanRule": {
-                "type": "int32",
-                "id": 26
-              },
-              "isMingPai": {
-                "type": "bool",
-                "id": 27
-              }
-            }
-          },
-          "SendCardUserInfo": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              },
-              "card": {
-                "type": "int32",
-                "id": 2
-              },
-              "tingInfos": {
-                "rule": "repeated",
-                "type": ".majiang.TingInfo",
-                "id": 3
-              },
-              "canPlayActions": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 4
-              },
-              "chuPai2Timeout": {
-                "type": "int32",
-                "id": 5
-              },
-              "isDianGangHuaDianPao": {
-                "type": "bool",
-                "id": 6
-              }
-            }
-          },
-          "NtfSendCard": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              },
-              "userInfos": {
-                "rule": "repeated",
-                "type": ".majiang.SendCardUserInfo",
-                "id": 2
-              },
-              "remainDuiCardNum": {
-                "type": "int32",
-                "id": 3
-              }
-            }
-          },
-          "PlayCardUserInfo": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              },
-              "canQiangActions": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 2
-              },
-              "canGangNoNumCardsAfterRiichiHu": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 3
-              }
-            }
-          },
-          "NtfPlayCard": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              },
-              "card": {
-                "type": "int32",
-                "id": 2
-              },
-              "action": {
-                "type": "int32",
-                "id": 3
-              },
-              "userInfos": {
-                "rule": "repeated",
-                "type": ".majiang.PlayCardUserInfo",
-                "id": 4
-              },
-              "isMoQie": {
-                "type": "bool",
-                "id": 5
-              },
-              "moneyLogs": {
-                "rule": "repeated",
-                "type": ".majiang.MoneyLog",
-                "id": 6
-              },
-              "isFinish": {
-                "type": "bool",
-                "id": 7
-              }
-            }
-          },
-          "QiangCardUserInfo": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              }
-            }
-          },
-          "NtfQiangCard": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              },
-              "action": {
-                "type": "int32",
-                "id": 2
-              },
-              "otherCards": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 3
-              },
-              "userInfos": {
-                "rule": "repeated",
-                "type": ".majiang.QiangCardUserInfo",
-                "id": 4
-              }
-            }
-          },
-          "QiangCardEndUserInfo": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              },
-              "tingInfos": {
-                "rule": "repeated",
-                "type": ".majiang.TingInfo",
-                "id": 2
-              },
-              "canPlayActions": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 3
-              },
-              "cantPlays": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 4
-              },
-              "chuPai2Timeout": {
-                "type": "int32",
-                "id": 5
-              },
-              "canGangNoNumCardsAfterRiichiHu": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 6
-              }
-            }
-          },
-          "NtfQiangCardEnd": {
-            "fields": {
-              "seats": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 1
-              },
-              "action": {
-                "type": "int32",
-                "id": 2
-              },
-              "otherCards": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 3
-              },
-              "userInfos": {
-                "rule": "repeated",
-                "type": ".majiang.QiangCardEndUserInfo",
-                "id": 4
-              },
-              "moneyLogs": {
-                "rule": "repeated",
-                "type": ".majiang.MoneyLog",
-                "id": 6
-              },
-              "isFinish": {
-                "type": "bool",
-                "id": 7
-              }
-            }
-          },
-          "SingleMa": {
-            "fields": {
-              "card": {
-                "type": "int32",
-                "id": 1
-              },
-              "seat": {
-                "type": "int32",
-                "id": 2
-              }
-            }
-          },
-          "HuInfo": {
-            "fields": {
-              "huCard": {
-                "type": "int32",
-                "id": 1
-              },
-              "huType": {
-                "type": "int32",
-                "id": 2
-              }
-            }
-          },
-          "OneGameHistory": {
-            "fields": {
-              "changeScore": {
-                "type": "int64",
-                "id": 2
-              }
-            }
-          },
-          "GameStopUserInfo": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              },
-              "score": {
-                "type": "int64",
-                "id": 2
-              },
-              "handCards": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 3
-              },
-              "changeScore": {
-                "type": "int64",
-                "id": 4
-              },
-              "totalBei": {
-                "type": "int32",
-                "id": 5
-              },
-              "rank": {
-                "type": "int32",
-                "id": 6
-              },
-              "doorCardsInfos": {
-                "rule": "repeated",
-                "type": ".majiang.DoorCardsInfo",
-                "id": 7
-              },
-              "alreadyRiichi": {
-                "type": "bool",
-                "id": 9
-              },
-              "oldPTLevel": {
-                "type": "int32",
-                "id": 10
-              },
-              "oldPTPoint": {
-                "type": "int32",
-                "id": 11
-              },
-              "newPTLevel": {
-                "type": "int32",
-                "id": 12
-              },
-              "newPTPoint": {
-                "type": "int32",
-                "id": 13
-              },
-              "changePT": {
-                "type": "int64",
-                "id": 14
-              },
-              "maiMa": {
-                "rule": "repeated",
-                "type": ".majiang.SingleMa",
-                "id": 16
-              },
-              "baseBei": {
-                "type": "int32",
-                "id": 17
-              },
-              "tingInfos": {
-                "rule": "repeated",
-                "type": ".majiang.TingInfo",
-                "id": 18
-              },
-              "isFinish": {
-                "type": "bool",
-                "id": 19
-              },
-              "poChanStatus": {
-                "type": "int32",
-                "id": 20
-              },
-              "huInfos": {
-                "rule": "repeated",
-                "type": ".majiang.HuInfo",
-                "id": 21
-              },
-              "isExit": {
-                "type": "bool",
-                "id": 22
-              },
-              "oldLoveLevel": {
-                "type": "int32",
-                "id": 23
-              },
-              "oldLovePoint": {
-                "type": "int32",
-                "id": 24
-              },
-              "newLoveLevel": {
-                "type": "int32",
-                "id": 25
-              },
-              "newLovePoint": {
-                "type": "int32",
-                "id": 26
-              },
-              "changeLove": {
-                "type": "int64",
-                "id": 27
-              },
-              "isTianMingHuaZHu": {
-                "type": "bool",
-                "id": 28
-              },
-              "histories": {
-                "rule": "repeated",
-                "type": ".majiang.OneGameHistory",
-                "id": 29
-              }
-            }
-          },
-          "NtfGameStop": {
-            "fields": {
-              "huSeats": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 1
-              },
-              "huCardSeat": {
-                "type": "int32",
-                "id": 2
-              },
-              "huCard": {
-                "type": "int32",
-                "id": 3
-              },
-              "isFinal": {
-                "type": "bool",
-                "id": 4
-              },
-              "userInfos": {
-                "rule": "repeated",
-                "type": ".majiang.GameStopUserInfo",
-                "id": 5
-              },
-              "stopType": {
-                "type": "int32",
-                "id": 7
-              },
-              "moneyLogs": {
-                "rule": "repeated",
-                "type": ".majiang.MoneyLog",
-                "id": 8
-              },
-              "winningStreak": {
-                "type": "int32",
-                "id": 9
-              }
-            }
-          },
-          "ChangeCardUserInfo": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              },
-              "cards": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 2
-              }
-            }
-          },
-          "NtfChangeCard": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              },
-              "cardNum": {
-                "type": "int32",
-                "id": 2
-              },
-              "userInfos": {
-                "rule": "repeated",
-                "type": ".majiang.ChangeCardUserInfo",
-                "id": 3
-              }
-            }
-          },
-          "ChangeCardEndUserInfo": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              },
-              "cards": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 2
-              },
-              "getCards": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 3
-              },
-              "dingQueSuggest": {
-                "type": "int32",
-                "id": 4
-              },
-              "tingInfos": {
-                "rule": "repeated",
-                "type": ".majiang.TingInfo",
-                "id": 5
-              },
-              "canPlayActions": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 6
-              },
-              "chuPai2Timeout": {
-                "type": "int32",
-                "id": 7
-              }
-            }
-          },
-          "NtfChangeCardEnd": {
-            "fields": {
-              "userInfos": {
-                "rule": "repeated",
-                "type": ".majiang.ChangeCardEndUserInfo",
-                "id": 1
-              }
-            }
-          },
-          "DingQueUserInfo": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              },
-              "dingQue": {
-                "type": "int32",
-                "id": 2
-              }
-            }
-          },
-          "NtfDingQue": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              },
-              "userInfos": {
-                "rule": "repeated",
-                "type": ".majiang.DingQueUserInfo",
-                "id": 2
-              }
-            }
-          },
-          "DingQueEndUserInfo": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              },
-              "dingQue": {
-                "type": "int32",
-                "id": 2
-              },
-              "tingInfos": {
-                "rule": "repeated",
-                "type": ".majiang.TingInfo",
-                "id": 3
-              },
-              "canPlayActions": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 4
-              },
-              "chuPai2Timeout": {
-                "type": "int32",
-                "id": 5
-              },
-              "quePaiBianShen": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 6
-              },
-              "moCard": {
-                "type": "int32",
-                "id": 7
-              }
-            }
-          },
-          "NtfDingQueEnd": {
-            "fields": {
-              "userInfos": {
-                "rule": "repeated",
-                "type": ".majiang.DingQueEndUserInfo",
-                "id": 1
-              }
-            }
-          },
-          "PoChanUserInfo": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              }
-            }
-          },
-          "NtfPoChanChange": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              },
-              "poChanStatus": {
-                "type": "int32",
-                "id": 2
-              },
-              "userInfos": {
-                "rule": "repeated",
-                "type": ".majiang.PoChanUserInfo",
-                "id": 3
-              },
-              "finalMoney": {
-                "type": "int64",
-                "id": 4
-              },
-              "isFinish": {
-                "type": "bool",
-                "id": 5
-              }
-            }
-          },
-          "ExitUserInfo": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              }
-            }
-          },
-          "NtfExit": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              },
-              "userInfos": {
-                "rule": "repeated",
-                "type": ".majiang.ExitUserInfo",
-                "id": 2
-              }
-            }
-          },
-          "TuoGuanUserInfo": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              }
-            }
-          },
-          "NtfTuoGuanChange": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              },
-              "tuoGuanStatus": {
-                "type": "int32",
-                "id": 2
-              },
-              "userInfos": {
-                "rule": "repeated",
-                "type": ".majiang.TuoGuanUserInfo",
-                "id": 3
-              }
-            }
-          },
-          "ReqPrepare": {
-            "fields": {}
-          },
-          "RspPrepare": {
-            "fields": {
-              "result": {
-                "type": "int32",
-                "id": 1
-              }
-            }
-          },
-          "ReqPlayCard": {
-            "fields": {
-              "card": {
-                "type": "int32",
-                "id": 1
-              },
-              "action": {
-                "type": "int32",
-                "id": 2
-              },
-              "isTimeout": {
-                "type": "bool",
-                "id": 3
-              },
-              "isChuPai1Timeout": {
-                "type": "bool",
-                "id": 4
-              }
-            }
-          },
-          "RspPlayCard": {
-            "fields": {
-              "result": {
-                "type": "int32",
-                "id": 1
-              }
-            }
-          },
-          "ReqQiangCard": {
-            "fields": {
-              "action": {
-                "type": "int32",
-                "id": 1
-              },
-              "otherCards": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 2
-              },
-              "isTimeout": {
-                "type": "bool",
-                "id": 3
-              }
-            }
-          },
-          "RspQiangCard": {
-            "fields": {
-              "result": {
-                "type": "int32",
-                "id": 1
-              }
-            }
-          },
-          "ReqChangeCard": {
-            "fields": {
-              "cards": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 1
-              }
-            }
-          },
-          "RspChangeCard": {
-            "fields": {
-              "result": {
-                "type": "int32",
-                "id": 1
-              }
-            }
-          },
-          "ReqDingQue": {
-            "fields": {
-              "dingQue": {
-                "type": "int32",
-                "id": 1
-              }
-            }
-          },
-          "RspDingQue": {
-            "fields": {
-              "result": {
-                "type": "int32",
-                "id": 1
-              }
-            }
-          },
-          "ReqPoChanChange": {
-            "fields": {
-              "poChanStatus": {
-                "type": "int32",
-                "id": 1
-              }
-            }
-          },
-          "RspPoChanChange": {
-            "fields": {
-              "result": {
-                "type": "int32",
-                "id": 1
-              }
-            }
-          },
-          "ReqExit": {
-            "fields": {}
-          },
-          "RspExit": {
-            "fields": {
-              "result": {
-                "type": "int32",
-                "id": 1
-              }
-            }
-          },
-          "ReqTuoGuanChange": {
-            "fields": {
-              "tuoGuanStatus": {
-                "type": "int32",
-                "id": 1
-              }
-            }
-          },
-          "RspTuoGuanChange": {
-            "fields": {
-              "result": {
-                "type": "int32",
-                "id": 1
-              }
-            }
-          },
-          "ReqSetInternalState": {
-            "fields": {
-              "InternalState": {
-                "keyType": "int32",
-                "type": "int32",
-                "id": 1
-              }
-            }
-          },
-          "RspSetInternalState": {
-            "fields": {
-              "result": {
-                "type": "int32",
-                "id": 1
-              }
-            }
-          },
-          "DoorCardsInfo": {
-            "fields": {
-              "cards": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 1
-              },
-              "action": {
-                "type": "int32",
-                "id": 2
-              },
-              "qiangSeat": {
-                "type": "int32",
-                "id": 3
-              }
-            }
-          },
-          "Offline2OnlineUserInfo": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              },
-              "handCardsNum": {
-                "type": "int32",
-                "id": 2
-              },
-              "doorCardsInfos": {
-                "rule": "repeated",
-                "type": ".majiang.DoorCardsInfo",
-                "id": 3
-              },
-              "handCards": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 4
-              },
-              "playedCards": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 5
-              },
-              "PlayedCardsOtherTake": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 6
-              },
-              "alreadyRiichi": {
-                "type": "bool",
-                "id": 7
-              },
-              "tingInfos": {
-                "rule": "repeated",
-                "type": ".majiang.TingInfo",
-                "id": 8
-              },
-              "canPlayActions": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 9
-              },
-              "cantPlays": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 10
-              },
-              "changeScore": {
-                "type": "int64",
-                "id": 11
-              },
-              "canQiangActions": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 12
-              },
-              "score": {
-                "type": "int64",
-                "id": 13
-              },
-              "huaCards": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 15
-              },
-              "huInfos": {
-                "rule": "repeated",
-                "type": ".majiang.HuInfo",
-                "id": 16
-              },
-              "dingQue": {
-                "type": "int32",
-                "id": 17
-              },
-              "canGangNoNumCardsAfterRiichiHu": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 18
-              },
-              "moQieMap": {
-                "keyType": "int32",
-                "type": "bool",
-                "id": 19
-              },
-              "chuPai2Timeout": {
-                "type": "int32",
-                "id": 20
-              },
-              "poChanStatus": {
-                "type": "int32",
-                "id": 21
-              },
-              "timeoutStartTime": {
-                "type": "int64",
-                "id": 22
-              },
-              "tuoGuanStatus": {
-                "type": "int32",
-                "id": 23
-              },
-              "internalState": {
-                "keyType": "int32",
-                "type": "int32",
-                "id": 24
-              },
-              "changeCardSuggest": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 26
-              },
-              "dingQueSuggest": {
-                "type": "int32",
-                "id": 27
-              },
-              "isFinish": {
-                "type": "bool",
-                "id": 28
-              },
-              "histories": {
-                "rule": "repeated",
-                "type": ".majiang.OneGameHistory",
-                "id": 29
-              },
-              "isDianGangHuaDianPao": {
-                "type": "bool",
-                "id": 30
-              }
-            }
-          },
-          "QiangInfo": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              },
-              "action": {
-                "type": "int32",
-                "id": 2
-              },
-              "otherCards": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 3
-              }
-            }
-          },
-          "ChangeCardInfo": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              },
-              "cards": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 2
-              },
-              "cardNum": {
-                "type": "int32",
-                "id": 3
-              }
-            }
-          },
-          "DingQueInfo": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              },
-              "dingQue": {
-                "type": "int32",
-                "id": 2
-              }
-            }
-          },
-          "Offline2OnlineGameScene": {
-            "fields": {
-              "seat": {
-                "type": "int32",
-                "id": 1
-              },
-              "changWind": {
-                "type": "int32",
-                "id": 2
-              },
-              "juNum": {
-                "type": "int32",
-                "id": 3
-              },
-              "zhuangSeat": {
-                "type": "int32",
-                "id": 4
-              },
-              "remainDuiCardNum": {
-                "type": "int32",
-                "id": 5
-              },
-              "currentSeat": {
-                "type": "int32",
-                "id": 6
-              },
-              "currentPlayCard": {
-                "type": "int32",
-                "id": 7
-              },
-              "currentAction": {
-                "type": "int32",
-                "id": 8
-              },
-              "qiangInfos": {
-                "rule": "repeated",
-                "type": ".majiang.QiangInfo",
-                "id": 10
-              },
-              "offline2OnlineUserInfos": {
-                "rule": "repeated",
-                "type": ".majiang.Offline2OnlineUserInfo",
-                "id": 11
-              },
-              "gameID": {
-                "type": "string",
-                "id": 12
-              },
-              "preSeat": {
-                "type": "int32",
-                "id": 13
-              },
-              "prePlayCard": {
-                "type": "int32",
-                "id": 14
-              },
-              "preAction": {
-                "type": "int32",
-                "id": 15
-              },
-              "preQiangInfos": {
-                "rule": "repeated",
-                "type": ".majiang.QiangInfo",
-                "id": 16
-              },
-              "baseScore": {
-                "type": "int64",
-                "id": 17
-              },
-              "topBei": {
-                "type": "int32",
-                "id": 18
-              },
-              "moneyLogs": {
-                "rule": "repeated",
-                "type": ".majiang.MoneyLog",
-                "id": 19
-              },
-              "huanZhangTimeout": {
-                "type": "int32",
-                "id": 22
-              },
-              "dingQueTimeout": {
-                "type": "int32",
-                "id": 23
-              },
-              "chuPai1Timeout": {
-                "type": "int32",
-                "id": 24
-              },
-              "qiangPaiTimeout": {
-                "type": "int32",
-                "id": 25
-              },
-              "poChan1Timeout": {
-                "type": "int32",
-                "id": 26
-              },
-              "poChan2Timeout": {
-                "type": "int32",
-                "id": 27
-              },
-              "changeCardType": {
-                "type": "int32",
-                "id": 28
-              },
-              "changeCardRule": {
-                "type": "int32",
-                "id": 29
-              },
-              "changeCardInfos": {
-                "rule": "repeated",
-                "type": ".majiang.ChangeCardInfo",
-                "id": 30
-              },
-              "hasDingQue": {
-                "type": "bool",
-                "id": 31
-              },
-              "dingQueInfos": {
-                "rule": "repeated",
-                "type": ".majiang.DingQueInfo",
-                "id": 32
-              },
-              "touzi1": {
-                "type": "int32",
-                "id": 33
-              },
-              "touzi2": {
-                "type": "int32",
-                "id": 34
-              },
-              "scoreType": {
-                "type": "int32",
-                "id": 35
-              },
-              "hasQuePaiBianShen": {
-                "type": "bool",
-                "id": 36
-              },
-              "totalJuNum": {
-                "type": "int32",
-                "id": 37
-              },
-              "guiPreCards": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 38
-              },
-              "guiCards": {
-                "rule": "repeated",
-                "type": "int32",
-                "id": 39
-              },
-              "specialCardNumMap": {
-                "keyType": "int32",
-                "type": "int32",
-                "id": 40
-              },
-              "jieSuanRule": {
-                "type": "int32",
-                "id": 41
-              }
-            }
-          },
-          "GmReqStopGame": {
-            "fields": {}
-          },
-          "GmRspStopGame": {
-            "fields": {}
-          },
-          "GmReqInitCard": {
-            "fields": {
-              "cardId": {
-                "type": "int32",
-                "id": 1
-              },
-              "isZimo": {
-                "type": "bool",
-                "id": 2
-              },
-              "isForbidRobotHu": {
-                "type": "bool",
-                "id": 3
-              },
-              "duiCardNum": {
-                "type": "int32",
-                "id": 4
-              }
-            }
-          },
-          "GmRspInitCard": {
-            "fields": {}
-          },
-          "GmReqSetRobotConfig": {
-            "fields": {
-              "robotSpeedLevel": {
-                "type": "int32",
-                "id": 1
-              }
-            },
-            "nested": {
-              "RobotSpeed": {
-                "values": {
-                  "Normal": 0,
-                  "HalfTime": 1,
-                  "Fast": 2
-                }
-              }
-            }
-          },
-          "GmRspSetRobotConfig": {
-            "fields": {}
-          },
-          "OneGameRecordStep": {
-            "fields": {
-              "ntfToPrepare": {
-                "type": ".majiang.NtfToPrepare",
-                "id": 1
-              },
-              "ntfPrepare": {
-                "type": ".majiang.NtfPrepare",
-                "id": 2
-              },
-              "ntfGameStart": {
-                "type": ".majiang.NtfGameStart",
-                "id": 3
-              },
-              "ntfSendCard": {
-                "type": ".majiang.NtfSendCard",
-                "id": 4
-              },
-              "ntfPlayCard": {
-                "type": ".majiang.NtfPlayCard",
-                "id": 5
-              },
-              "ntfQiangCard": {
-                "type": ".majiang.NtfQiangCard",
-                "id": 6
-              },
-              "ntfQiangCardEnd": {
-                "type": ".majiang.NtfQiangCardEnd",
-                "id": 7
-              },
-              "ntfGameStop": {
-                "type": ".majiang.NtfGameStop",
-                "id": 8
-              },
-              "ntfChangeCard": {
-                "type": ".majiang.NtfChangeCard",
-                "id": 9
-              },
-              "ntfChangeCardEnd": {
-                "type": ".majiang.NtfChangeCardEnd",
-                "id": 10
-              },
-              "ntfDingQue": {
-                "type": ".majiang.NtfDingQue",
-                "id": 11
-              },
-              "ntfDingQueEnd": {
-                "type": ".majiang.NtfDingQueEnd",
-                "id": 12
-              },
-              "ntfPoChanChange": {
-                "type": ".majiang.NtfPoChanChange",
-                "id": 13
-              },
-              "ntfExit": {
-                "type": ".majiang.NtfExit",
-                "id": 14
-              },
-              "ntfTuoGuanChange": {
-                "type": ".majiang.NtfTuoGuanChange",
-                "id": 15
-              },
-              "stepType": {
-                "type": "int32",
-                "id": 101
-              },
-              "time": {
-                "type": "int64",
-                "id": 102
-              }
-            }
-          },
-          "CardType": {
-            "values": {
-              "None": 0,
-              "Wan": 1,
-              "Tong": 2,
-              "Tiao": 3,
-              "Zi": 4,
-              "Hua": 5,
-              "Te": 6
-            }
-          },
-          "Result": {
-            "values": {
-              "Succ": 0,
-              "Fail_InternalError": 1,
-              "Fail_InvalidParam": 2,
-              "Fail_InvalidSequence": 3,
-              "Fail_ActionNotInCanPlayActions": 101,
-              "Fail_CardInCantPlays": 102,
-              "Fail_RiichiPlayCardWrong": 103,
-              "Fail_CardNotInHand": 104,
-              "Fail_CardNotMatchAction": 105,
-              "Fail_ActionNotInCanQiangActions": 201,
-              "Fail_InvalidOtherCards": 202,
-              "Fail_InvalidChangeCards": 301,
-              "Fail_InvalidDingQue": 401
-            }
-          },
-          "Wind": {
-            "values": {
-              "East": 0,
-              "South": 1,
-              "West": 2,
-              "North": 3
-            }
-          },
-          "MaJiangMsg": {
-            "values": {
-              "ENone": 0,
-              "EReqPrepare": 1,
-              "ERspPrepare": 2,
-              "EReqPlayCard": 3,
-              "ERspPlayCard": 4,
-              "EReqQiangCard": 5,
-              "ERspQiangCard": 6,
-              "EReqChangeCard": 7,
-              "ERspChangeCard": 8,
-              "EReqDingQue": 9,
-              "ERspDingQue": 10,
-              "EReqPoChanChange": 11,
-              "ERspPoChanChange": 12,
-              "EReqExit": 13,
-              "ERspExit": 14,
-              "EReqTuoGuanChange": 15,
-              "ERspTuoGuanChange": 16,
-              "EReqSetInternalState": 17,
-              "ERspSetInternalState": 18,
-              "ENtfToPrepare": 1001,
-              "ENtfPrepare": 1002,
-              "ENtfGameStart": 1003,
-              "ENtfSendCard": 1004,
-              "ENtfPlayCard": 1005,
-              "ENtfQiangCard": 1006,
-              "ENtfQiangCardEnd": 1007,
-              "ENtfGameStop": 1008,
-              "ENtfChangeCard": 1009,
-              "ENtfChangeCardEnd": 1010,
-              "ENtfDingQue": 1011,
-              "ENtfDingQueEnd": 1012,
-              "ENtfPoChanChange": 1013,
-              "ENtfExit": 1014,
-              "ENtfTuoGuanChange": 1015,
-              "EGmBegin": 5e4,
-              "EGmReqStopGame": 50001,
-              "EGmRspStopGame": 50002,
-              "EGmReqInitCard": 50003,
-              "EGmRspInitCard": 50004,
-              "EGmReqSetRobotConfig": 50005,
-              "EGmRspSetRobotConfig": 50006,
-              "EGmEnd": 6e4
-            }
-          },
-          "PlayAction": {
-            "values": {
-              "Normal": 0,
-              "Guo": 1,
-              "Chi": 2,
-              "Peng": 3,
-              "MingGang": 4,
-              "PengGang": 5,
-              "AnGang": 6,
-              "Riichi": 7,
-              "Hu": 8
-            }
-          },
-          "GuiPlayRule": {
-            "values": {
-              "GuiPlayRule_No": 0,
-              "GuiPlayRule_Gang": 1
-            }
-          },
-          "MoneyLogType": {
-            "values": {
-              "MoneyLogType_None": 0,
-              "MoneyLogType_MingGang": 1,
-              "MoneyLogType_PengGang": 2,
-              "MoneyLogType_AnGang": 3,
-              "MoneyLogType_Mo": 4,
-              "MoneyLogType_Rong": 5,
-              "MoneyLogType_MaiMa": 6,
-              "MoneyLogType_ZhaNiao": 7,
-              "MoneyLogType_ChaHuaZhu": 8,
-              "MoneyLogType_ChaDaJiao": 9,
-              "MoneyLogType_TuiShui": 10,
-              "MoneyLogType_HuJiaoZhuanYi": 11
-            }
-          },
-          "ChangeCardRule": {
-            "values": {
-              "ChangeCardRule_No": 0,
-              "ChangeCardRule_HuanSanZhang": 1,
-              "ChangeCardRule_RenYiHuan": 2,
-              "ChangeCardRule_HuanSanZhang2": 3
-            }
-          },
-          "ChangeCardType": {
-            "values": {
-              "ChangeCardType_No": 0,
-              "ChangeCardType_Shun": 1,
-              "ChangeCardType_Ni": 2,
-              "ChangeCardType_Dui": 3
-            }
-          },
-          "HuType": {
-            "values": {
-              "HuType_None": 0,
-              "HuType_Mo": 1,
-              "HuType_Rong": 2,
-              "HuType_QiangGang": 3
-            }
-          },
-          "PoChanStatus": {
-            "values": {
-              "PoChanStatus_No": 0,
-              "PoChanStatus_DaiBuDou": 1,
-              "PoChanStatus_RenShu": 2,
-              "PoChanStatus_BuDouZhong": 3
-            }
-          },
-          "InternalStateType": {
-            "values": {
-              "InternalStateType_None": 0,
-              "InternalStateType_Que": 1,
-              "InternalStateType_Gang": 2,
-              "InternalStateType_Hu": 3
-            }
-          }
-        }
-      }
-    }
-  };
-
-  // mockjs/majiang_pb.mjs
-  var root2 = import_light2.default.Root.fromJSON(MAJIANG_DESCRIPTOR).resolveAll();
-  var namespace = root2.lookup("majiang");
-  var types = new Map(Object.entries(namespace.nested).filter(([, value]) => value instanceof import_light2.default.Type));
-  var MaJiangMsg = Object.freeze({ ...root2.lookupEnum("majiang.MaJiangMsg").values });
-  var MaJiangAction = Object.freeze({ ...root2.lookupEnum("majiang.PlayAction").values });
-  var MaJiangResult = Object.freeze({ ...root2.lookupEnum("majiang.Result").values });
-  var messageNames = new Map(Object.entries(MaJiangMsg).filter(([name, id]) => id > 0 && id < 5e4 && /^E(?:Req|Rsp|Ntf)/.test(name)).map(([name, id]) => [id, name.slice(1)]));
-  var envelope = new import_light2.default.Type("GameServerLogicData").add(new import_light2.default.Field("cmd", 1, "int32")).add(new import_light2.default.Field("extraLogicData", 2, "bytes", "repeated")).add(new import_light2.default.Field("gameNumber", 3, "int64")).add(new import_light2.default.Field("serialized", 100, "bytes"));
-  new import_light2.default.Root().add(envelope).resolveAll();
-  function typeOf(name) {
-    if (!types.has(name)) throw new Error(`\u672A\u77E5\u5730\u65B9\u9EBB\u5C06\u6D88\u606F\uFF1A${name}`);
-    return types.get(name);
-  }
-  function verifyValues(type, value) {
-    for (const key of Object.keys(value)) {
-      if (!Object.hasOwn(type.fields, key)) throw new TypeError(`protobuf ${type.name}: \u672A\u77E5\u5B57\u6BB5 ${key}`);
-      const field = type.fields[key];
-      const values = field.repeated ? value[key] : field.map ? Object.values(value[key] || {}) : [value[key]];
-      for (const item of values) {
-        if (item == null) continue;
-        if (field.resolvedType instanceof import_light2.default.Type) {
-          verifyValues(field.resolvedType, item);
-        } else if (typeof item === "number" && /^(?:u?int|sint|s?fixed)(?:32|64)$/.test(field.type)) {
-          const signed = !/^(?:uint|fixed)/.test(field.type);
-          const valid = Number.isSafeInteger(item) && (field.type.endsWith("64") ? signed || item >= 0 : item >= (signed ? -2147483648 : 0) && item <= (signed ? 2147483647 : 4294967295));
-          if (!valid) throw new RangeError(`protobuf ${type.name}.${key}: \u6574\u6570\u8D85\u51FA\u5B89\u5168\u8303\u56F4`);
-        }
-      }
-    }
-  }
-  function encode(type, value) {
-    const error = type.verify(value);
-    if (error) throw new TypeError(`protobuf ${type.name}: ${error}`);
-    verifyValues(type, value);
-    return type.encode(type.fromObject(value)).finish();
-  }
-  function decode(type, bytes) {
-    if (!(bytes instanceof Uint8Array)) throw new TypeError("protobuf\u8F93\u5165\u5FC5\u987B\u662F\u5B57\u8282\u6570\u7EC4");
-    return type.toObject(type.decode(bytes), { defaults: true, arrays: true, objects: true, enums: Number, longs: String });
-  }
-  function encodeMaJiang(name, value) {
-    return encode(typeOf(name), value);
-  }
-  function decodeMaJiang(name, bytes) {
-    return decode(typeOf(name), bytes);
-  }
-  function majiangMessageName(cmd) {
-    if (!Number.isInteger(cmd) || !messageNames.has(cmd)) throw new RangeError(`\u672A\u652F\u6301\u7684\u5730\u65B9\u9EBB\u5C06\u4E8B\u4EF6\uFF1A${cmd}`);
-    return messageNames.get(cmd);
-  }
-  function encodeMaJiangEnvelope(cmd, payload, { gameNumber = 0 } = {}) {
-    const name = majiangMessageName(cmd);
-    return encode(envelope, { cmd, gameNumber, serialized: encodeMaJiang(name, payload) });
-  }
-  function decodeMaJiangEnvelope(bytes) {
-    const { cmd, gameNumber, serialized, extraLogicData } = decode(envelope, bytes);
-    const name = majiangMessageName(cmd);
-    return { cmd, name, gameNumber, payload: decodeMaJiang(name, serialized), extraLogicData };
-  }
-
-  // mockjs/sichuan_opening_notifications.mjs
-  var seats = [0, 1, 2, 3];
-  var seconds = (milliseconds) => Math.ceil(milliseconds / 1e3);
-  var playActions = {
-    discard: MaJiangAction.Normal,
-    redKong: MaJiangAction.Normal,
-    ankan: MaJiangAction.AnGang,
-    kakan: MaJiangAction.PengGang,
-    hu: MaJiangAction.Hu
-  };
-  var exchangeTypes = { 1: 2, 2: 3, 3: 1 };
-  function frame(name, payload) {
-    const cmd = MaJiangMsg[`E${name}`];
-    return { name, cmd, payload, bytes: encodeMaJiangEnvelope(cmd, payload) };
-  }
-  var _session, _context, _status2, _exchanges, _missing, _complete, _SichuanOpeningNotifications_instances, start_fn;
-  var SichuanOpeningNotifications = class {
-    constructor(session, { gameID, userIds, initialScores, scoreType } = {}) {
-      __privateAdd(this, _SichuanOpeningNotifications_instances);
-      __privateAdd(this, _session);
-      __privateAdd(this, _context);
-      __privateAdd(this, _status2, "idle");
-      __privateAdd(this, _exchanges, [null, null, null, null]);
-      __privateAdd(this, _missing, [null, null, null, null]);
-      __privateAdd(this, _complete, false);
-      if (!(session instanceof SichuanSession) || session.status !== "idle") throw new TypeError("\u5F00\u5C40\u6295\u5F71\u5FC5\u987B\u5728\u4F1A\u8BDD\u542F\u52A8\u524D\u521B\u5EFA");
-      if (typeof gameID !== "string" || !gameID.trim() || gameID.length > 128 || !Array.isArray(userIds) || userIds.length !== 4 || new Set(userIds).size !== 4 || userIds.some((id) => !Number.isSafeInteger(id) || id <= 0) || !Array.isArray(initialScores) || initialScores.length !== 4 || initialScores.some((score2) => !Number.isSafeInteger(score2) || score2 < 0) || !Number.isInteger(scoreType) || scoreType < 0 || scoreType > 2147483647) {
-        throw new RangeError("\u65E0\u6548\u7684\u5F00\u5C40\u684C\u9762\u8D44\u6599");
-      }
-      __privateSet(this, _session, session);
-      __privateSet(this, _context, structuredClone({ gameID, userIds, initialScores, scoreType }));
-    }
-    get complete() {
-      return __privateGet(this, _complete);
-    }
-    read() {
-      const view = __privateGet(this, _session).view();
-      if (__privateGet(this, _complete) || ["idle", "stopped", "failed", "ended"].includes(view.status)) return [];
-      if (view.status === "preparing") {
-        if (__privateGet(this, _status2) === "preparing") return [];
-        const result = frame("NtfToPrepare", { userInfos: seats.map((seat) => ({ seat, userID: __privateGet(this, _context).userIds[seat] })) });
-        __privateSet(this, _status2, "preparing");
-        return [result];
-      }
-      if (__privateGet(this, _status2) === "idle") throw new Error("\u5F00\u5C40\u6295\u5F71\u9057\u6F0F\u51C6\u5907\u901A\u77E5");
-      const state = __privateGet(this, _session).snapshot();
-      const changedExchanges = seats.filter((seat) => __privateGet(this, _exchanges)[seat] === null && state.exchanges[seat] !== null);
-      const changedMissing = seats.filter((seat) => __privateGet(this, _missing)[seat] === null && state.players[seat].missingSuit !== null);
-      const starting = __privateGet(this, _status2) === "preparing";
-      if (starting && (changedExchanges.length || changedMissing.length) || changedExchanges.length + changedMissing.length > 1 || !["exchange", "missing", "turn"].includes(state.phase) || state.players.some((player) => player.discardCount || player.drawCount || player.melds.length)) {
-        throw new Error("\u5F00\u5C40\u6295\u5F71\u9057\u6F0F\u72B6\u6001\u66F4\u65B0\uFF0C\u7981\u6B62\u7528\u5F53\u524D\u624B\u724C\u8865\u9020\u5386\u53F2\u901A\u77E5");
-      }
-      const frames = [];
-      if (starting) {
-        for (const seat of seats) frames.push(frame("NtfPrepare", { seat, userInfos: seats.map((entry) => ({ seat: entry })) }));
-        frames.push(__privateMethod(this, _SichuanOpeningNotifications_instances, start_fn).call(this, state, view));
-      }
-      for (const seat of changedExchanges) {
-        frames.push(frame("NtfChangeCard", {
-          seat,
-          cardNum: 3,
-          userInfos: seats.map((entry) => ({ seat: entry, cards: entry === seat && entry === view.seat ? state.exchanges[entry] : [] }))
-        }));
-        if (state.exchanges.every((cards) => cards !== null)) {
-          frames.push(frame("NtfChangeCardEnd", { userInfos: seats.map((entry) => ({
-            seat: entry,
-            // 原34283按数组下标取玩家，再逐张移出/加入手牌；他家用等量背牌维持手牌数。
-            cards: entry === view.seat ? state.exchanges[entry] : [0, 0, 0],
-            getCards: entry === view.seat ? state.exchanges[(entry - state.exchangeOffset + 4) % 4] : [0, 0, 0],
-            dingQueSuggest: entry === view.seat ? chooseSichuanMissingSuit(view.hand, view.wild) : 0,
-            canPlayActions: [],
-            chuPai2Timeout: 0
-          })) }));
-        }
-      }
-      for (const seat of changedMissing) {
-        frames.push(frame("NtfDingQue", {
-          seat,
-          userInfos: seats.map((entry) => ({
-            seat: entry,
-            dingQue: entry === seat && entry === view.seat ? state.players[entry].missingSuit : 0
-          }))
-        }));
-        if (state.players.every((player) => player.missingSuit !== null)) {
-          frames.push(frame("NtfDingQueEnd", { userInfos: seats.map((entry) => ({
-            seat: entry,
-            dingQue: state.players[entry].missingSuit,
-            canPlayActions: entry === view.seat && state.turn === entry ? [...new Set(view.options.map((option) => playActions[option.type]))] : [],
-            chuPai2Timeout: 0
-            // 庄家第14张已在开局手牌中；此时不是再次摸牌，不发NtfSendCard。
-          })) }));
-        }
-      }
-      __privateSet(this, _status2, view.status);
-      __privateSet(this, _exchanges, structuredClone(state.exchanges));
-      __privateSet(this, _missing, state.players.map((player) => player.missingSuit));
-      __privateSet(this, _complete, state.phase === "turn");
-      return frames;
-    }
-  };
-  _session = new WeakMap();
-  _context = new WeakMap();
-  _status2 = new WeakMap();
-  _exchanges = new WeakMap();
-  _missing = new WeakMap();
-  _complete = new WeakMap();
-  _SichuanOpeningNotifications_instances = new WeakSet();
-  start_fn = function(state, view) {
-    const { gameID, initialScores, scoreType } = __privateGet(this, _context);
-    const timeouts = __privateGet(this, _session).timeoutsMs;
-    return frame("NtfGameStart", {
-      changWind: 0,
-      juNum: 0,
-      zhuangSeat: state.dealer,
-      totalJuNum: 1,
-      remainDuiCardNum: view.remaining,
-      gameID,
-      baseScore: state.rules.baseScore,
-      topBei: state.rules.topBei,
-      scoreType,
-      hasDingQue: true,
-      isMingPai: false,
-      // 红中血流：原客户端按 gameType=5023 放开任意三张；规则字段用 RenYiHuan=2，赖子为 guiCards=[450]。
-      changeCardRule: state.rules.exchange ? state.rules.wild ? 2 : 1 : 0,
-      guiCards: state.rules.wild ? [RED_ZHONG_DISPLAY] : [],
-      changeCardType: state.rules.exchange ? exchangeTypes[state.exchangeOffset] : 0,
-      huanZhangTimeout: seconds(timeouts.exchange),
-      dingQueTimeout: seconds(timeouts.missing),
-      chuPai1Timeout: seconds(timeouts.turn),
-      qiangPaiTimeout: seconds(timeouts.claim),
-      // 仅用于发牌演出；不额外消耗引擎随机数或影响牌山。
-      touzi1: (state.seed >>> 0) % 6 + 1,
-      touzi2: (state.seed >>> 3) % 6 + 1,
-      userInfos: seats.map((seat) => ({
-        seat,
-        score: initialScores[seat],
-        handCards: seat === view.seat ? view.hand : Array(view.handCounts[seat]).fill(0),
-        changeCardSuggest: seat === view.seat && state.rules.exchange ? chooseSichuanExchange(view.hand, view.wild) : [],
-        dingQueSuggest: seat === view.seat && !state.rules.exchange ? chooseSichuanMissingSuit(view.hand, view.wild) : 0,
-        canPlayActions: [],
-        chuPai2Timeout: 0
-      }))
-    });
-  };
-
-  // mockjs/sichuan_turn_notifications.mjs
-  var seats2 = [0, 1, 2, 3];
-  var turnActions = {
-    discard: MaJiangAction.Normal,
-    redKong: MaJiangAction.Normal,
-    ankan: MaJiangAction.AnGang,
-    kakan: MaJiangAction.PengGang,
-    hu: MaJiangAction.Hu
-  };
-  var claimActions = { pass: MaJiangAction.Guo, pon: MaJiangAction.Peng, kan: MaJiangAction.MingGang, hu: MaJiangAction.Hu };
-  function checkSeat(seat) {
-    if (!Number.isInteger(seat) || !seats2.includes(seat)) throw new RangeError("\u65E0\u6548\u7684\u901A\u77E5\u5EA7\u4F4D");
-  }
-  function checkEvent(event, type, wild = false) {
-    if (!event || event.type !== type || !Number.isSafeInteger(event.index) || event.index < 0) {
-      throw new TypeError(`\u9700\u8981\u6709\u6548\u7684\u56DB\u5DDD${type}\u4E8B\u4EF6`);
-    }
-    sichuanKind(event.tile, wild);
-  }
-  function actions(types2, mapping) {
-    if (!Array.isArray(types2) || new Set(types2).size !== types2.length || types2.some((type) => typeof type !== "string" || !Object.hasOwn(mapping, type))) {
-      throw new TypeError("\u65E0\u6548\u7684\u56DB\u5DDD\u4E8B\u4EF6\u52A8\u4F5C\u5019\u9009");
-    }
-    return [...new Set(types2.map((type) => mapping[type]))];
-  }
-  function frame2(eventIndex, name, payload) {
-    const cmd = MaJiangMsg[`E${name}`];
-    return { eventIndex, name, cmd, payload, bytes: encodeMaJiangEnvelope(cmd, payload) };
-  }
-  function buildSichuanDrawNotification(event, humanSeat, { wild = false } = {}) {
-    checkEvent(event, "draw", wild);
-    checkSeat(event.seat);
-    checkSeat(humanSeat);
-    if (!["draw", "kong"].includes(event.source) || !Number.isInteger(event.remaining) || event.remaining < 0 || event.remaining > (wild ? 60 : 54)) throw new RangeError("\u65E0\u6548\u7684\u56DB\u5DDD\u6478\u724C\u4E8B\u4EF6");
-    const canPlayActions = actions(event.actionTypes, turnActions);
-    if (!event.actionTypes.some((type) => ["discard", "redKong"].includes(type))) throw new TypeError("\u6478\u724C\u4E8B\u4EF6\u7F3A\u5C11\u51FA\u724C\u5019\u9009");
-    return frame2(event.index, "NtfSendCard", {
-      seat: event.seat,
-      remainDuiCardNum: event.remaining,
-      // 原34255按数组下标处理四座位，仅为NtfSendCard.seat增加一张牌。
-      userInfos: seats2.map((seat) => ({
-        seat,
-        card: seat === event.seat && seat === humanSeat ? event.tile : 0,
-        canPlayActions: seat === event.seat && seat === humanSeat ? [...canPlayActions] : [],
-        tingInfos: [],
-        chuPai2Timeout: 0,
-        isDianGangHuaDianPao: false
-      }))
-      // chuPai1Timeout已由开局通知给出；chuPai2Timeout为附加时间，不能再填一次基础时间。
-    });
-  }
-  function buildSichuanDiscardNotification(event, claimWindow, humanSeat, { wild = false } = {}) {
-    checkEvent(event, "discard", wild);
-    checkEvent(claimWindow, "claimWindow", wild);
-    checkSeat(event.seat);
-    checkSeat(humanSeat);
-    if (typeof event.isMoQie !== "boolean" || claimWindow.kind !== "discard" || claimWindow.index !== event.index + 1 || claimWindow.from !== event.seat || claimWindow.tile !== event.tile || !Array.isArray(claimWindow.actionTypes) || claimWindow.actionTypes.length !== 4) throw new TypeError("\u51FA\u724C\u4E8B\u4EF6\u4E0E\u62A2\u724C\u7A97\u53E3\u4E0D\u5339\u914D");
-    const candidates = claimWindow.actionTypes.map((types2) => {
-      const result = actions(types2, claimActions);
-      if (types2.length && (!types2.includes("pass") || types2.length < 2)) throw new TypeError("\u65E0\u6548\u7684\u62A2\u724C\u7A97\u53E3\u5019\u9009");
-      return result;
-    });
-    if (candidates[event.seat].length) throw new TypeError("\u51FA\u724C\u8005\u4E0D\u80FD\u62A2\u81EA\u5DF1\u7684\u724C");
-    return frame2(event.index, "NtfPlayCard", {
-      seat: event.seat,
-      card: event.tile,
-      action: MaJiangAction.Normal,
-      isMoQie: event.isMoQie,
-      // 原34272同样按数组下标更新动作，并从开局qiangPaiTimeout建立基础截止时间。
-      userInfos: seats2.map((seat) => ({
-        seat,
-        canQiangActions: seat === humanSeat ? [...candidates[seat]] : [],
-        canGangNoNumCardsAfterRiichiHu: []
-      })),
-      moneyLogs: [],
-      isFinish: false
-      // 可胡只是候选，不是已胡；不得在有人响应前标记完成或预扣分数。
-    });
-  }
-
-  // mockjs/sichuan_notifications.mjs
-  var seats3 = [0, 1, 2, 3];
-  var turnActions2 = {
-    discard: MaJiangAction.Normal,
-    redKong: MaJiangAction.Normal,
-    hu: MaJiangAction.Hu,
-    ankan: MaJiangAction.AnGang,
-    kakan: MaJiangAction.PengGang
-  };
-  var claimActions2 = { pass: MaJiangAction.Guo, hu: MaJiangAction.Hu, pon: MaJiangAction.Peng, kan: MaJiangAction.MingGang };
-  var kongTypes = { exposed: 1, added: 2, concealed: 3 };
-  var settlementTypes = { flower: 8, ready: 9, refund: 10, callTransfer: 11 };
-  var clone2 = (value) => structuredClone(value);
-  function frame3(event, name, payload) {
-    const cmd = MaJiangMsg[`E${name}`];
-    return { eventIndex: event.index, name, cmd, payload, bytes: encodeMaJiangEnvelope(cmd, payload) };
-  }
-  function add(a, b) {
-    const result = a + b;
-    if (!Number.isSafeInteger(result)) throw new RangeError("\u56DB\u5DDD\u663E\u793A\u79EF\u5206\u8D85\u51FA\u5B89\u5168\u8303\u56F4");
-    return result;
-  }
-  function moneyLog(type, delta, scores, initialScores, baseScore, score2 = null) {
-    if (delta.length !== 4 || scores.length !== 4 || delta.reduce((sum, value) => sum + value, 0) !== 0) {
-      throw new Error("\u56DB\u5DDD\u79EF\u5206\u65E5\u5FD7\u4E0D\u5B88\u6052");
-    }
-    return { type, userInfos: seats3.map((seat) => ({
-      seat,
-      money: delta[seat],
-      finalMoney: add(initialScores[seat], scores[seat]),
-      bei: delta[seat] / baseScore,
-      fengDing: delta[seat] !== 0 && Boolean(score2?.capped),
-      yiTypes: delta[seat] !== 0 && score2 ? score2.yaku.map((item) => item.yiType) : [],
-      noMoney: false,
-      sysMoney: 0
-    })) };
-  }
-  function transferDelta(transfer) {
-    const delta = [0, 0, 0, 0];
-    delta[transfer.from] = -transfer.amount;
-    delta[transfer.to] = transfer.amount;
-    return delta;
-  }
-  function endUsers(humanSeat, caller = null, event = null) {
-    return seats3.map((seat) => ({
-      seat,
-      tingInfos: [],
-      canPlayActions: seat === humanSeat && seat === caller ? [...new Set(event.actionTypes.map((type) => turnActions2[type]))] : [],
-      cantPlays: seat === humanSeat && seat === caller ? [...event.cantPlays] : [],
-      chuPai2Timeout: 0,
-      canGangNoNumCardsAfterRiichiHu: []
-    }));
-  }
-  function claimEnd(event, humanSeat, {
-    winners = [],
-    action: action2 = MaJiangAction.Guo,
-    otherCards = [],
-    moneyLogs = [],
-    caller = null,
-    isFinish = action2 === MaJiangAction.Hu
-  } = {}) {
-    return frame3(event, "NtfQiangCardEnd", {
-      seats: winners,
-      action: action2,
-      otherCards,
-      userInfos: endUsers(humanSeat, caller, event),
-      moneyLogs,
-      isFinish
-    });
-  }
-  function play(event, humanSeat, { seat, card, action: action2, moneyLogs = [], isFinish = false, canQiang = [] }) {
-    return frame3(event, "NtfPlayCard", {
-      seat,
-      card,
-      action: action2,
-      isMoQie: false,
-      moneyLogs,
-      isFinish,
-      userInfos: seats3.map((entry) => ({
-        seat: entry,
-        canQiangActions: entry === humanSeat ? [...canQiang] : [],
-        canGangNoNumCardsAfterRiichiHu: []
-      }))
-    });
-  }
-  var _session2, _opening, _initialScores, _humanSeat2, _selfLoveLevel, _cursor, _pending, _scores, _ended;
-  var SichuanNotifications = class {
-    constructor(session, context) {
-      __privateAdd(this, _session2);
-      __privateAdd(this, _opening);
-      __privateAdd(this, _initialScores);
-      __privateAdd(this, _humanSeat2);
-      __privateAdd(this, _selfLoveLevel, 0);
-      __privateAdd(this, _cursor, null);
-      __privateAdd(this, _pending, null);
-      __privateAdd(this, _scores, [0, 0, 0, 0]);
-      __privateAdd(this, _ended, false);
-      __privateSet(this, _opening, new SichuanOpeningNotifications(session, context));
-      __privateSet(this, _session2, session);
-      __privateSet(this, _initialScores, [...context.initialScores]);
-      __privateSet(this, _humanSeat2, session.view().seat);
-      __privateSet(this, _selfLoveLevel, Number(context.selfLoveLevel) || 0);
-    }
-    get complete() {
-      return __privateGet(this, _ended);
-    }
-    read() {
-      const status = __privateGet(this, _session2).status;
-      if (__privateGet(this, _ended) || ["idle", "stopped", "failed"].includes(status)) return [];
-      if (!__privateGet(this, _opening).complete) {
-        const frames2 = __privateGet(this, _opening).read();
-        if (__privateGet(this, _opening).complete) __privateSet(this, _cursor, __privateGet(this, _session2).snapshot().events.length);
-        return frames2;
-      }
-      const state = __privateGet(this, _session2).snapshot();
-      const frames = [];
-      let pending = clone2(__privateGet(this, _pending));
-      let scores = [...__privateGet(this, _scores)];
-      let ended = false;
-      const humanSeat = __privateGet(this, _humanSeat2);
-      const wild = { wild: state.rules.wild };
-      for (let index = __privateGet(this, _cursor); index < state.events.length; index += 1) {
-        const event = state.events[index];
-        if (event.index !== index || ended) throw new Error("\u56DB\u5DDD\u4E8B\u4EF6\u7D22\u5F15\u6216\u7EC8\u5C40\u987A\u5E8F\u9519\u8BEF");
-        switch (event.type) {
-          case "discard": {
-            if (pending) throw new Error("\u62A2\u724C\u88C1\u51B3\u5C1A\u672A\u5B8C\u6210\uFF0C\u4E0D\u80FD\u7EE7\u7EED\u51FA\u724C");
-            pending = state.events[++index];
-            frames.push(buildSichuanDiscardNotification(event, pending, humanSeat, wild));
-            break;
-          }
-          case "claimWindow": {
-            if (pending || event.kind !== "added") throw new Error("\u7F3A\u5C11\u56DB\u5DDD\u51FA\u724C\u4E8B\u4EF6");
-            if (event.actionTypes.some((types2) => types2.length)) {
-              const own = event.actionTypes[humanSeat];
-              if (own.length && (!own.includes("pass") || own.some((type) => !["pass", "hu"].includes(type)))) {
-                throw new Error("\u62A2\u8865\u6760\u53EA\u80FD\u9009\u62E9\u80E1\u6216\u8FC7");
-              }
-              frames.push(play(event, humanSeat, {
-                seat: event.from,
-                card: event.tile,
-                action: MaJiangAction.PengGang,
-                canQiang: own.map((type) => claimActions2[type])
-              }));
-              pending = { ...event, announced: true };
-            } else pending = event;
-            break;
-          }
-          case "claimResponse": {
-            if (!pending || !pending.actionTypes[event.seat]?.includes(event.action)) throw new Error("\u7F3A\u5C11\u6709\u6548\u7684\u62A2\u724C\u7A97\u53E3");
-            frames.push(frame3(event, "NtfQiangCard", {
-              seat: event.seat,
-              action: claimActions2[event.action],
-              otherCards: event.seat === humanSeat ? [...event.tiles] : [],
-              userInfos: seats3.map((seat) => ({ seat }))
-            }));
-            break;
-          }
-          case "claimPassed": {
-            if (!pending || pending.kind !== "discard" || pending.from !== event.from || pending.tile !== event.tile) {
-              throw new Error("\u8FC7\u724C\u88C1\u51B3\u4E0E\u62A2\u724C\u7A97\u53E3\u4E0D\u5339\u914D");
-            }
-            frames.push(claimEnd(event, humanSeat));
-            pending = null;
-            break;
-          }
-          case "pon": {
-            if (!pending || pending.kind !== "discard" || pending.from !== event.from || pending.tile !== event.tile) {
-              throw new Error("\u78B0\u724C\u88C1\u51B3\u4E0E\u62A2\u724C\u7A97\u53E3\u4E0D\u5339\u914D");
-            }
-            frames.push(claimEnd(event, humanSeat, {
-              winners: [event.seat],
-              action: MaJiangAction.Peng,
-              otherCards: event.tiles.filter((tile) => tile !== event.tile),
-              caller: event.seat
-            }));
-            pending = null;
-            break;
-          }
-          case "kong": {
-            const logs = event.delta.some(Boolean) ? [moneyLog(kongTypes[event.kind], event.delta, event.scores, __privateGet(this, _initialScores), event.baseScore)] : [];
-            if (event.kind === "exposed") {
-              if (!pending || pending.kind !== "discard" || event.from !== pending.from || !event.tiles.includes(pending.tile)) {
-                throw new Error("\u660E\u6760\u88C1\u51B3\u4E0E\u62A2\u724C\u7A97\u53E3\u4E0D\u5339\u914D");
-              }
-              frames.push(claimEnd(event, humanSeat, {
-                winners: [event.seat],
-                action: MaJiangAction.MingGang,
-                otherCards: event.tiles.filter((tile) => tile !== pending.tile),
-                moneyLogs: logs
-              }));
-            } else if (event.kind === "added" && pending?.announced) {
-              if (pending.from !== event.seat || event.tiles[0] !== pending.tile) throw new Error("\u8865\u6760\u88C1\u51B3\u4E0E\u62A2\u6760\u7A97\u53E3\u4E0D\u5339\u914D");
-              frames.push(claimEnd(event, humanSeat, { moneyLogs: logs }));
-            } else if (event.kind === "concealed" && pending === null || event.kind === "added" && pending?.kind === "added") {
-              frames.push(play(event, humanSeat, {
-                seat: event.seat,
-                card: event.kind === "concealed" && event.seat !== humanSeat ? 0 : event.tiles[0],
-                action: event.kind === "concealed" ? MaJiangAction.AnGang : MaJiangAction.PengGang,
-                moneyLogs: logs
-              }));
-              frames.push(claimEnd(event, humanSeat));
-            } else throw new Error("\u65E0\u6548\u7684\u56DB\u5DDD\u6760\u724C\u4E8B\u4EF6");
-            scores = [...event.scores];
-            pending = null;
-            break;
-          }
-          case "redKong": {
-            if (pending) throw new Error("\u62A2\u724C\u88C1\u51B3\u5C1A\u672A\u5B8C\u6210\uFF0C\u4E0D\u80FD\u7EA2\u4E2D\u6760");
-            frames.push(play(event, humanSeat, { seat: event.seat, card: event.tile, action: MaJiangAction.Normal }));
-            frames.push(claimEnd(event, humanSeat));
-            break;
-          }
-          case "win": {
-            const tsumo = event.winType === "tsumo";
-            const isFinish = state.rules.gameType === 5022;
-            if (tsumo ? pending !== null : pending === null) throw new Error("\u80E1\u724C\u88C1\u51B3\u4E0E\u62A2\u724C\u7A97\u53E3\u4E0D\u5339\u914D");
-            const logs = event.results.map((result) => moneyLog(
-              tsumo ? 4 : 5,
-              result.delta,
-              result.scores,
-              __privateGet(this, _initialScores),
-              event.baseScore,
-              result.score
-            ));
-            scores = [...event.results.at(-1).scores];
-            if (event.callTransfer) {
-              logs.push(moneyLog(
-                11,
-                transferDelta(event.callTransfer),
-                event.callTransfer.scores,
-                __privateGet(this, _initialScores),
-                event.baseScore
-              ));
-              scores = [...event.callTransfer.scores];
-            }
-            if (tsumo) {
-              const result = event.results[0];
-              frames.push(play(event, humanSeat, {
-                seat: result.seat,
-                card: result.tile,
-                action: MaJiangAction.Hu,
-                moneyLogs: logs,
-                isFinish
-              }));
-            } else frames.push(claimEnd(event, humanSeat, {
-              winners: event.results.map((result) => result.seat),
-              action: MaJiangAction.Hu,
-              moneyLogs: logs,
-              isFinish
-            }));
-            pending = null;
-            break;
-          }
-          case "draw": {
-            if (pending) throw new Error("\u62A2\u724C\u88C1\u51B3\u5C1A\u672A\u5B8C\u6210\uFF0C\u4E0D\u80FD\u7EE7\u7EED\u6478\u724C");
-            frames.push(buildSichuanDrawNotification(event, humanSeat, wild));
-            break;
-          }
-          case "end": {
-            if (pending || state.phase !== "ended" || index !== state.events.length - 1) throw new Error("\u7F3A\u5C11\u5B8C\u6574\u7684\u56DB\u5DDD\u7EC8\u5C40\u72B6\u6001");
-            const logs = [];
-            for (const transfer of event.settlement?.transfers ?? []) {
-              const delta = transferDelta(transfer);
-              scores = scores.map((score2, seat) => add(score2, delta[seat]));
-              logs.push(moneyLog(settlementTypes[transfer.reason], delta, scores, __privateGet(this, _initialScores), state.rules.baseScore));
-            }
-            if (scores.some((value, seat) => value !== event.scores[seat])) throw new Error("\u56DB\u5DDD\u4E0B\u884C\u7ED3\u7B97\u4E0E\u6743\u5A01\u5206\u6570\u4E0D\u7B26");
-            const lastWin = event.reason === "threeWinners" ? state.events[index - 1] : null;
-            if (lastWin && lastWin.type !== "win") throw new Error("\u4E09\u5BB6\u80E1\u724C\u7EC8\u5C40\u7F3A\u5C11\u6700\u540E\u88C1\u51B3");
-            const latest = lastWin?.results[0];
-            frames.push(frame3(event, "NtfGameStop", {
-              huSeats: lastWin?.results.map((result) => result.seat) ?? [],
-              huCardSeat: latest ? latest.from ?? latest.seat : 0,
-              huCard: latest?.tile ?? 0,
-              isFinal: true,
-              stopType: 0,
-              moneyLogs: logs,
-              userInfos: state.players.map((player, seat) => ({
-                seat,
-                score: add(__privateGet(this, _initialScores)[seat], scores[seat]),
-                changeScore: scores[seat],
-                totalBei: scores[seat] / state.rules.baseScore,
-                // 原34272已将自摸张移出暗手并单独展示；终局不能再次放回手牌区。
-                handCards: player.hand.filter((tile) => !(player.win?.from === null && tile === player.win.tile)),
-                isFinish: player.won && state.rules.gameType === 5022,
-                doorCardsInfos: player.melds.map((meld) => ({
-                  cards: [...meld.tiles],
-                  action: meld.type === "pon" ? MaJiangAction.Peng : meld.type === "ankan" ? MaJiangAction.AnGang : meld.kongKind === "added" ? MaJiangAction.PengGang : MaJiangAction.MingGang,
-                  qiangSeat: meld.from ?? seat
-                })),
-                huInfos: player.wins.map((record) => ({
-                  huCard: record.tile,
-                  huType: record.from === null ? 1 : record.score.winType === "robKong" ? 3 : 2
-                })),
-                // 好感度不随对局变化，本人席位回显当前等级，避免结算面板显示 Lv.0。
-                ...seat === __privateGet(this, _humanSeat2) ? { oldLoveLevel: __privateGet(this, _selfLoveLevel), newLoveLevel: __privateGet(this, _selfLoveLevel) } : {}
-              }))
-            }));
-            ended = true;
-            break;
-          }
-          default:
-            throw new Error(`\u672A\u9002\u914D\u7684\u56DB\u5DDD\u4E8B\u4EF6\uFF1A${event.type}`);
-        }
-      }
-      __privateSet(this, _cursor, state.events.length);
-      __privateSet(this, _pending, pending);
-      __privateSet(this, _scores, scores);
-      __privateSet(this, _ended, ended);
-      return frames;
-    }
-  };
-  _session2 = new WeakMap();
-  _opening = new WeakMap();
-  _initialScores = new WeakMap();
-  _humanSeat2 = new WeakMap();
-  _selfLoveLevel = new WeakMap();
-  _cursor = new WeakMap();
-  _pending = new WeakMap();
-  _scores = new WeakMap();
-  _ended = new WeakMap();
-
-  // mockjs/sichuan_requests.mjs
-  var requests = /* @__PURE__ */ new Map([
-    ["ReqPrepare", MaJiangMsg.ERspPrepare],
-    ["ReqPlayCard", MaJiangMsg.ERspPlayCard],
-    ["ReqQiangCard", MaJiangMsg.ERspQiangCard],
-    ["ReqChangeCard", MaJiangMsg.ERspChangeCard],
-    ["ReqDingQue", MaJiangMsg.ERspDingQue],
-    ["ReqPoChanChange", MaJiangMsg.ERspPoChanChange],
-    ["ReqExit", MaJiangMsg.ERspExit],
-    ["ReqTuoGuanChange", MaJiangMsg.ERspTuoGuanChange],
-    ["ReqSetInternalState", MaJiangMsg.ERspSetInternalState]
-  ]);
-  var sameTiles = (a, b) => a.length === b.length && new Set(a).size === a.length && a.every((tile) => b.includes(tile));
-  function selectAction(view, name, payload) {
-    const options = view.options;
-    const find = (type, tiles) => options.find((option) => option.type === type && sameTiles(tiles, option.tiles));
-    if (name === "ReqChangeCard") {
-      return {
-        chosen: view.phase === "exchange" && find("exchange", payload.cards),
-        result: MaJiangResult.Fail_InvalidChangeCards
-      };
-    }
-    if (name === "ReqDingQue") {
-      return {
-        chosen: view.phase === "missing" && find("missing", [payload.dingQue]),
-        result: MaJiangResult.Fail_InvalidDingQue
-      };
-    }
-    if (name === "ReqQiangCard") {
-      if (view.phase !== "claim") return { result: MaJiangResult.Fail_InvalidSequence };
-      const type = { [MaJiangAction.Guo]: "pass", [MaJiangAction.Peng]: "pon", [MaJiangAction.MingGang]: "kan", [MaJiangAction.Hu]: "hu" }[payload.action];
-      if (!type || !options.some((option) => option.type === type)) return { result: MaJiangResult.Fail_ActionNotInCanQiangActions };
-      return { chosen: find(type, payload.otherCards), result: MaJiangResult.Fail_InvalidOtherCards };
-    }
-    if (name === "ReqPlayCard") {
-      if (view.phase !== "turn") return { result: MaJiangResult.Fail_InvalidSequence };
-      const type = { [MaJiangAction.Normal]: "discard", [MaJiangAction.PengGang]: "kakan", [MaJiangAction.AnGang]: "ankan", [MaJiangAction.Hu]: "hu" }[payload.action];
-      const offered = (entry) => entry === type || type === "discard" && entry === "redKong";
-      if (!type || !options.some((option) => offered(option.type))) return { result: MaJiangResult.Fail_ActionNotInCanPlayActions };
-      if (type === "hu") {
-        return {
-          chosen: (payload.card === 0 || view.hand.includes(payload.card)) && find("hu", []),
-          result: MaJiangResult.Fail_CardNotInHand
-        };
-      }
-      if (!view.hand.includes(payload.card)) return { result: MaJiangResult.Fail_CardNotInHand };
-      const redKong = type === "discard" && options.find((option) => option.type === "redKong" && option.tiles[0] === payload.card);
-      if (redKong) return { chosen: redKong };
-      const chosen = options.find((option) => option.type === type && option.tiles.includes(payload.card));
-      return { chosen, result: type === "discard" ? MaJiangResult.Fail_CardInCantPlays : MaJiangResult.Fail_CardNotMatchAction };
-    }
-    return { result: MaJiangResult.Fail_InvalidParam };
-  }
-  function handleSichuanRequest(session, bytes, { connectionId, windowId } = {}) {
-    let request;
-    try {
-      request = decodeMaJiangEnvelope(bytes);
-    } catch {
-      return { ok: false, error: "malformedRequest", response: null };
-    }
-    const responseCmd = requests.get(request.name);
-    if (responseCmd === void 0) return { ok: false, error: "notARequest", response: null };
-    const reply = (result, error = null) => ({
-      ok: result === MaJiangResult.Succ,
-      error,
-      response: encodeMaJiangEnvelope(responseCmd, { result })
-    });
-    if (request.extraLogicData.length) return reply(MaJiangResult.Fail_InvalidParam, "unsupportedExtraLogic");
-    const view = session.view();
-    if (!view.connected || connectionId !== view.connectionId || !["preparing", "playing"].includes(view.status)) return reply(MaJiangResult.Fail_InvalidSequence, "inactiveConnection");
-    if (request.name === "ReqPrepare") {
-      const outcome2 = session.prepare(connectionId);
-      return reply(outcome2.ok ? MaJiangResult.Succ : MaJiangResult.Fail_InvalidSequence, outcome2.error);
-    }
-    if (!["ReqPlayCard", "ReqQiangCard", "ReqChangeCard", "ReqDingQue"].includes(request.name)) {
-      return reply(MaJiangResult.Fail_InvalidParam, "unsupportedRequest");
-    }
-    if (view.status !== "playing" || !Number.isSafeInteger(windowId) || windowId !== view.windowId) {
-      return reply(MaJiangResult.Fail_InvalidSequence, "staleWindow");
-    }
-    const selection = selectAction(view, request.name, request.payload);
-    if (!selection.chosen) return reply(selection.result, "illegalAction");
-    const outcome = session.submit(structuredClone(selection.chosen), { connectionId, windowId });
-    return reply(outcome.ok ? MaJiangResult.Succ : MaJiangResult.Fail_InvalidSequence, outcome.error);
-  }
-
-  // mockjs/sichuan_table.mjs
-  var SICHUAN_PLAYABLE_GAME_TYPES = Object.freeze([5021, 5022, 5023]);
-  var SCORE_TYPE_MONEY = 1;
-  var REPLY_CACHE = 64;
-  function sichuanRoom(gameType, roomId) {
-    const game = SICHUAN_CATALOG.games[String(gameType)];
-    if (!game) return null;
-    const room = game.rooms.find((item) => item.id === roomId);
-    return room ? structuredClone(room) : null;
-  }
-  function sichuanRoomRules(room) {
-    const exchange = !room.ruleTags.includes(1);
-    const topBei = room.topBei === 0 && room.gameType === 5023 ? 128 : room.topBei;
-    return { gameType: room.gameType, exchange, topBei: topBei === 128 && exchange ? 128 : 256, baseScore: room.moneyBase };
-  }
-  var _session3, _notifications, _onFrame, _onSettle, _log, _replies, _buffer, _settled, _failed, _exited, _SichuanTable_instances, flush_fn, fail_fn, settle_fn, dispatch_fn;
-  var SichuanTable = class {
-    constructor({
-      room,
-      seed,
-      userIds,
-      initialScores,
-      gameID,
-      selfLoveLevel = 0,
-      aiDelayMs = 350,
-      timeoutsMs = {},
-      clock,
-      onFrame,
-      onSettle = () => {
-      },
-      log = () => {
-      }
-    }) {
-      __privateAdd(this, _SichuanTable_instances);
-      __privateAdd(this, _session3);
-      __privateAdd(this, _notifications);
-      __privateAdd(this, _onFrame);
-      __privateAdd(this, _onSettle);
-      __privateAdd(this, _log);
-      __privateAdd(this, _replies, /* @__PURE__ */ new Map());
-      __privateAdd(this, _buffer, null);
-      __privateAdd(this, _settled, false);
-      __privateAdd(this, _failed, false);
-      __privateAdd(this, _exited, false);
-      if (!SICHUAN_PLAYABLE_GAME_TYPES.includes(room?.gameType)) throw new RangeError("\u5C1A\u672A\u5B9E\u73B0\u7684\u56DB\u5DDD\u73A9\u6CD5");
-      if (typeof onFrame !== "function" || typeof onSettle !== "function") throw new TypeError("\u65E0\u6548\u7684\u56DB\u5DDD\u724C\u684C\u56DE\u8C03");
-      __privateSet(this, _onFrame, onFrame);
-      __privateSet(this, _onSettle, onSettle);
-      __privateSet(this, _log, log);
-      this.room = structuredClone(room);
-      __privateSet(this, _session3, new SichuanSession({
-        seed: seed >>> 0,
-        ...sichuanRoomRules(room),
-        aiDelayMs,
-        timeoutsMs,
-        clock,
-        onUpdate: () => __privateMethod(this, _SichuanTable_instances, flush_fn).call(this),
-        onFinish: (result) => __privateMethod(this, _SichuanTable_instances, settle_fn).call(this, result.scores[0], "finish"),
-        onError: (error) => __privateMethod(this, _SichuanTable_instances, fail_fn).call(this, error)
-      }));
-      __privateSet(this, _notifications, new SichuanNotifications(
-        __privateGet(this, _session3),
-        { gameID, userIds, initialScores, selfLoveLevel, scoreType: SCORE_TYPE_MONEY }
-      ));
-    }
-    get matchOver() {
-      return __privateGet(this, _settled) || __privateGet(this, _failed) || __privateGet(this, _session3).matchOver || __privateGet(this, _session3).stopped;
-    }
-    get session() {
-      return __privateGet(this, _session3);
-    }
-    start() {
-      return __privateGet(this, _session3).start();
-    }
-    /** 上行入口。seq 来自外层可信请求序号；同号同包返回缓存，异包拒绝。 */
-    handleClient(bytes, seq = 0) {
-      const key = seq ? `${__privateGet(this, _session3).view().connectionId}:${seq}` : null;
-      const signature = Array.from(bytes).join(",");
-      if (key && __privateGet(this, _replies).has(key)) {
-        const cached = __privateGet(this, _replies).get(key);
-        return cached.signature === signature ? { response: cached.response, frames: [] } : { response: null, frames: [] };
-      }
-      __privateSet(this, _buffer, []);
-      let outcome;
-      try {
-        outcome = __privateMethod(this, _SichuanTable_instances, dispatch_fn).call(this, bytes);
-      } finally {
-        var frames = __privateGet(this, _buffer);
-        __privateSet(this, _buffer, null);
-      }
-      if (key && outcome.response) {
-        __privateGet(this, _replies).set(key, { signature, response: outcome.response });
-        if (__privateGet(this, _replies).size > REPLY_CACHE) __privateGet(this, _replies).delete(__privateGet(this, _replies).keys().next().value);
-      }
-      if (outcome.error) __privateGet(this, _log).call(this, `[sichuan] \u8BF7\u6C42\u88AB\u62D2\u7EDD\uFF1A${outcome.error}`);
-      return { response: outcome.response, frames: frames.map((frame4) => [frame4.cmd, frame4.bytes]) };
-    }
-    get exited() {
-      return __privateGet(this, _exited);
-    }
-    /** 断线：真人席交给AI；会话继续推进，事件仍由外层缓存。 */
-    detach() {
-      const view = __privateGet(this, _session3).view();
-      return __privateGet(this, _session3).detach(view.connectionId);
-    }
-    attach() {
-      __privateGet(this, _replies).clear();
-      return __privateGet(this, _session3).attach();
-    }
-    /**
-     * 离桌：胡牌后或终局结算本人冻结分数；未胡就离桌按当前已发生的即时收付结算，
-     * 不再继续承担后续支付（本地单机约定，避免未完成牌局吞掉已发生的输赢）。
-     */
-    leave() {
-      if (!__privateGet(this, _settled) && !__privateGet(this, _failed) && __privateGet(this, _session3).status !== "idle") {
-        const state = __privateGet(this, _session3).snapshot();
-        __privateMethod(this, _SichuanTable_instances, settle_fn).call(this, state.scores[__privateGet(this, _session3).view().seat], "leave");
-      }
-      __privateGet(this, _session3).stop();
-    }
-    stop() {
-      __privateGet(this, _session3).stop();
-    }
-  };
-  _session3 = new WeakMap();
-  _notifications = new WeakMap();
-  _onFrame = new WeakMap();
-  _onSettle = new WeakMap();
-  _log = new WeakMap();
-  _replies = new WeakMap();
-  _buffer = new WeakMap();
-  _settled = new WeakMap();
-  _failed = new WeakMap();
-  _exited = new WeakMap();
-  _SichuanTable_instances = new WeakSet();
-  flush_fn = function() {
-    if (__privateGet(this, _failed)) return;
-    let frames;
-    try {
-      frames = __privateGet(this, _notifications).read();
-    } catch (error) {
-      __privateMethod(this, _SichuanTable_instances, fail_fn).call(this, error);
-      return;
-    }
-    for (const frame4 of frames) {
-      if (__privateGet(this, _buffer)) __privateGet(this, _buffer).push(frame4);
-      else __privateGet(this, _onFrame).call(this, frame4.cmd, frame4.bytes);
-    }
-  };
-  fail_fn = function(error) {
-    if (__privateGet(this, _failed)) return;
-    __privateSet(this, _failed, true);
-    __privateGet(this, _log).call(this, `[sichuan] \u724C\u5C40\u5F02\u5E38\u7EC8\u6B62\uFF1A${error?.message ?? error}`);
-    __privateGet(this, _session3).stop();
-  };
-  settle_fn = function(delta, reason) {
-    if (__privateGet(this, _settled) || __privateGet(this, _failed)) return;
-    __privateSet(this, _settled, true);
-    __privateGet(this, _onSettle).call(this, { delta, reason, room: this.room, result: __privateGet(this, _session3).result });
-  };
-  dispatch_fn = function(bytes) {
-    let request;
-    try {
-      request = decodeMaJiangEnvelope(bytes);
-    } catch {
-      return { error: "malformedRequest", response: null };
-    }
-    const view = __privateGet(this, _session3).view();
-    const reply = (cmd, result, error = null, extra = []) => ({
-      error,
-      response: encodeMaJiangEnvelope(cmd, { result }),
-      extra
-    });
-    if (request.name === "ReqTuoGuanChange") {
-      if (request.extraLogicData.length) return reply(MaJiangMsg.ERspTuoGuanChange, MaJiangResult.Fail_InvalidParam, "unsupportedExtraLogic");
-      const enabled = request.payload.tuoGuanStatus !== 0;
-      const outcome = __privateGet(this, _session3).setAutoplay(enabled, view.connectionId);
-      if (!outcome.ok) return reply(MaJiangMsg.ERspTuoGuanChange, MaJiangResult.Fail_InvalidSequence, outcome.error);
-      __privateGet(this, _buffer).push({ cmd: MaJiangMsg.ENtfTuoGuanChange, bytes: encodeMaJiangEnvelope(
-        MaJiangMsg.ENtfTuoGuanChange,
-        { seat: view.seat, tuoGuanStatus: enabled ? 1 : 0, userInfos: [] }
-      ) });
-      return reply(MaJiangMsg.ERspTuoGuanChange, MaJiangResult.Succ);
-    }
-    if (request.name === "ReqExit") {
-      const state = __privateGet(this, _session3).snapshot();
-      const frozen = state.rules.gameType === 5022 && state.players[view.seat].won;
-      if (request.extraLogicData.length || !(frozen || __privateGet(this, _session3).matchOver)) {
-        return reply(MaJiangMsg.ERspExit, MaJiangResult.Fail_InvalidSequence, "exitBeforeWin");
-      }
-      __privateSet(this, _exited, true);
-      __privateGet(this, _buffer).push({ cmd: MaJiangMsg.ENtfExit, bytes: encodeMaJiangEnvelope(MaJiangMsg.ENtfExit, { seat: view.seat, userInfos: [] }) });
-      __privateMethod(this, _SichuanTable_instances, settle_fn).call(this, state.scores[view.seat], "exit");
-      return reply(MaJiangMsg.ERspExit, MaJiangResult.Succ);
-    }
-    return handleSichuanRequest(__privateGet(this, _session3), bytes, { connectionId: view.connectionId, windowId: view.windowId });
-  };
-
   // mockjs/riichi_reload.mjs
   var NAMES = {
     [RiichiMsg.ENtfGameStart]: "NtfGameStart",
@@ -27211,7 +18244,7 @@
   };
   var DISCARDS = /* @__PURE__ */ new Set([PlayAction.Normal, PlayAction.Riichi]);
   var CLAIMS = /* @__PURE__ */ new Set([PlayAction.Chi, PlayAction.Peng, PlayAction.MingGang]);
-  var kindOf4 = (tile) => Math.floor(tile / 10);
+  var kindOf3 = (tile) => Math.floor(tile / 10);
   var removeTiles = (hand, tiles) => {
     for (const tile of tiles) {
       const index = hand.indexOf(tile);
@@ -27284,9 +18317,9 @@
         } else if (msg.action === PlayAction.AnGang) {
           player.melds.push({ action: PlayAction.AnGang, card: msg.card, cards: null, qiangSeat: msg.seat });
           player.count -= 4;
-          if (player.hand) removeTiles(player.hand, player.hand.filter((tile) => kindOf4(tile) === kindOf4(msg.card)));
+          if (player.hand) removeTiles(player.hand, player.hand.filter((tile) => kindOf3(tile) === kindOf3(msg.card)));
         } else if (msg.action === PlayAction.PengGang) {
-          const pon = player.melds.find((meld) => meld.action === PlayAction.Peng && kindOf4(meld.cards[0]) === kindOf4(msg.card));
+          const pon = player.melds.find((meld) => meld.action === PlayAction.Peng && kindOf3(meld.cards[0]) === kindOf3(msg.card));
           if (!pon) throw new Error("\u91CD\u8FDE\u5FEB\u7167\uFF1A\u52A0\u6760\u627E\u4E0D\u5230\u5BF9\u5E94\u7684\u78B0");
           pon.action = PlayAction.PengGang;
           pon.cards = [msg.card, ...pon.cards];
@@ -27314,7 +18347,7 @@
     if (!state || state.remain <= 0 || engine.handEnded) return null;
     const me = engine.players[mySeat];
     if (!me || state.players[mySeat].hand.length !== me.hand.length) return null;
-    const draw2 = engine._expectedDraw?.seat === mySeat ? engine._expectedDraw : null;
+    const draw = engine._expectedDraw?.seat === mySeat ? engine._expectedDraw : null;
     const claim = engine._expectedClaim?.seat === mySeat ? engine._expectedClaim : null;
     if (claim && claim.card !== state.lastDiscard?.card) return null;
     const hand = state.players[mySeat].hand;
@@ -27333,7 +18366,7 @@
       const own = folded.seat === mySeat;
       const melds = folded.melds.map((meld) => {
         if (meld.cards) return { cards: meld.cards, action: meld.action, qiangSeat: meld.qiangSeat };
-        const ankan = p.melds.find((item) => item.type === "ankan" && kindOf4(item.tiles[0]) === kindOf4(meld.card));
+        const ankan = p.melds.find((item) => item.type === "ankan" && kindOf3(item.tiles[0]) === kindOf3(meld.card));
         return { cards: ankan.tiles.slice(), action: meld.action, qiangSeat: meld.qiangSeat };
       });
       return {
@@ -27347,11 +18380,11 @@
         alreadyRiichi: !!p.riichi,
         tingInfos: own ? engine.buildTingInfos(p) : [],
         score: p.score,
-        canPlayActions: own && draw2 ? draw2.actions.slice() : [],
+        canPlayActions: own && draw ? draw.actions.slice() : [],
         isZhenTing: engine.isFuriten(p),
         moQieMap: folded.moQie,
         leftTimer: own ? Math.ceil(bankLeft) : 0,
-        cantPlays: own && draw2 ? draw2.cantPlays.slice() : [],
+        cantPlays: own && draw ? draw.cantPlays.slice() : [],
         changeScore: p.score - folded.initScore,
         baBeiCards: folded.babei,
         internalState: own ? internalState : {},
@@ -27608,7 +18641,6 @@
   var _MJ = _g.__mj || (_g.__mj = {});
   _MJ.shop = shop_exports;
   _MJ.oneRound = one_round_exports;
-  _MJ.sichuan = { SichuanTable, SICHUAN_PLAYABLE_GAME_TYPES, sichuanRoom, MaJiangMsg };
   _MJ.riichi = {
     RiichiSession,
     GameEngine,

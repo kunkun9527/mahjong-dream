@@ -4,8 +4,6 @@ import { RiichiMsg, PlayAction, ManType, YiType, LiuJuType } from './proto_enum.
 import { tileName, decodeId, tileId } from './tiles.mjs';
 import * as shop from './shop.mjs';
 import * as oneRound from './one_round.mjs';
-import { SichuanTable, SICHUAN_PLAYABLE_GAME_TYPES, sichuanRoom } from './sichuan_table.mjs';
-import { MaJiangMsg } from './majiang_pb.mjs';
 import { buildRiichiReloadScene } from './riichi_reload.mjs';
 
 var MSG_NAME = {
@@ -222,7 +220,6 @@ var _g = typeof window !== "undefined" ? window : globalThis;
 var _MJ = _g.__mj || (_g.__mj = {});
 _MJ.shop = shop;
 _MJ.oneRound = oneRound;
-_MJ.sichuan = { SichuanTable, SICHUAN_PLAYABLE_GAME_TYPES, sichuanRoom, MaJiangMsg };
 _MJ.riichi = {
   RiichiSession,
   GameEngine,

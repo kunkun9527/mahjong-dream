@@ -5,9 +5,6 @@
 
 ## Key files
 - `extract_economy_config.py` — 段位 PT 表、四类商店、一局战奖励 → `mockjs/economy_catalog.mjs`。
-- `extract_sichuan_rules.py` — 四川规则、番型、房间（MatchSeparateCfg）→ `mockjs/sichuan_catalog.mjs`。
-- `extract_majiang_protocol.mjs` — 从 MajiangReflection 还原 majiang.proto → `mockjs/majiang_desc.mjs`。
-
 - `ai_benchmark.mjs` — 立直 AI 难度对战基准（固定种子、轮换座位），`node tools/ai_benchmark.mjs advanced intermediate 40`。不是数据提取脚本。
 
 ## Flow
