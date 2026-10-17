@@ -71,7 +71,7 @@ git checkout -- .
 
 依次阅读：
 
-1. [`../CONTEXT.md`](../CONTEXT.md)：产品术语与明确边界；
+1. [`../GLOSSARY.md`](../GLOSSARY.md)：产品术语与明确边界；
 2. [`adr/0001-filesystem-owned-local-save.md`](adr/0001-filesystem-owned-local-save.md)：本地存档决策；
 3. [`adr/0002-use-mahjong-soul-ranked-rules.md`](adr/0002-use-mahjong-soul-ranked-rules.md)：唯一规则基线；
 4. [`technical-architecture.md`](technical-architecture.md)：完整技术架构和文件索引；
@@ -88,7 +88,7 @@ git checkout -- .
 
 | 领域 | 权威来源 |
 | --- | --- |
-| 产品定义与术语 | `CONTEXT.md` |
+| 产品定义与术语 | `GLOSSARY.md` |
 | 规则争议 | `docs/adr/0002-use-mahjong-soul-ranked-rules.md` |
 | 存档设计 | `docs/adr/0001-filesystem-owned-local-save.md` |
 | 功能完成状态 | `docs/repair-backlog.md` |
@@ -317,7 +317,7 @@ MJ_DEBUG=1 MJ_USERDATA_DIR=.tmp-userdata npm start
 截至本文核对时，Git 状态包含：
 
 - 已修改：`README.md`、`game.html`、`index.html`、`mock/proto.js`、`mock/riichi.js`、`mock/server.js`、`mock/userdata.js`、`offline-patch.js`；
-- 未跟踪：`.gitignore`、`CONTEXT.md`、`docs/`、`local/`、`mockjs/`、`package.json`、`package-lock.json`、`start-game.bat`、`test/` 等。
+- 未跟踪：`.gitignore`、`GLOSSARY.md`、`docs/`、`local/`、`mockjs/`、`package.json`、`package-lock.json`、`start-game.bat`、`test/` 等。
 
 该列表只是交接时快照，不是提交建议。下一位接手者应重新运行 `git status --short`，并把维护者的本地改动视为不可覆盖资产。
 

@@ -645,7 +645,7 @@ npm test
 | --- | --- | --- |
 | `README.md` | 手写 | 用户启动和最小开发说明 |
 | `codemap.md`（根目录及 `local/`、`mock/`、`mockjs/`、`tools/`） | 手写 | 代码地图与开发规范，不是运行时文件；`.slim/codemap.json` 记录文件哈希，用于判断地图是否过期 |
-| `CONTEXT.md` | 手写 | 产品目标、验收边界和已确认决策 |
+| `GLOSSARY.md` | 手写 | 产品目标、验收边界和已确认决策 |
 | `start-game.bat` | 手写 | Windows 环境检查和一键入口 |
 | `index.html` | 原页面+小补丁 | iframe、方向和顶层页面边界 |
 | `game.html` | 原页面+本地补丁 | Unity 加载、渠道 SDK stub、错误提示 |
@@ -814,7 +814,7 @@ local/server.mjs
 
 为了减少跨层跳转，建议按以下顺序审查：
 
-1. `CONTEXT.md`、两个 ADR：确认产品与规则边界；
+1. `GLOSSARY.md`、两个 ADR：确认产品与规则边界；
 2. `start-game.bat`、`local/launcher.mjs`：确认进程和启动模型；
 3. `local/server.mjs`、`local/profile.mjs`：确认网络、会话和存档所有权；
 4. `offline-patch.js`、`index.html`、`game.html`：确认离线边界和 Unity 接线；
