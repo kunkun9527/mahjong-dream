@@ -426,6 +426,74 @@
     return this._makeChange(DT_BASIC_INFO, ch[0], ch[1], ch[2]);
   };
 
+  // 原配置 MjWTbGoodwillLevel 最高为 6 级，MjWTbWarriorAudio 语音门槛最高也是 Lv6。
+  var MAX_WARRIOR_LEVEL = 6;
+  // 原配置 PlayerInfoTbHead 的全部 19 个头像。
+  var ALL_HEAD_IDS = [];
+  for (var headId = 1001; headId <= 1019; headId++) ALL_HEAD_IDS.push(headId);
+
+  /** 离线版内容全解锁：补齐头像，把雀士好感度固定为最高级并已觉醒。
+   *  幂等，每次装载档案后调用；不涉及货币和段位。无变化时返回 null。 */
+  UserData.prototype.normalizeOfflineContent = function () {
+    var changes = {}, changed = false;
+
+    // DT11 Head 行 "0"：repeated f1 { 1:HeadId, 2:{ 1:HeadId, 2:获得时间 } }
+    var head = this.row(DT_HEAD, '0');
+    if (head) {
+      var owned = {}, latest = 0;
+      P.parse(head).forEach(function (f) {
+        if (f[0] !== 1 || f[1] !== 2) return;
+        var entry = P.dict(f[2]);
+        owned[entry[1]] = true;
+        var info = entry[2] instanceof Uint8Array ? P.dict(entry[2]) : {};
+        if (info[2] > latest) latest = info[2];
+      });
+      var headW = P.W().raw(head), added = false;
+      ALL_HEAD_IDS.forEach(function (id) {
+        if (owned[id]) return;
+        headW.s(1, P.W().v(1, id).s(2, P.W().v(1, id).v(2, latest)).bytes());
+        added = true;
+      });
+      if (added) {
+        changes[DT_HEAD] = [this.setRow(DT_HEAD, '0', headW.bytes())];
+        changed = true;
+      }
+    }
+
+    // DT26 雀士：row.f3 MahjongWarriorData { 5:Level, 7:Arousal }
+    var warriors = this.modules[DT_MAHJONG_WARRIOR];
+    if (warriors) {
+      var keys = warriors.order.slice();
+      for (var i = 0; i < keys.length; i++) {
+        var row = warriors.rows[keys[i]];
+        var inner = row && P.get(row, 3);
+        if (!(inner instanceof Uint8Array)) continue;
+        if ((P.get(inner, 5) || 0) >= MAX_WARRIOR_LEVEL && (P.get(inner, 7) || 0) >= 1) continue;
+        inner = P.setVarint(P.setVarint(inner, 5, MAX_WARRIOR_LEVEL), 7, 1);
+        if (!changes[DT_MAHJONG_WARRIOR]) changes[DT_MAHJONG_WARRIOR] = [];
+        changes[DT_MAHJONG_WARRIOR].push(this.setRow(DT_MAHJONG_WARRIOR, keys[i], P.setBytes(row, 3, inner)));
+        changed = true;
+      }
+    }
+
+    // DT1 UserBasic.f20 WarriorList：repeated { 1:WarriorId, 2:Level }
+    var basic = this.row(DT_BASIC_INFO, '0');
+    if (basic) {
+      var basicW = P.W(), raised = false;
+      P.parse(basic).forEach(function (f) {
+        if (f[0] === 20 && f[1] === 2 && (P.get(f[2], 2) || 0) < MAX_WARRIOR_LEVEL) {
+          basicW.s(20, P.setVarint(f[2], 2, MAX_WARRIOR_LEVEL));
+          raised = true;
+        } else P.reencode(basicW, f[0], f[1], f[2]);
+      });
+      if (raised) {
+        changes[DT_BASIC_INFO] = [this.setRow(DT_BASIC_INFO, '0', basicW.bytes())];
+        changed = true;
+      }
+    }
+    return changed ? changes : null;
+  };
+
   MJ.userdata = {
     UserData: UserData, Module: Module,
     DT_NAMES: DT_NAMES,

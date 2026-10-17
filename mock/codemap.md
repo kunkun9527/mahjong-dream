@@ -20,6 +20,7 @@
 ## Gotchas
 - 保持 ES5 风格 IIFE（`var`、`function`），不要改成 ESM。
 - 保存类请求必须带 f24 增量，客户端才认为成功；100141 要按模块版本收敛，否则客户端会无限重查。
-- 未实现的请求返回明确失败，不要伪装成空成功。
+- 未实现的请求返回明确失败，不要伪装成空成功。外围在线功能列在 `server.js` 的 `OFFLINE_UNAVAILABLE_IDS`：返回 `f1=10` 并推送 20106 原生飘字；新增本地实现前先把对应 msgId 从表中移除。
+- `userdata.js` 的 `normalizeOfflineContent()` 每次装载档案都会补齐头像、固定雀士满好感，不要把它并入只执行一次的经济补给。
 - `encTableInfo` 字段号以 `common_define` 为准：5 subType、6 roomType、8 roomID。
 - 对局通知帧会缓存用于 20162 重放；已开牌后重放跳过 NtfToPrepare。

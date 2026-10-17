@@ -29,10 +29,12 @@ const mock = globalThis.__mj.server;
 mock.quiet(process.env.MJ_DEBUG !== '1');
 if (profile.lobbyData) mock.setUserdata(Buffer.from(profile.lobbyData, 'base64'));
 const economyUpgraded = initializeOfflineEconomy(profile, mock.userdata, ECONOMY_CATALOG.defaults);
+// 内容解锁每次装载都归一（幂等），与只执行一次的货币补给分开。
+const contentNormalized = mock.userdata.normalizeOfflineContent() !== null;
 mock.updateNickname(profile.nickname);
 mock.updateRanks(profile.ranks);
 mock.updateProfileStats(profile.stats);
-if (economyUpgraded) {
+if (economyUpgraded || contentNormalized) {
   profile.lobbyData = Buffer.from(mock.userdata.serialize()).toString('base64');
   // 补给与完成标记必须一起落盘后才对外提供服务；失败不能假装升级成功。
   await saveProfile(userdataDirectory, profile);
