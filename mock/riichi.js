@@ -12397,9 +12397,10 @@
       calculator.calcFu = function() {
         calcFu.call(this);
         if (this.tmpResult.yaku["\u4E03\u5BFE\u5B50"] || this.tmpResult.yaku["\u5E73\u548C"]) return;
-        const runs = this.currentPattern.filter((group) => Array.isArray(group) && group.length === 3 && group[0] !== group[1]);
+        const concealedPattern = this.currentPattern.slice(0, this.currentPattern.length - this.furo.length);
+        const runs = concealedPattern.filter((group) => Array.isArray(group) && group.length === 3 && group[0] !== group[1]);
         const edgeWait = runs.some((group) => group[2] === this.agari && group[0][0] === "1" || group[0] === this.agari && group[2][0] === "9");
-        const countedWait = this.currentPattern.some((group) => typeof group === "string" && group === this.agari) || runs.some((group) => group[1] === this.agari);
+        const countedWait = concealedPattern.some((group) => typeof group === "string" && group === this.agari) || runs.some((group) => group[1] === this.agari);
         if (!edgeWait || countedWait) return;
         let fu = 20 + (!this.isTsumo && this.isMenzen() ? 10 : 0) + (this.isTsumo ? 2 : 0) + 2;
         for (const group of this.currentPattern) {
@@ -13610,9 +13611,6 @@
         if (!this._expectedClaim && this._bufferedClaim == null) this.expectClaim(0, discarderSeat, card, canQiang[0]);
         const payload = await this.waitHuman("claim");
         humanHandled = true;
-        if (payload?.action !== PlayAction.Hu && canQiang[0].includes(PlayAction.Hu)) {
-          this.markPassedRon(this.players[0]);
-        }
         if (payload?.action != null && payload.action !== PlayAction.Guo) {
           all.push({ seat: 0, action: payload.action, otherCards: payload.otherCards || [] });
         }
@@ -13624,7 +13622,14 @@
         if (!canQiang[seat]?.length) continue;
         const claim2 = this.aiClaim(seat, discarderSeat, card, canQiang[seat]);
         if (claim2) all.push({ seat, ...claim2 });
-        if (claim2?.action !== PlayAction.Hu && canQiang[seat].includes(PlayAction.Hu)) this.markPassedRon(this.players[seat]);
+      }
+      for (const p of this.players) {
+        if (p.seat !== discarderSeat && (canQiang[p.seat]?.includes(PlayAction.Hu) || p.waits?.includes(kindOf2(card))) && !all.some((claim2) => claim2.seat === p.seat && claim2.action === PlayAction.Hu)) this.markPassedRon(p);
+      }
+      if (this.kanCount === 4 && !all.some((claim2) => claim2.action === PlayAction.Hu) && !this.players.some((p) => p.melds.filter((meld) => meld.type === "kan" || meld.type === "ankan").length === 4)) {
+        this.confirmRiichiDeclaration(this.players[discarderSeat]);
+        await this.abortiveDraw(LiuJuType.SiGang, discarderSeat);
+        return;
       }
       if (!all.length) {
         this.confirmRiichiDeclaration(this.players[discarderSeat]);
@@ -13704,10 +13709,6 @@
         this.emit(RiichiMsg.ENtfQiangCard, this.buildQiang(seat, action2, used2));
         await this._d(this.T.claim);
         this._deferredKanDora++;
-        if (this.kanCount >= 4 && !this.players.some((player) => player.melds.filter((meld) => meld.type === "kan" || meld.type === "ankan").length >= 4)) {
-          await this.abortiveDraw(LiuJuType.SiGang, seat);
-          return Result.Succ;
-        }
         if (!await this.drawReplacement(seat)) return Result.Succ;
         this.emit(RiichiMsg.ENtfQiangCardEnd, this.buildQiangEnd(seat, action2, used2, [...used2, card]));
         await this._d(this.T.claim);
@@ -13757,13 +13758,15 @@
         const payload = await this.waitHuman("claim");
         humanHandled = true;
         if (payload?.action === PlayAction.Hu) claims.push({ seat: 0 });
-        else this.markPassedRon(this.players[0]);
       } else {
         this._expectedClaim = null;
       }
       for (let seat = 0; seat < this.playersN; seat++) {
         if (seat === 0 && (humanHandled || !this.isAiSeat(this.players[0]))) continue;
         if (canQiang[seat]?.includes(PlayAction.Hu)) claims.push({ seat });
+      }
+      for (const p of this.players) {
+        if (p.seat !== kanSeat && (canQiang[p.seat]?.includes(PlayAction.Hu) || !winExtra.chankan && p.waits?.includes(kindOf2(tile))) && !claims.some((claim) => claim.seat === p.seat)) this.markPassedRon(p);
       }
       if (!claims.length) return false;
       const distance = (seat) => (seat - kanSeat + this.playersN) % this.playersN;
@@ -13794,10 +13797,6 @@
       this.firstGoAround = false;
       if (kind === "ankan") this.revealKanDora();
       else this._deferredKanDora++;
-      if (this.kanCount >= 4 && !this.players.some((player) => player.melds.filter((meld) => meld.type === "kan" || meld.type === "ankan").length >= 4)) {
-        await this.abortiveDraw(LiuJuType.SiGang, seat);
-        return;
-      }
       if (!await this.drawReplacement(seat)) return;
       await this.awaitTurn(seat, true);
     }

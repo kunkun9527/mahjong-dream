@@ -64,11 +64,13 @@ function calcWin(concealedIds, melds, akaSet, opts = {}) {
     calculator.calcFu = function () {
       calcFu.call(this);
       if (this.tmpResult.yaku['七対子'] || this.tmpResult.yaku['平和']) return;
-      const runs = this.currentPattern.filter((group) => Array.isArray(group)
+      // currentPattern 末尾是已完成副露，不能用其中的牌判断本次等待。
+      const concealedPattern = this.currentPattern.slice(0, this.currentPattern.length - this.furo.length);
+      const runs = concealedPattern.filter((group) => Array.isArray(group)
         && group.length === 3 && group[0] !== group[1]);
       const edgeWait = runs.some((group) => group[2] === this.agari && group[0][0] === '1'
         || group[0] === this.agari && group[2][0] === '9');
-      const countedWait = this.currentPattern.some((group) => typeof group === 'string' && group === this.agari)
+      const countedWait = concealedPattern.some((group) => typeof group === 'string' && group === this.agari)
         || runs.some((group) => group[1] === this.agari);
       if (!edgeWait || countedWait) return;
       // 原结果已进位，不能直接加两符；按当前库的面子表示重算未进位符数。

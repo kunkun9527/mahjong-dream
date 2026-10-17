@@ -60,6 +60,9 @@ for (const [name, hand, opts, han, fu, points] of [
   ['八九边张荣和七万加二符', '89m456m123p789s55p7m', { riichi: true }, 1, 40, 1300],
   ['连风雀头计四符', '111m456m789p23s11z4s', { seatWind: 1, riichi: true }, 1, 50, 2400],
   ['开门无符形至少三十符', '456m234p55p789s', { melds: [{ type: 'chi', tiles: tiles('234m') }], haidi: true }, 1, 30, 1000],
+  ['副露边张顺子不能把暗手双碰误判为边张', '33m111p789s55p3m', { melds: [{ type: 'chi', tiles: tiles('123m') }], haidi: true }, 1, 30, 1000],
+  ['副露有边张顺子但暗手也确实边张时仍补两符', '12s222p55z333p3s', { melds: [{ type: 'chi', tiles: tiles('123m') }], haidi: true }, 1, 40, 1300],
+  ['副露中间张不抑制暗手真正边张的两符', '12s222p55z333p3s', { melds: [{ type: 'chi', tiles: tiles('234s') }], haidi: true }, 1, 40, 1300],
   ['幺九暗杠三十二符与门清荣和', '456m234p55p789s', { melds: [{ type: 'ankan', tiles: tiles('1111m') }], riichi: true }, 1, 70, 2300],
   ['中张明杠八符', '456m234p55p789s', { melds: [{ type: 'kan', tiles: tiles('2222m') }], haidi: true }, 1, 30, 1000],
   ['开门边张与明杠刻子累加后重新进位', '12s55p3s', { haidi: true, melds: [

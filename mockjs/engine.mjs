@@ -834,9 +834,6 @@ var GameEngine = class {
       if (!this._expectedClaim && this._bufferedClaim == null) this.expectClaim(0, discarderSeat, card, canQiang[0]);
       const payload = await this.waitHuman("claim");
       humanHandled = true;
-      if (payload?.action !== PlayAction.Hu && canQiang[0].includes(PlayAction.Hu)) {
-        this.markPassedRon(this.players[0]);
-      }
       if (payload?.action != null && payload.action !== PlayAction.Guo) {
         all.push({ seat: 0, action: payload.action, otherCards: payload.otherCards || [] });
       }
@@ -848,7 +845,18 @@ var GameEngine = class {
       if (!canQiang[seat]?.length) continue;
       const claim = this.aiClaim(seat, discarderSeat, card, canQiang[seat]);
       if (claim) all.push({ seat, ...claim });
-      if (claim?.action !== PlayAction.Hu && canQiang[seat].includes(PlayAction.Hu)) this.markPassedRon(this.players[seat]);
+    }
+    // 见逃按完成牌形判断，不以是否下发有役荣和按钮为准（无役低目也算）。
+    for (const p of this.players) {
+      if (p.seat !== discarderSeat && (canQiang[p.seat]?.includes(PlayAction.Hu) || p.waits?.includes(kindOf2(card)))
+        && !all.some((claim) => claim.seat === p.seat && claim.action === PlayAction.Hu)) this.markPassedRon(p);
+    }
+    // 第四杠仍可岭上自摸；其后弃牌先裁决荣和，再流局，不能继续吃碰。
+    if (this.kanCount === 4 && !all.some((claim) => claim.action === PlayAction.Hu)
+      && !this.players.some((p) => p.melds.filter((meld) => meld.type === "kan" || meld.type === "ankan").length === 4)) {
+      this.confirmRiichiDeclaration(this.players[discarderSeat]);
+      await this.abortiveDraw(LiuJuType.SiGang, discarderSeat);
+      return;
     }
     if (!all.length) {
       this.confirmRiichiDeclaration(this.players[discarderSeat]);
@@ -929,10 +937,6 @@ var GameEngine = class {
       this.emit(RiichiMsg.ENtfQiangCard, this.buildQiang(seat, action, used2));
       await this._d(this.T.claim);
       this._deferredKanDora++;
-      if (this.kanCount >= 4 && !this.players.some((player) => player.melds.filter((meld) => meld.type === "kan" || meld.type === "ankan").length >= 4)) {
-        await this.abortiveDraw(LiuJuType.SiGang, seat);
-        return Result.Succ;
-      }
       if (!await this.drawReplacement(seat)) return Result.Succ;
       this.emit(RiichiMsg.ENtfQiangCardEnd, this.buildQiangEnd(seat, action, used2, [...used2, card]));
       await this._d(this.T.claim);
@@ -982,13 +986,18 @@ var GameEngine = class {
       const payload = await this.waitHuman("claim");
       humanHandled = true;
       if (payload?.action === PlayAction.Hu) claims.push({ seat: 0 });
-      else this.markPassedRon(this.players[0]);
     } else {
       this._expectedClaim = null;
     }
     for (let seat = 0; seat < this.playersN; seat++) {
       if (seat === 0 && (humanHandled || !this.isAiSeat(this.players[0]))) continue;
       if (canQiang[seat]?.includes(PlayAction.Hu)) claims.push({ seat });
+    }
+    for (const p of this.players) {
+      // 暗杠只有国士能抢；拔北没有抢杠役，无役完成牌形的见逃仍需记录。
+      if (p.seat !== kanSeat && (canQiang[p.seat]?.includes(PlayAction.Hu)
+        || !winExtra.chankan && p.waits?.includes(kindOf2(tile)))
+        && !claims.some((claim) => claim.seat === p.seat)) this.markPassedRon(p);
     }
     if (!claims.length) return false;
     const distance = (seat) => (seat - kanSeat + this.playersN) % this.playersN;
@@ -1020,10 +1029,6 @@ var GameEngine = class {
     this.firstGoAround = false;
     if (kind === "ankan") this.revealKanDora();
     else this._deferredKanDora++;
-    if (this.kanCount >= 4 && !this.players.some((player) => player.melds.filter((meld) => meld.type === "kan" || meld.type === "ankan").length >= 4)) {
-      await this.abortiveDraw(LiuJuType.SiGang, seat);
-      return;
-    }
     if (!await this.drawReplacement(seat)) return;
     await this.awaitTurn(seat, true);
   }
