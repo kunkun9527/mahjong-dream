@@ -46,6 +46,8 @@ var RiichiSession = class {
       extraTime: opts.extraTime != null ? opts.extraTime : 20,
       internalState: { ...(opts.internalState || {}) },
       autoHuman: opts.autoHuman != null ? opts.autoHuman : false,
+      // AI 难度：intermediate / advanced（由服务按房间决定）
+      aiLevel: opts.aiLevel,
       // 座位 -> 真实 userID，必须与 20408/20014 下发的牌桌 uid 完全一致
       uids: opts.uids || null
     };
@@ -108,6 +110,7 @@ var RiichiSession = class {
       internalState: this.clientInternalState,
       uids: o.uids,
       autoHuman: o.autoHuman,
+      aiLevel: o.aiLevel,
       onFinalResult: (scores, engine, humanWin) => this.onFinalResult(scores, engine, humanWin),
       // false=0号位真人，true=AI代打（测试用）
       emit: (ev, payload) => this.send(ev, payload),

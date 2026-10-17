@@ -777,6 +777,8 @@
       seed: sess.table && sess.table.seed != null ? sess.table.seed : CONFIG.seed,
       uids: uids,
       autoHuman: CONFIG.autoHuman,
+      // 段位战御龙间（roomID=4）用高级 AI，其余房间（含一局战）用中级 AI。
+      aiLevel: sess.rankRoomId === 4 ? 'advanced' : 'intermediate',
       internalState: sess.internalState || {},
       onSettingsChange: function (state) {
         sess.internalState = state;

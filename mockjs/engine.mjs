@@ -1,5 +1,6 @@
 import { tileId, decodeId, toRiichi, doraFromIndicator, buildWall, shuffle, tileName } from './tiles.mjs';
 import { tileIndex, indexToTileId, countsOf, shantenOfCounts, waitsOfCounts, discardOptionsOfCounts } from './shanten.mjs';
+import { normalizeAiLevel, chooseDiscardByPolicy, shouldFoldHand, riichiPolicy } from './riichi_ai_policy.mjs';
 import { kindOf, concealedStr, realMelds, furoGroupStr, furoStr, handStr, calcWin, handShanten, handWaits, chooseDiscard, pickIdFromHand, discardSecondaryScore } from './ai.mjs';
 import { Result, RiichiMsg, PlayAction, ManType, YiType, LiuJuType } from './proto_enum.mjs';
 import { mapYaku, manTypeFromResult } from './yaku_map.mjs';
@@ -25,6 +26,9 @@ var GameEngine = class {
     this.emit = emit || (() => {
     });
     this.autoHuman = !!opts.autoHuman;
+    // AI 难度：basic（旧启发式，仅供对照）/ intermediate / advanced；可按座位单独指定。
+    const levels = Array.isArray(opts.aiLevels) ? opts.aiLevels : [];
+    this.aiLevels = Array.from({ length: players }, (_, seat) => normalizeAiLevel(levels[seat] ?? opts.aiLevel));
     this.speed = opts.speed != null ? opts.speed : 1;
     this.baseTime = opts.baseTime != null ? opts.baseTime : 5;
     this.extraTime = opts.extraTime != null ? opts.extraTime : 20;
@@ -1541,7 +1545,38 @@ var GameEngine = class {
     this.dealerSeat = 0;
   }
   // ================= AI =================
+  aiLevelOf(seat) {
+    return this.aiLevels?.[seat] || "intermediate";
+  }
   aiTurn(seat, drew, can, cantPlays = []) {
+    const level = this.aiLevelOf(seat);
+    if (level === "basic") return this.aiTurnBasic(seat, drew, can, cantPlays);
+    const p = this.players[seat];
+    if (can.includes(PlayAction.Hu)) return { action: PlayAction.Hu, card: p.drawnTile };
+    const danger = this.dangerKinds(seat);
+    if (can.includes(PlayAction.BaBei)) {
+      const north = this.northInHand(p);
+      if (north != null) return { action: PlayAction.BaBei, card: north };
+    }
+    if (can.includes(PlayAction.Riichi)) {
+      const decision = riichiPolicy(this, seat, this.formalTenpaiDiscards(p));
+      if (decision?.action === "riichi") return { action: PlayAction.Riichi, card: decision.card };
+      if (decision?.action === "dama") return { action: PlayAction.Normal, card: decision.card };
+    }
+    if (can.includes(PlayAction.AnGang) && this.aiWantsKan(p, danger)) {
+      return { action: PlayAction.AnGang, card: this.concealedQuadTile(p) };
+    }
+    if (can.includes(PlayAction.PengGang) && this.aiWantsKan(p, danger)) {
+      return { action: PlayAction.PengGang, card: this.addedKanTile(p) };
+    }
+    const forbiddenKinds = new Set(cantPlays.map((value) => Math.floor(value / 10)));
+    if (p.riichi && p.riichiTurn !== this.xunNum) {
+      return { action: PlayAction.Normal, card: this.bestDiscard(p, { forbiddenKinds, forced: p.drawnTile }).discardId };
+    }
+    const best = chooseDiscardByPolicy(this, seat, { forbiddenKinds, level });
+    return { action: PlayAction.Normal, card: best.discardId };
+  }
+  aiTurnBasic(seat, drew, can, cantPlays = []) {
     const p = this.players[seat];
     if (can.includes(PlayAction.Hu)) return { action: PlayAction.Hu, card: p.drawnTile };
     const danger = this.dangerKinds(seat);
@@ -1671,7 +1706,8 @@ var GameEngine = class {
     if (can.includes(PlayAction.Hu)) return { action: PlayAction.Hu };
     const current = this.currentShanten(p);
     const danger = this.dangerKinds(seat);
-    if (this.aiShouldFold(p, current, danger)) return null;
+    const fold = this.aiLevelOf(seat) === "basic" ? this.aiShouldFold(p, current, danger) : shouldFoldHand(this, seat);
+    if (fold) return null;
 
     if (can.includes(PlayAction.MingGang)) {
       const after = this.shantenAfterClaim(p, card, "pon");
