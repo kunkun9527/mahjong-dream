@@ -58,6 +58,36 @@ function calcWin(concealedIds, melds, akaSet, opts = {}) {
   let res;
   try {
     const calculator = new Riichi(str.toLowerCase());
+    // riichi 1.2.0 的 calcFu 把边张牌与 hasAgariFu 布尔值比较，漏掉
+    // 12 等 3 / 89 等 7 的两符。只修正受影响分解，且必须在择优前算点。
+    const calcFu = calculator.calcFu;
+    calculator.calcFu = function () {
+      calcFu.call(this);
+      if (this.tmpResult.yaku['七対子'] || this.tmpResult.yaku['平和']) return;
+      const runs = this.currentPattern.filter((group) => Array.isArray(group)
+        && group.length === 3 && group[0] !== group[1]);
+      const edgeWait = runs.some((group) => group[2] === this.agari && group[0][0] === '1'
+        || group[0] === this.agari && group[2][0] === '9');
+      const countedWait = this.currentPattern.some((group) => typeof group === 'string' && group === this.agari)
+        || runs.some((group) => group[1] === this.agari);
+      if (!edgeWait || countedWait) return;
+      // 原结果已进位，不能直接加两符；按当前库的面子表示重算未进位符数。
+      let fu = 20 + (!this.isTsumo && this.isMenzen() ? 10 : 0) + (this.isTsumo ? 2 : 0) + 2;
+      for (const group of this.currentPattern) {
+        if (typeof group === 'string') {
+          if (group[1] === 'z') for (const rank of [this.bakaze, this.jikaze, 5, 6, 7]) {
+            if (Number(group[0]) === rank) fu += 2;
+          }
+        } else {
+          const terminal = group[0][1] === 'z' || group[0][0] === '1' || group[0][0] === '9';
+          if (group.length === 1) fu += terminal ? 8 : 4;
+          else if (group.length === 2) fu += terminal ? 32 : 16;
+          else if (group.length === 4) fu += terminal ? 16 : 8;
+          else if (group[0] === group[1]) fu += terminal ? 4 : 2;
+        }
+      }
+      this.tmpResult.fu = Math.max(30, Math.ceil(fu / 10) * 10);
+    };
     if (opts.rinshan && opts.ronTile == null) {
       // riichi 1.2.0 只识别有杠副露的岭上；雀魂拔北补牌同样可成岭上。
       // 在每个分解的役判定后补役，让原库继续算宝牌、符和最优点数；

@@ -12393,6 +12393,30 @@
     let res;
     try {
       const calculator = new import_riichi.default(str.toLowerCase());
+      const calcFu = calculator.calcFu;
+      calculator.calcFu = function() {
+        calcFu.call(this);
+        if (this.tmpResult.yaku["\u4E03\u5BFE\u5B50"] || this.tmpResult.yaku["\u5E73\u548C"]) return;
+        const runs = this.currentPattern.filter((group) => Array.isArray(group) && group.length === 3 && group[0] !== group[1]);
+        const edgeWait = runs.some((group) => group[2] === this.agari && group[0][0] === "1" || group[0] === this.agari && group[2][0] === "9");
+        const countedWait = this.currentPattern.some((group) => typeof group === "string" && group === this.agari) || runs.some((group) => group[1] === this.agari);
+        if (!edgeWait || countedWait) return;
+        let fu = 20 + (!this.isTsumo && this.isMenzen() ? 10 : 0) + (this.isTsumo ? 2 : 0) + 2;
+        for (const group of this.currentPattern) {
+          if (typeof group === "string") {
+            if (group[1] === "z") for (const rank of [this.bakaze, this.jikaze, 5, 6, 7]) {
+              if (Number(group[0]) === rank) fu += 2;
+            }
+          } else {
+            const terminal2 = group[0][1] === "z" || group[0][0] === "1" || group[0][0] === "9";
+            if (group.length === 1) fu += terminal2 ? 8 : 4;
+            else if (group.length === 2) fu += terminal2 ? 32 : 16;
+            else if (group.length === 4) fu += terminal2 ? 16 : 8;
+            else if (group[0] === group[1]) fu += terminal2 ? 4 : 2;
+          }
+        }
+        this.tmpResult.fu = Math.max(30, Math.ceil(fu / 10) * 10);
+      };
       if (opts.rinshan && opts.ronTile == null) {
         const calcYaku = calculator.calcYaku;
         calculator.calcYaku = function() {
