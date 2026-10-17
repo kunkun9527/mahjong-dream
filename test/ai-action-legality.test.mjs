@@ -32,8 +32,8 @@ function player(seat, hand = []) {
   };
 }
 
-function engineWith(players) {
-  const engine = new GameEngine({ players: players.length, speed: 0 });
+function engineWith(players, opts = {}) {
+  const engine = new GameEngine({ players: players.length, speed: 0, ...opts });
   engine.players = players;
   engine.akaSet = new Set();
   engine.doraIndicators = [191];
@@ -55,7 +55,8 @@ test('AI 明杠提交三张实体牌并可通过 resolveClaims 执行', async ()
     player(3),
   ];
   players[0].discards.push(114);
-  const engine = engineWith(players);
+  // 门清听牌时中级/高级会放弃大明杠（见 ai-levels 测试）；这里只验证旧规则式路径提交的实体牌。
+  const engine = engineWith(players, { aiLevel: 'basic' });
   engine.lastDiscard = { seat: 0, card: 114 };
   const actions = engine.claimActions(1, 0, 114);
 

@@ -1,6 +1,6 @@
 import { tileId, decodeId, toRiichi, doraFromIndicator, buildWall, shuffle, tileName } from './tiles.mjs';
 import { tileIndex, indexToTileId, countsOf, shantenOfCounts, waitsOfCounts, discardOptionsOfCounts } from './shanten.mjs';
-import { normalizeAiLevel, chooseDiscardByPolicy, shouldFoldHand, riichiPolicy } from './riichi_ai_policy.mjs';
+import { normalizeAiLevel, chooseDiscardByPolicy, shouldFoldHand, claimPolicy, riichiPolicy } from './riichi_ai_policy.mjs';
 import { kindOf, concealedStr, realMelds, furoGroupStr, furoStr, handStr, calcWin, handShanten, handWaits, chooseDiscard, pickIdFromHand, discardSecondaryScore } from './ai.mjs';
 import { Result, RiichiMsg, PlayAction, ManType, YiType, LiuJuType } from './proto_enum.mjs';
 import { mapYaku, manTypeFromResult } from './yaku_map.mjs';
@@ -1563,10 +1563,12 @@ var GameEngine = class {
       if (decision?.action === "riichi") return { action: PlayAction.Riichi, card: decision.card };
       if (decision?.action === "dama") return { action: PlayAction.Normal, card: decision.card };
     }
-    if (can.includes(PlayAction.AnGang) && this.aiWantsKan(p, danger)) {
+    const kanOk = (can.includes(PlayAction.AnGang) || can.includes(PlayAction.PengGang))
+      && this.aiWantsKan(p, danger) && !shouldFoldHand(this, seat);
+    if (kanOk && can.includes(PlayAction.AnGang)) {
       return { action: PlayAction.AnGang, card: this.concealedQuadTile(p) };
     }
-    if (can.includes(PlayAction.PengGang) && this.aiWantsKan(p, danger)) {
+    if (kanOk && can.includes(PlayAction.PengGang)) {
       return { action: PlayAction.PengGang, card: this.addedKanTile(p) };
     }
     const forbiddenKinds = new Set(cantPlays.map((value) => Math.floor(value / 10)));
@@ -1704,10 +1706,11 @@ var GameEngine = class {
   aiClaim(seat, discarderSeat, card, can) {
     const p = this.players[seat];
     if (can.includes(PlayAction.Hu)) return { action: PlayAction.Hu };
+    const level = this.aiLevelOf(seat);
+    if (level !== "basic") return this.aiClaimByPolicy(seat, card, can, level);
     const current = this.currentShanten(p);
     const danger = this.dangerKinds(seat);
-    const fold = this.aiLevelOf(seat) === "basic" ? this.aiShouldFold(p, current, danger) : shouldFoldHand(this, seat);
-    if (fold) return null;
+    if (this.aiShouldFold(p, current, danger)) return null;
 
     if (can.includes(PlayAction.MingGang)) {
       const after = this.shantenAfterClaim(p, card, "pon");
@@ -1733,6 +1736,27 @@ var GameEngine = class {
       }
     }
     return null;
+  }
+  // 中级/高级：吃、碰、大明杠与跳过按同一期望值模型比较；开门仍须有明确成役路线。
+  aiClaimByPolicy(seat, card, can, level) {
+    const p = this.players[seat];
+    const danger = this.dangerKinds(seat);
+    const options = [];
+    if (can.includes(PlayAction.MingGang) && this.worthOpening(p, card, "kan") && this.aiWantsKan(p, danger)) {
+      options.push({ action: PlayAction.MingGang, type: "kan", used: this.previewTiles(p, card, 3) });
+    }
+    if (can.includes(PlayAction.Peng) && this.worthOpening(p, card, "pon")) {
+      const used = this.previewTiles(p, card, 2);
+      options.push({ action: PlayAction.Peng, type: "pon", used, forbiddenKinds: this.kuikaeKinds(PlayAction.Peng, [...used, card], card) });
+    }
+    if (can.includes(PlayAction.Chi)) {
+      for (const used of this.chiOptions(p, card)) {
+        if (!this.worthOpening(p, card, "chi", used)) continue;
+        options.push({ action: PlayAction.Chi, type: "chi", used, forbiddenKinds: this.kuikaeKinds(PlayAction.Chi, [...used, card], card) });
+      }
+    }
+    const choice = claimPolicy(this, seat, card, options, level);
+    return choice ? { action: choice.action, otherCards: choice.used } : null;
   }
   currentShanten(p) {
     return handShanten(p.hand, p.melds);

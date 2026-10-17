@@ -12586,10 +12586,12 @@
   }
   var DEFAULT_UKEIRE = [6, 18, 30, 40, 48, 54, 60, 60, 60];
   var RON_CHANCE_PER_OPPONENT = 0.25;
-  function publicContext(engine, seat) {
-    const p = engine.players[seat];
+  function publicContext(engine, seat, hypothetical = null) {
+    const p = hypothetical?.player || engine.players[seat];
     const n = engine.playersN;
-    const remainOf = engine.remainOfFor(p);
+    const baseRemain = engine.remainOfFor(p);
+    const extra = countsOf(hypothetical?.extraSeen || []);
+    const remainOf = (idx) => baseRemain(idx) - extra[idx];
     let unseen = 0;
     for (let i = 0; i < 34; i++) unseen += Math.max(0, remainOf(i));
     const danger = engine.dangerKinds(seat);
@@ -12874,8 +12876,8 @@
   }
   var SEARCH_BUDGET = 900;
   var SEARCH_CANDIDATES = 6;
-  function chooseDiscardByPolicy(engine, seat, { forbiddenKinds = null, level = "intermediate" } = {}) {
-    const ctx = publicContext(engine, seat);
+  function chooseDiscardByPolicy(engine, seat, { forbiddenKinds = null, level = "intermediate", hypothetical = null } = {}) {
+    const ctx = publicContext(engine, seat, hypothetical);
     const { p } = ctx;
     const meldCount = realMelds(p.melds).length;
     const counts = countsOf(p.hand);
@@ -12948,17 +12950,46 @@
       score: best.ev
     };
   }
+  function handOutlook(ctx, hand, melds, valueScale = 1) {
+    const meldCount = realMelds(melds).length;
+    const w = waitsOfCounts(countsOf(hand), meldCount, ctx.remainOf);
+    const value = estimateValue(ctx, hand, melds) * ctx.gainScale * valueScale;
+    const win2 = winCurve(ctx, w.shanten, w.ukeire, ctx.ownDraws);
+    const nextRisk = ctx.danger ? 0.06 * ctx.threatLoss * ctx.lossScale : 0;
+    const push = win2 * value - futureExposure(ctx, w.shanten) - nextRisk;
+    const fold = ctx.danger ? -0.012 * ctx.threatLoss * ctx.lossScale * Math.min(ctx.ownDraws, 6) : -Infinity;
+    return { push, fold, ev: Math.max(push, fold) };
+  }
   function shouldFoldHand(engine, seat) {
     const ctx = publicContext(engine, seat);
     if (!ctx.danger) return false;
-    const { p } = ctx;
-    const meldCount = realMelds(p.melds).length;
-    const w = waitsOfCounts(countsOf(p.hand), meldCount, ctx.remainOf);
-    const value = estimateValue(ctx, p.hand, p.melds) * ctx.gainScale;
-    const win2 = winCurve(ctx, w.shanten, w.ukeire, ctx.ownDraws);
-    const push = win2 * value - futureExposure(ctx, w.shanten) - 0.06 * ctx.threatLoss * ctx.lossScale;
-    const fold = -0.012 * ctx.threatLoss * ctx.lossScale * Math.min(ctx.ownDraws, 6);
-    return fold > push;
+    const outlook = handOutlook(ctx, ctx.p.hand, ctx.p.melds);
+    return outlook.fold > outlook.push;
+  }
+  function claimPolicy(engine, seat, card, options, level = "intermediate") {
+    if (!options.length) return null;
+    const p = engine.players[seat];
+    const passCtx = publicContext(engine, seat);
+    const pass = handOutlook(passCtx, p.hand, p.melds).ev;
+    let best = null;
+    for (const option of options) {
+      const hand = p.hand.filter((tile) => !option.used.includes(tile));
+      const meld = { type: option.type, tiles: [...option.used, card] };
+      const player = { ...p, hand, melds: p.melds.concat([meld]), menzen: false, drawnTile: null };
+      const hypothetical = { player, extraSeen: option.used };
+      let ev;
+      if (option.type === "kan") {
+        ev = handOutlook(publicContext(engine, seat, hypothetical), hand, player.melds, 1.2).ev;
+      } else {
+        try {
+          ev = chooseDiscardByPolicy(engine, seat, { forbiddenKinds: option.forbiddenKinds, level, hypothetical }).ev;
+        } catch {
+          continue;
+        }
+      }
+      if (ev > pass && (!best || ev > best.ev)) best = { ...option, ev };
+    }
+    return best;
   }
   function riichiPolicy(engine, seat, discardKinds) {
     const ctx = publicContext(engine, seat);
@@ -14759,10 +14790,11 @@
         if (decision?.action === "riichi") return { action: PlayAction.Riichi, card: decision.card };
         if (decision?.action === "dama") return { action: PlayAction.Normal, card: decision.card };
       }
-      if (can.includes(PlayAction.AnGang) && this.aiWantsKan(p, danger)) {
+      const kanOk = (can.includes(PlayAction.AnGang) || can.includes(PlayAction.PengGang)) && this.aiWantsKan(p, danger) && !shouldFoldHand(this, seat);
+      if (kanOk && can.includes(PlayAction.AnGang)) {
         return { action: PlayAction.AnGang, card: this.concealedQuadTile(p) };
       }
-      if (can.includes(PlayAction.PengGang) && this.aiWantsKan(p, danger)) {
+      if (kanOk && can.includes(PlayAction.PengGang)) {
         return { action: PlayAction.PengGang, card: this.addedKanTile(p) };
       }
       const forbiddenKinds = new Set(cantPlays.map((value) => Math.floor(value / 10)));
@@ -14897,10 +14929,11 @@
     aiClaim(seat, discarderSeat, card, can) {
       const p = this.players[seat];
       if (can.includes(PlayAction.Hu)) return { action: PlayAction.Hu };
+      const level = this.aiLevelOf(seat);
+      if (level !== "basic") return this.aiClaimByPolicy(seat, card, can, level);
       const current = this.currentShanten(p);
       const danger = this.dangerKinds(seat);
-      const fold = this.aiLevelOf(seat) === "basic" ? this.aiShouldFold(p, current, danger) : shouldFoldHand(this, seat);
-      if (fold) return null;
+      if (this.aiShouldFold(p, current, danger)) return null;
       if (can.includes(PlayAction.MingGang)) {
         const after = this.shantenAfterClaim(p, card, "pon");
         if (after <= current && this.worthOpening(p, card, "kan") && this.aiWantsKan(p, danger)) {
@@ -14925,6 +14958,27 @@
         }
       }
       return null;
+    }
+    // 中级/高级：吃、碰、大明杠与跳过按同一期望值模型比较；开门仍须有明确成役路线。
+    aiClaimByPolicy(seat, card, can, level) {
+      const p = this.players[seat];
+      const danger = this.dangerKinds(seat);
+      const options = [];
+      if (can.includes(PlayAction.MingGang) && this.worthOpening(p, card, "kan") && this.aiWantsKan(p, danger)) {
+        options.push({ action: PlayAction.MingGang, type: "kan", used: this.previewTiles(p, card, 3) });
+      }
+      if (can.includes(PlayAction.Peng) && this.worthOpening(p, card, "pon")) {
+        const used = this.previewTiles(p, card, 2);
+        options.push({ action: PlayAction.Peng, type: "pon", used, forbiddenKinds: this.kuikaeKinds(PlayAction.Peng, [...used, card], card) });
+      }
+      if (can.includes(PlayAction.Chi)) {
+        for (const used of this.chiOptions(p, card)) {
+          if (!this.worthOpening(p, card, "chi", used)) continue;
+          options.push({ action: PlayAction.Chi, type: "chi", used, forbiddenKinds: this.kuikaeKinds(PlayAction.Chi, [...used, card], card) });
+        }
+      }
+      const choice = claimPolicy(this, seat, card, options, level);
+      return choice ? { action: choice.action, otherCards: choice.used } : null;
     }
     currentShanten(p) {
       return handShanten(p.hand, p.melds);

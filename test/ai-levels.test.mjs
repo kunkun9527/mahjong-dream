@@ -153,6 +153,28 @@ test('高级：决策确定、不读隐藏信息，且单次决策在 1 秒内',
   for (let i = 0; i < 5; i++) assert.deepEqual(evaluate(), expected);
 });
 
+test('中级：鸣牌与跳过同用期望值比较——门清高打点听牌不大明杠，开门役牌刻子可大明杠并提交三张实体牌', () => {
+  // 门清听牌（1m 刻子为宝牌）：大明杠会失去立直与门清价值。
+  const closed = [111, 112, 113, 211, 212, 213, 221, 222, 223, 231, 232, 233, 241];
+  const a = makeEngine([makePlayer(0), makePlayer(1, closed), makePlayer(2), makePlayer(3)]);
+  a.doraIndicators = [191];
+  a.players[0].discards.push(114);
+  assert.equal(a.aiClaim(1, 0, 114, [PlayAction.MingGang, PlayAction.Peng, PlayAction.Guo]), null);
+
+  // 已碰 2p 的开门听牌，暗刻中且中是宝牌：大明杠中不改变听牌，多一次杠宝机会。
+  const open = makeTiles([[4, [7, 7, 7]], [1, [2, 3, 4, 6, 7]], [3, [5, 5]]]);
+  const p = makePlayer(1, open);
+  p.melds = [{ type: 'pon', tiles: [tileId(2, 2, 1), tileId(2, 2, 2), tileId(2, 2, 3)], from: 0 }];
+  p.menzen = false;
+  const b = makeEngine([makePlayer(0), p, makePlayer(2), makePlayer(3)]);
+  b.doraIndicators = [tileId(4, 6, 4)];
+  const zhong = tileId(4, 7, 4);
+  b.players[0].discards.push(zhong);
+  const decision = b.aiClaim(1, 0, zhong, [PlayAction.MingGang, PlayAction.Peng, PlayAction.Guo]);
+  assert.equal(decision?.action, PlayAction.MingGang);
+  assert.deepEqual([...decision.otherCards].sort(), open.slice(0, 3).sort());
+});
+
 test('AI 全自动对局：中级与高级混合打完东风战且守恒', async () => {
   for (const players of [3, 4]) {
     let final = null;

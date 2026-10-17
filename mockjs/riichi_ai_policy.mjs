@@ -26,10 +26,14 @@ const DEFAULT_UKEIRE = [6, 18, 30, 40, 48, 54, 60, 60, 60];
 // 每次摸牌之间他家打出的牌也可能荣和：每家按 0.35 次有效机会计。
 const RON_CHANCE_PER_OPPONENT = 0.25;
 
-function publicContext(engine, seat) {
-  const p = engine.players[seat];
+// hypothetical：拟鸣牌后的假想手牌 { player, extraSeen }；extraSeen 为移入新副露、
+// 尚未计入公开牌的自家实体牌（只影响剩余枚数）。
+function publicContext(engine, seat, hypothetical = null) {
+  const p = hypothetical?.player || engine.players[seat];
   const n = engine.playersN;
-  const remainOf = engine.remainOfFor(p);
+  const baseRemain = engine.remainOfFor(p);
+  const extra = countsOf(hypothetical?.extraSeen || []);
+  const remainOf = (idx) => baseRemain(idx) - extra[idx];
   let unseen = 0;
   for (let i = 0; i < 34; i++) unseen += Math.max(0, remainOf(i));
   const danger = engine.dangerKinds(seat);
@@ -339,8 +343,8 @@ const SEARCH_BUDGET = 900;
 const SEARCH_CANDIDATES = 6;
 
 // 打牌候选统一评估。返回 { discardId, shanten, ukeire, ev, fold }。
-function chooseDiscardByPolicy(engine, seat, { forbiddenKinds = null, level = 'intermediate' } = {}) {
-  const ctx = publicContext(engine, seat);
+function chooseDiscardByPolicy(engine, seat, { forbiddenKinds = null, level = 'intermediate', hypothetical = null } = {}) {
+  const ctx = publicContext(engine, seat, hypothetical);
   const { p } = ctx;
   const meldCount = realMelds(p.melds).length;
   const counts = countsOf(p.hand);
@@ -410,18 +414,52 @@ function chooseDiscardByPolicy(engine, seat, { forbiddenKinds = null, level = 'i
   };
 }
 
+// 未打牌（13 张当量）手牌的进攻/弃和期望；进攻侧扣除下一打的平均放铳。
+function handOutlook(ctx, hand, melds, valueScale = 1) {
+  const meldCount = realMelds(melds).length;
+  const w = waitsOfCounts(countsOf(hand), meldCount, ctx.remainOf);
+  const value = estimateValue(ctx, hand, melds) * ctx.gainScale * valueScale;
+  const win = winCurve(ctx, w.shanten, w.ukeire, ctx.ownDraws);
+  const nextRisk = ctx.danger ? 0.06 * ctx.threatLoss * ctx.lossScale : 0;
+  const push = win * value - futureExposure(ctx, w.shanten) - nextRisk;
+  const fold = ctx.danger ? -0.012 * ctx.threatLoss * ctx.lossScale * Math.min(ctx.ownDraws, 6) : -Infinity;
+  return { push, fold, ev: Math.max(push, fold) };
+}
+
 // 13 张手牌下的押引判断：继续进攻的期望是否不如弃和。
 function shouldFoldHand(engine, seat) {
   const ctx = publicContext(engine, seat);
   if (!ctx.danger) return false;
-  const { p } = ctx;
-  const meldCount = realMelds(p.melds).length;
-  const w = waitsOfCounts(countsOf(p.hand), meldCount, ctx.remainOf);
-  const value = estimateValue(ctx, p.hand, p.melds) * ctx.gainScale;
-  const win = winCurve(ctx, w.shanten, w.ukeire, ctx.ownDraws);
-  const push = win * value - futureExposure(ctx, w.shanten) - 0.06 * ctx.threatLoss * ctx.lossScale;
-  const fold = -0.012 * ctx.threatLoss * ctx.lossScale * Math.min(ctx.ownDraws, 6);
-  return fold > push;
+  const outlook = handOutlook(ctx, ctx.p.hand, ctx.p.melds);
+  return outlook.fold > outlook.push;
+}
+
+// 鸣牌与跳过用同一期望值比较。options：[{ action, type: 'chi'|'pon'|'kan', used, forbiddenKinds }]。
+// 吃/碰按鸣后立即打出的最佳弃牌期望；大明杠按岭上补牌前的手牌展望，另计新杠宝期望。
+function claimPolicy(engine, seat, card, options, level = 'intermediate') {
+  if (!options.length) return null;
+  const p = engine.players[seat];
+  const passCtx = publicContext(engine, seat);
+  const pass = handOutlook(passCtx, p.hand, p.melds).ev;
+  let best = null;
+  for (const option of options) {
+    const hand = p.hand.filter((tile) => !option.used.includes(tile));
+    const meld = { type: option.type, tiles: [...option.used, card] };
+    const player = { ...p, hand, melds: p.melds.concat([meld]), menzen: false, drawnTile: null };
+    const hypothetical = { player, extraSeen: option.used };
+    let ev;
+    if (option.type === 'kan') {
+      ev = handOutlook(publicContext(engine, seat, hypothetical), hand, player.melds, 1.2).ev;
+    } else {
+      try {
+        ev = chooseDiscardByPolicy(engine, seat, { forbiddenKinds: option.forbiddenKinds, level, hypothetical }).ev;
+      } catch {
+        continue;
+      }
+    }
+    if (ev > pass && (!best || ev > best.ev)) best = { ...option, ev };
+  }
+  return best;
 }
 
 // 立直/默听期望比较。返回 { action: 'riichi'|'dama'|null, card }。
@@ -490,6 +528,7 @@ export {
   winCurve,
   chooseDiscardByPolicy,
   shouldFoldHand,
+  claimPolicy,
   riichiPolicy,
   makeSearch,
 };
