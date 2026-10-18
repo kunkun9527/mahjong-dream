@@ -6,7 +6,12 @@ import { ECONOMY_CATALOG as C } from '../mockjs/economy_catalog.mjs';
 import { applyRankResult, createDefaultProfile } from '../local/profile.mjs';
 
 test('商品目录绑定原始bundle，关键字段不是FlatBuffers地址或排序号', async () => {
-  const bytes = await fs.readFile(new URL('../' + C.source, import.meta.url));
+  // UI 改包管线会裁剪并重命名 commonconfigs bundle；测试校验的是 git HEAD 中原始包的哈希。
+  let bytes = await fs.readFile(new URL('../' + C.source, import.meta.url)).catch(() => null);
+  if (!bytes) {
+    const { execFileSync } = await import('node:child_process');
+    bytes = execFileSync('git', ['show', `HEAD:${C.source}`], { maxBuffer: 1 << 30 });
+  }
   assert.equal(createHash('sha256').update(bytes).digest('hex'), C.sha256);
   const protocol = await fs.readFile(new URL('../' + C.protocolSource, import.meta.url));
   assert.equal(createHash('sha256').update(protocol).digest('hex'), C.protocolSha256);

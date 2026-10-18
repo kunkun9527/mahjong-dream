@@ -1,6 +1,7 @@
 """只读提取本快照的段位/商店配置，生成后端目录；开发机需已有 UnityPy。
 字段顺序核对自 IL2CPP v31 metadata 的 Create*Cfg 参数（MethodDefinition 36 字节）。
 运行：python tools/extract_economy_config.py；不修改 Unity bundle。
+读取 assets/pristine/commonconfigs.bundle（UI 改包前的原始快照，`tools/patch_ui_bundle.py` 会裁剪并重命名 StreamingAssets 里的原文件）。
 """
 import hashlib
 import json
@@ -10,7 +11,11 @@ import UnityPy
 import brotli
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCE = 'StreamingAssets/Bundles/WebGL/commonconfigs_d005e1531b1cf360239da815293e48c6.bundle'
+SOURCE = 'assets/pristine/commonconfigs.bundle'  # UI 改包前的原始 bundle 快照（含未裁剪配置表）
+
+
+def source_bytes(source: str) -> bytes:
+    return (ROOT / source).read_bytes()
 
 
 class Table:
@@ -104,7 +109,7 @@ def one_round_rewards(assets):
 
 
 def main():
-    bundle = (ROOT / SOURCE).read_bytes()
+    bundle = source_bytes(SOURCE)
     assert bundle[33:41] == b'UnityFS\0'
     assets = {}
     for obj in UnityPy.load(bundle[33:]).objects:
