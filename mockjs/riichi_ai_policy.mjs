@@ -13,6 +13,52 @@ function normalizeAiLevel(level) {
   return AI_LEVELS.includes(level) ? level : 'intermediate';
 }
 
+// ---------- NPC play style (npc_roster.mjs) ----------
+// A style only shifts preferences on top of the room's analysis level; no style = the neutral AI (identical to before styles existed).
+// risk: multiplier on every perceived deal-in loss (deal-in, future exposure, fold route), so attack/fold balance moves smoothly.
+// callBias / riichiBias: points added to the call / riichi side before comparing with pass / dama.
+// valueBeta: convexity of the hand-value term (positive prefers big hands, negative prefers speed).
+// jitter: amplitude (points) of seeded noise among discard candidates.
+const RISK_BY_ATTACK = [1.5, 1.22, 1, 0.82, 0.67];
+const JITTER_POINTS = { low: 60, mid: 150, high: 300 };
+const NEUTRAL_STYLE = Object.freeze({
+  risk: 1, callBias: 0, callReach: 2, riichiBias: 0, valueBeta: 0, jitter: 0, keepDora: false, kan: false, placement: 1, rng: null,
+});
+const clampAxis = (v) => Math.max(1, Math.min(5, Math.round(Number(v) || 3)));
+
+// Resolve a seat's style for the current situation (traits depend on dealer, wind, wall and riichi state).
+function resolveStyle(engine, seat) {
+  const raw = engine.aiStyles?.[seat];
+  if (!raw) return NEUTRAL_STYLE;
+  const attack = clampAxis(raw.attack), call = clampAxis(raw.call), riichi = clampAxis(raw.riichi), value = clampAxis(raw.value);
+  const trait = raw.trait;
+  let risk = RISK_BY_ATTACK[attack - 1];
+  let callBias = (call - 3) * 300;
+  // Max shanten at which an open call is considered at all (neutral 2).
+  let callReach = call >= 5 ? 3 : call <= 1 ? 1 : 2;
+  let riichiBias = (riichi - 3) * 400;
+  let valueBeta = (value - 3) * 0.12;
+  // Situational traits act on top of the base axes (not clamped back to 5), so maxed-out NPCs still show them.
+  if (trait === 'dealer' && seat === engine.dealerSeat) risk *= 0.82;
+  if (trait === 'late' && engine.remain != null && engine.remain <= (engine.sanma ? 27 : 35)) risk *= 0.82;
+  if (trait === 'east' && engine.roundWind === 1) { callBias += 300; callReach = Math.min(3, callReach + 1); valueBeta -= 0.12; }
+  if (trait === 'chase' && engine.players?.some((pl) => pl.seat !== seat && pl.riichi)) riichiBias += 800;
+  return {
+    risk, callBias, callReach, riichiBias, valueBeta,
+    jitter: JITTER_POINTS[raw.jitter] || 0,
+    keepDora: trait === 'dora',
+    kan: trait === 'kan',
+    placement: trait === 'placement' ? 1.5 : 1,
+    rng: engine.styleRngOf ? engine.styleRngOf(seat) : null,
+  };
+}
+
+// Hand-value preference: v · (v / pivot)^beta keeps the neutral style unchanged and bends the speed/value trade-off.
+function styledValue(ctx, v) {
+  const beta = ctx.style.valueBeta;
+  return beta && v > 0 ? v * Math.pow(v / 5200, beta) : v;
+}
+
 // Ron value for a non-dealer (approximated by han, 30-40 fu); dealer ×1.5.
 const KO_POINTS = [0, 1000, 2000, 3900, 7700, 8000, 12000, 12000, 16000, 16000, 16000, 24000, 24000, 32000];
 function pointsForHan(han, dealer) {
@@ -99,17 +145,20 @@ function publicContext(engine, seat, hypothetical = null, level = 'intermediate'
   const allLast = engine.isAllLast();
   const dealer = seat === engine.dealerSeat;
   const threatLoss = threatLossOf(engine, seat, danger);
+  const style = resolveStyle(engine, seat);
   // Seat adjustment: when All Last is ahead, deal-in costs more and point value is lower; in last place it is the opposite.
+  // A placement-minded style applies it at every level and more strongly.
   let gainScale = 1;
   let lossScale = 1;
-  if (allLast && level !== 'basic') {
+  if (allLast && (level !== 'basic' || style.placement > 1)) {
+    const k = style.placement;
     const lead = p.score - Math.max(...others);
     if (placement === 0 && lead > 0) {
-      lossScale = 1 + Math.min(1, lead / 8000);
-      gainScale = 0.7;
+      lossScale = 1 + Math.min(1, lead / 8000) * k;
+      gainScale = 1 - 0.3 * k;
     } else if (placement === n - 1) {
-      gainScale = 1.25;
-      lossScale = 0.8;
+      gainScale = 1 + 0.25 * k;
+      lossScale = 1 - 0.2 * k;
     }
   }
   const ctx = {
@@ -132,6 +181,7 @@ function publicContext(engine, seat, hypothetical = null, level = 'intermediate'
     tableBonus: (engine.riichiSticks || 0) * 1000 + (engine.honba || 0) * 300,
     gainUtil: (v) => v * gainScale,
     level,
+    style,
     advanced: false,
     threatActive: !!danger,
     // Non-hand conditions for declaring riichi (consistent with engine.canRiichi: points ≥ 1000, tiles left ≥ player count).
@@ -191,13 +241,16 @@ function attachAdvanced(ctx) {
 
 // Expected deal-in loss from discarding a given tile (already including seat adjustment).
 function discardRisk(ctx, idx, kind) {
-  if (ctx.advanced) return ctx.read.lossOf[idx];
-  return dealInProbability(ctx, kind) * ctx.threatLoss * ctx.lossScale;
+  if (ctx.advanced) return ctx.read.lossOf[idx] * ctx.style.risk;
+  return dealInProbability(ctx, kind) * ctx.threatLoss * ctx.lossScale * ctx.style.risk;
 }
 
 // Cumulative deal-in loss of future discards if we keep attacking: the current threat uses the average risk of a random draw,
 // and future threats (opponents becoming tenpai one after another) grow each turn; if not in riichi we can switch to fold midway, discounted.
 function pushExposure(ctx, win, foldable = true, shanten = 0) {
+  return rawPushExposure(ctx, win, foldable, shanten) * ctx.style.risk;
+}
+function rawPushExposure(ctx, win, foldable, shanten) {
   if (ctx.level === 'basic') return 0;
   if (!ctx.advanced) return foldable ? futureExposure(ctx, shanten)
     : Math.min(ctx.ownDraws, 6) * 0.06 * ctx.threatLoss * ctx.lossScale;
@@ -216,6 +269,9 @@ function pushExposure(ctx, win, foldable = true, shanten = 0) {
 
 // Fold route: discard the safest tiles in hand one by one; later draws and new genbutsu lower the risk, discounted 0.75.
 function foldLoss(ctx, counts) {
+  return rawFoldLoss(ctx, counts) * ctx.style.risk;
+}
+function rawFoldLoss(ctx, counts) {
   if (!ctx.advanced) return ctx.level === 'basic' ? 0
     : 0.012 * ctx.threatLoss * ctx.lossScale * Math.min(ctx.ownDraws, 6);
   const losses = [];
@@ -654,7 +710,7 @@ function chooseDiscardCandidates(ctx, forbiddenKinds) {
     counts[idx]++;
     const rest = p.hand.slice();
     rest.splice(rest.indexOf(id), 1);
-    const value = ctx.gainUtil(estimateValue(ctx, rest, p.melds));
+    const value = styledValue(ctx, ctx.gainUtil(estimateValue(ctx, rest, p.melds)));
     const win = winCurve(ctx, w.shanten, w.ukeire, ctx.ownDraws, quality);
     candidates.push({
       id, idx, rest, value, quality,
@@ -704,13 +760,18 @@ function chooseDiscardCandidates(ctx, forbiddenKinds) {
     }
   }
   let best = null;
+  const { style } = ctx;
   for (const c of candidates) {
     // With no threat, do not drop shanten for points (rough point estimates have large error); with a threat, any tile may be a fold candidate.
     if (!ctx.threatActive && c.shanten > minShanten) continue;
-    const pushEV = c.push - c.risk;
+    // Dora-keeping style: giving up a dora while attacking feels expensive.
+    const doraCost = style.keepDora && (ctx.doraKinds.has(kindOf(c.id)) || ctx.akaSet?.has(c.id)) ? 500 : 0;
+    const pushEV = c.push - c.risk - doraCost;
     const foldEV = c.foldBase - c.risk;
     c.fold = foldEV > pushEV;
-    c.ev = Math.max(pushEV, foldEV) + c.tie;
+    // Seeded noise lets a styled NPC pick among near-equal moves; the neutral AI draws nothing from the RNG.
+    const noise = style.jitter && style.rng ? (style.rng() * 2 - 1) * style.jitter : 0;
+    c.ev = Math.max(pushEV, foldEV) + c.tie + noise;
     if (!best || c.ev > best.ev || (c.ev === best.ev && c.id < best.id)) best = c;
   }
   return {
@@ -732,7 +793,7 @@ function handOutlook(ctx, hand, melds, valueScale = 1) {
   ctx.budget.baseWork += WAITS_WORK;
   const counts = countsOf(hand);
   const w = policyWaits(ctx, counts, meldCount);
-  const value = ctx.gainUtil(estimateValue(ctx, hand, melds) * valueScale);
+  const value = styledValue(ctx, ctx.gainUtil(estimateValue(ctx, hand, melds) * valueScale));
   const quality = (ctx.level !== 'basic' && w.shanten === 1
     ? tenpaiQuality(ctx, counts, meldCount, { budget: ctx.budget }) : null) ?? DEFAULT_UKEIRE[0];
   const win = winCurve(ctx, w.shanten, w.ukeire, ctx.ownDraws, quality);
@@ -782,6 +843,7 @@ function claimPolicy(engine, seat, card, options, level = 'intermediate', budget
       }
     }
     if (part) settleBudget(shared, part);
+    ev += passCtx.style.callBias;
     if (ev > pass && (!best || ev > best.ev)) best = { ...option, ev };
   }
   return best;
@@ -872,12 +934,13 @@ function riichiDecisionByPolicy(ctx, best) {
     const foldEV = -foldLoss(ctx, counts) - best.risk;
     if (foldEV > Math.max(riichiEV, damaEV)) return null;
   }
-  if (damaEV >= riichiEV) return { action: 'dama', card: best.card };
+  if (damaEV >= riichiEV + ctx.style.riichiBias) return { action: 'dama', card: best.card };
   return { action: 'riichi', card: best.card };
 }
 
 export {
   normalizeAiLevel,
+  resolveStyle,
   readThreats,
   placementUtility,
   publicContext,

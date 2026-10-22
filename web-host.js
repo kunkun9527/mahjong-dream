@@ -72,10 +72,19 @@
         changed = host.load();
       }
       if (changed) write();
-      mj.server.onSessionCreated = function (session) { host.attach(session); };
+      // The first connection of this page picks up a match left by a reload (within the away limit) where it stopped.
+      var resumePending = true;
+      mj.server.onSessionCreated = function (session) {
+        host.attach(session);
+        if (!resumePending) return;
+        resumePending = false;
+        host.recoverMatch({ session: session }).catch(function (e) { console.error('[web-host] 恢复对局失败', e); });
+      };
       // Shop purchases, equipment and other lobby changes have no callback; save after each client message like the Node service.
+      // Every message also proves the player is still here (the away clock of an unfinished match).
       var send = mj.server.FakeWebSocket.prototype.send;
       mj.server.FakeWebSocket.prototype.send = function () {
+        host.touch();
         var result = send.apply(this, arguments);
         persist(false);
         return result;
@@ -86,7 +95,11 @@
         }
       });
       if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {});
-      return host;
+      // Away longer than the limit: the AI finishes the saved match before the game starts, so the lobby shows the result.
+      return host.recoverMatch().then(function () { return host; }, function (e) {
+        console.error('[web-host] 代打上一场比赛失败', e);
+        return host;
+      });
     });
   }
 

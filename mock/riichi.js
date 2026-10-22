@@ -12993,6 +12993,56 @@
   function normalizeAiLevel(level) {
     return AI_LEVELS.includes(level) ? level : "intermediate";
   }
+  var RISK_BY_ATTACK = [1.5, 1.22, 1, 0.82, 0.67];
+  var JITTER_POINTS = { low: 60, mid: 150, high: 300 };
+  var NEUTRAL_STYLE = Object.freeze({
+    risk: 1,
+    callBias: 0,
+    callReach: 2,
+    riichiBias: 0,
+    valueBeta: 0,
+    jitter: 0,
+    keepDora: false,
+    kan: false,
+    placement: 1,
+    rng: null
+  });
+  var clampAxis = (v) => Math.max(1, Math.min(5, Math.round(Number(v) || 3)));
+  function resolveStyle(engine, seat) {
+    const raw = engine.aiStyles?.[seat];
+    if (!raw) return NEUTRAL_STYLE;
+    const attack = clampAxis(raw.attack), call = clampAxis(raw.call), riichi = clampAxis(raw.riichi), value = clampAxis(raw.value);
+    const trait = raw.trait;
+    let risk = RISK_BY_ATTACK[attack - 1];
+    let callBias = (call - 3) * 300;
+    let callReach = call >= 5 ? 3 : call <= 1 ? 1 : 2;
+    let riichiBias = (riichi - 3) * 400;
+    let valueBeta = (value - 3) * 0.12;
+    if (trait === "dealer" && seat === engine.dealerSeat) risk *= 0.82;
+    if (trait === "late" && engine.remain != null && engine.remain <= (engine.sanma ? 27 : 35)) risk *= 0.82;
+    if (trait === "east" && engine.roundWind === 1) {
+      callBias += 300;
+      callReach = Math.min(3, callReach + 1);
+      valueBeta -= 0.12;
+    }
+    if (trait === "chase" && engine.players?.some((pl) => pl.seat !== seat && pl.riichi)) riichiBias += 800;
+    return {
+      risk,
+      callBias,
+      callReach,
+      riichiBias,
+      valueBeta,
+      jitter: JITTER_POINTS[raw.jitter] || 0,
+      keepDora: trait === "dora",
+      kan: trait === "kan",
+      placement: trait === "placement" ? 1.5 : 1,
+      rng: engine.styleRngOf ? engine.styleRngOf(seat) : null
+    };
+  }
+  function styledValue(ctx, v) {
+    const beta = ctx.style.valueBeta;
+    return beta && v > 0 ? v * Math.pow(v / 5200, beta) : v;
+  }
   var KO_POINTS2 = [0, 1e3, 2e3, 3900, 7700, 8e3, 12e3, 12e3, 16e3, 16e3, 16e3, 24e3, 24e3, 32e3];
   function pointsForHan2(han, dealer) {
     const h = Math.max(0, Math.min(13, han));
@@ -13064,16 +13114,18 @@
     const allLast = engine.isAllLast();
     const dealer = seat === engine.dealerSeat;
     const threatLoss = threatLossOf(engine, seat, danger);
+    const style = resolveStyle(engine, seat);
     let gainScale = 1;
     let lossScale = 1;
-    if (allLast && level !== "basic") {
+    if (allLast && (level !== "basic" || style.placement > 1)) {
+      const k = style.placement;
       const lead = p.score - Math.max(...others);
       if (placement === 0 && lead > 0) {
-        lossScale = 1 + Math.min(1, lead / 8e3);
-        gainScale = 0.7;
+        lossScale = 1 + Math.min(1, lead / 8e3) * k;
+        gainScale = 1 - 0.3 * k;
       } else if (placement === n - 1) {
-        gainScale = 1.25;
-        lossScale = 0.8;
+        gainScale = 1 + 0.25 * k;
+        lossScale = 1 - 0.2 * k;
       }
     }
     const ctx = {
@@ -13096,6 +13148,7 @@
       tableBonus: (engine.riichiSticks || 0) * 1e3 + (engine.honba || 0) * 300,
       gainUtil: (v) => v * gainScale,
       level,
+      style,
       advanced: false,
       threatActive: !!danger,
       // Non-hand conditions for declaring riichi (consistent with engine.canRiichi: points ≥ 1000, tiles left ≥ player count).
@@ -13145,10 +13198,13 @@
     ctx.lossScale = 1;
   }
   function discardRisk(ctx, idx, kind) {
-    if (ctx.advanced) return ctx.read.lossOf[idx];
-    return dealInProbability(ctx, kind) * ctx.threatLoss * ctx.lossScale;
+    if (ctx.advanced) return ctx.read.lossOf[idx] * ctx.style.risk;
+    return dealInProbability(ctx, kind) * ctx.threatLoss * ctx.lossScale * ctx.style.risk;
   }
   function pushExposure(ctx, win, foldable = true, shanten = 0) {
+    return rawPushExposure(ctx, win, foldable, shanten) * ctx.style.risk;
+  }
+  function rawPushExposure(ctx, win, foldable, shanten) {
     if (ctx.level === "basic") return 0;
     if (!ctx.advanced) return foldable ? futureExposure(ctx, shanten) : Math.min(ctx.ownDraws, 6) * 0.06 * ctx.threatLoss * ctx.lossScale;
     const T = ctx.ownDraws;
@@ -13164,6 +13220,9 @@
     return total;
   }
   function foldLoss(ctx, counts) {
+    return rawFoldLoss(ctx, counts) * ctx.style.risk;
+  }
+  function rawFoldLoss(ctx, counts) {
     if (!ctx.advanced) return ctx.level === "basic" ? 0 : 0.012 * ctx.threatLoss * ctx.lossScale * Math.min(ctx.ownDraws, 6);
     const losses = [];
     for (let i = 0; i < 34; i++) for (let c = 0; c < counts[i]; c++) losses.push(ctx.read.lossOf[i]);
@@ -13565,7 +13624,7 @@
       counts[idx]++;
       const rest = p.hand.slice();
       rest.splice(rest.indexOf(id), 1);
-      const value = ctx.gainUtil(estimateValue(ctx, rest, p.melds));
+      const value = styledValue(ctx, ctx.gainUtil(estimateValue(ctx, rest, p.melds)));
       const win = winCurve(ctx, w.shanten, w.ukeire, ctx.ownDraws, quality);
       candidates.push({
         id,
@@ -13617,12 +13676,15 @@
       }
     }
     let best = null;
+    const { style } = ctx;
     for (const c of candidates) {
       if (!ctx.threatActive && c.shanten > minShanten) continue;
-      const pushEV = c.push - c.risk;
+      const doraCost = style.keepDora && (ctx.doraKinds.has(kindOf(c.id)) || ctx.akaSet?.has(c.id)) ? 500 : 0;
+      const pushEV = c.push - c.risk - doraCost;
       const foldEV = c.foldBase - c.risk;
       c.fold = foldEV > pushEV;
-      c.ev = Math.max(pushEV, foldEV) + c.tie;
+      const noise = style.jitter && style.rng ? (style.rng() * 2 - 1) * style.jitter : 0;
+      c.ev = Math.max(pushEV, foldEV) + c.tie + noise;
       if (!best || c.ev > best.ev || c.ev === best.ev && c.id < best.id) best = c;
     }
     return {
@@ -13642,7 +13704,7 @@
     ctx.budget.baseWork += WAITS_WORK;
     const counts = countsOf(hand);
     const w = policyWaits(ctx, counts, meldCount);
-    const value = ctx.gainUtil(estimateValue(ctx, hand, melds) * valueScale);
+    const value = styledValue(ctx, ctx.gainUtil(estimateValue(ctx, hand, melds) * valueScale));
     const quality = (ctx.level !== "basic" && w.shanten === 1 ? tenpaiQuality(ctx, counts, meldCount, { budget: ctx.budget }) : null) ?? DEFAULT_UKEIRE[0];
     const win = winCurve(ctx, w.shanten, w.ukeire, ctx.ownDraws, quality);
     let meanLoss = 0;
@@ -13684,6 +13746,7 @@
         }
       }
       if (part) settleBudget(shared, part);
+      ev += passCtx.style.callBias;
       if (ev > pass && (!best || ev > best.ev)) best = { ...option, ev };
     }
     return best;
@@ -13768,7 +13831,7 @@
       const foldEV = -foldLoss(ctx, counts) - best.risk;
       if (foldEV > Math.max(riichiEV, damaEV)) return null;
     }
-    if (damaEV >= riichiEV) return { action: "dama", card: best.card };
+    if (damaEV >= riichiEV + ctx.style.riichiBias) return { action: "dama", card: best.card };
     return { action: "riichi", card: best.card };
   }
 
@@ -14026,6 +14089,9 @@
       this.setInternalState(opts.internalState || {});
       this.seed = seed != null ? Number(seed) >>> 0 : null;
       this.rng = this.seed != null ? mulberry32(this.seed) : Math.random;
+      const styles = Array.isArray(opts.aiStyles) ? opts.aiStyles : [];
+      this.aiStyles = Array.from({ length: players }, (_, seat) => styles[seat] || null);
+      this._styleRngs = this.aiStyles.map((style, seat) => !style ? null : this.seed != null ? mulberry32((this.seed ^ Math.imul(2654435761, seat + 1)) >>> 0) : Math.random);
       this.handIndex = 0;
       this.juNum = 0;
       this.matchLength = opts.matchLength === "hanchan" ? "hanchan" : "east";
@@ -14054,6 +14120,52 @@
       this._finalResult = null;
       this.matchStats = { hands: 0, wins: 0, dealIns: 0, riichi: 0, calls: 0, tsumo: 0, ron: 0, winPoints: 0, winTurns: 0, maxRenchan: 0 };
       this.uids = opts.uids && opts.uids.length >= players ? opts.uids.slice(0, players) : Array.from({ length: players }, (_, s) => 1e4 + s);
+      this.humanLog = [];
+      this.onRecord = opts.onRecord || null;
+      this._replay = Array.isArray(opts.replayLog) && opts.replayLog.length ? opts.replayLog.slice() : null;
+      this.replaying = !!opts.replayLog;
+      this._liveSpeed = this.speed;
+      if (this.replaying) this.speed = 0;
+      this.onReplayDone = opts.onReplayDone || null;
+      this.humanPresent = opts.humanPresent !== false;
+    }
+    _record(entry) {
+      this.humanLog.push(entry);
+      if (this.onRecord) this.onRecord(entry);
+    }
+    /** Take the next replay entry for a human wait of `kind`; ends the replay (and goes live) when the log is used up or diverges. */
+    _replayNext(kind) {
+      if (!this.replaying) return null;
+      const next = this._replay?.[0];
+      if (next && next[0] === kind) return this._replay.shift();
+      if (next) this.log && this.log(`[riichi] \u8BB0\u5F55\u91CD\u6F14\u5206\u53C9\uFF1A\u671F\u671B ${next[0]}\uFF0C\u5B9E\u9645 ${kind}\uFF0C\u6309\u5F53\u524D\u5C40\u9762\u7EE7\u7EED`);
+      this.replaying = false;
+      this._replay = null;
+      this.speed = this._liveSpeed;
+      if (this.onReplayDone) this.onReplayDone(!next);
+      return null;
+    }
+    /** Player connection state. Leaving pauses the current human wait; returning restarts its clock from the saved time bank. */
+    setHumanPresent(present) {
+      this.humanPresent = !!present;
+      const pending = this._pending;
+      if (!this.humanPresent) {
+        if (pending?.timer) {
+          clearTimeout(pending.timer);
+          pending.timer = null;
+        }
+        if (this._prepareWaiter?.timer) {
+          clearTimeout(this._prepareWaiter.timer);
+          this._prepareWaiter.timer = null;
+        }
+        return;
+      }
+      if (pending && !pending.timer && !this.autoHuman) {
+        pending.startedAt = Date.now();
+        this._armHumanTimer(pending);
+        this._queueAutomatic(pending);
+      }
+      if (this._prepareWaiter && !this._prepareWaiter.timer) this._armPrepareTimer(this._prepareWaiter);
     }
     uidOf(seat) {
       return this.uids[seat];
@@ -14072,9 +14184,14 @@
      *  a new match is a newly matched room with a new engine (see finishHand).
      *  autoHuman (self-test, no client) skips directly; human mode keeps a fallback timeout to prevent a hang. */
     waitPrepare(timeoutMs = 15e3) {
+      if (this._replayNext("p")) {
+        this._record(["p"]);
+        return Promise.resolve();
+      }
       if (this.autoHuman) return Promise.resolve();
       if (this._prepared) {
         this._prepared = false;
+        this._record(["p"]);
         return Promise.resolve();
       }
       return new Promise((resolve) => {
@@ -14082,16 +14199,23 @@
         const fin = () => {
           if (done) return;
           done = true;
+          if (fin.timer) clearTimeout(fin.timer);
+          if (this._prepareWaiter === fin) this._prepareWaiter = null;
           this._prepared = false;
+          if (!this.finished) this._record(["p"]);
           resolve();
         };
+        fin.timeoutMs = timeoutMs;
         this._prepareWaiter = fin;
-        setTimeout(() => {
-          if (done) return;
-          this.log && this.log("[riichi] \u7B49 ReqPrepare \u8D85\u65F6\uFF0C\u81EA\u884C\u5F00\u5C40");
-          fin();
-        }, timeoutMs);
+        if (this.humanPresent) this._armPrepareTimer(fin);
       });
+    }
+    _armPrepareTimer(fin) {
+      fin.timer = setTimeout(() => {
+        fin.timer = null;
+        this.log && this.log("[riichi] \u7B49 ReqPrepare \u8D85\u65F6\uFF0C\u81EA\u884C\u5F00\u5C40");
+        fin();
+      }, fin.timeoutMs);
     }
     _d(ms) {
       return this.speed > 0 ? sleep(ms * this.speed) : Promise.resolve();
@@ -15506,6 +15630,9 @@
     aiLevelOf(seat) {
       return this.aiLevels?.[seat] || "intermediate";
     }
+    styleRngOf(seat) {
+      return this._styleRngs?.[seat] || null;
+    }
     aiTurn(seat, drew, can, cantPlays = []) {
       const level = this.aiLevelOf(seat);
       const p = this.players[seat];
@@ -15581,7 +15708,9 @@
     aiWantsKan(p, danger = null) {
       const scores = this.players.map((player) => player.score);
       const leading = p.score === Math.max(...scores);
-      if (danger || this.isAllLast() && leading) return false;
+      if (danger) return false;
+      if (resolveStyle(this, p.seat).kan) return true;
+      if (this.isAllLast() && leading) return false;
       if (p.riichi) return true;
       const shanten = this.currentShanten(p);
       const dora = p.hand.filter((tile) => this.doraKinds().has(kindOf2(tile)) || this.akaSet.has(tile)).length;
@@ -15649,7 +15778,7 @@
       if (kind === "pon" && this.isYakuhaiKind(p, kindOf2(card))) return true;
       const doraKinds = this.doraKinds();
       const dora = p.hand.filter((tile) => doraKinds.has(kindOf2(tile)) || this.akaSet.has(tile)).length;
-      return current <= 2 || dora >= 2;
+      return current <= resolveStyle(this, p.seat).callReach || dora >= 2;
     }
     shantenAfterClaim(p, card, kind, chiTiles = null) {
       const hand = p.hand.slice();
@@ -15707,7 +15836,9 @@
     }
     setHumanAutoplay(enabled) {
       this.autoHuman = !!enabled;
-      if (!this.autoHuman || !this._pending) return;
+      if (!this.autoHuman) return;
+      if (this._prepareWaiter) this._prepareWaiter();
+      if (!this._pending) return;
       const pending = this._pending;
       this.resolveHumanPending(pending, this.timeoutHumanAction(pending.kind));
     }
@@ -15746,9 +15877,28 @@
       if (pending.kind === "draw") this._expectedDraw = null;
       else this._expectedClaim = null;
       this._pending = null;
+      const applied = {};
+      for (const key of ["action", "card", "otherCards"]) if (payload?.[key] != null) applied[key] = payload[key];
+      this._record([pending.kind === "draw" ? "d" : "c", applied, player.timeBank]);
       pending.resolve(payload || {});
     }
+    _armHumanTimer(pending) {
+      const player = this.players[0];
+      const timeoutMs = Math.max(0, this.baseTime + player.timeBank) * 1e3;
+      pending.timer = setTimeout(() => {
+        const payload = this.timeoutHumanAction(pending.kind);
+        this.resolveHumanPending(pending, payload);
+      }, timeoutMs);
+    }
     waitHuman(kind) {
+      const replayed = this._replayNext(kind === "draw" ? "d" : "c");
+      if (replayed) {
+        if (kind === "draw") this._expectedDraw = null;
+        else this._expectedClaim = null;
+        this.players[0].timeBank = replayed[2];
+        this._record(replayed);
+        return Promise.resolve({ ...replayed[1] });
+      }
       return new Promise((resolve) => {
         const pending = { kind, resolve, startedAt: Date.now(), timer: null };
         this._pending = pending;
@@ -15764,19 +15914,19 @@
           queueMicrotask(() => this.resolveHumanPending(pending, payload));
           return;
         }
-        const player = this.players[0];
-        const timeoutMs = Math.max(0, this.baseTime + player.timeBank) * 1e3;
-        pending.timer = setTimeout(() => {
-          const payload = this.timeoutHumanAction(kind);
-          this.resolveHumanPending(pending, payload);
-        }, timeoutMs);
-        if (this.automaticHumanAction(kind)) {
-          queueMicrotask(() => {
-            if (this._pending !== pending) return;
-            const automatic = this.automaticHumanAction(kind);
-            if (automatic) this.resolveHumanPending(pending, automatic);
-          });
+        if (this.humanPresent) {
+          this._armHumanTimer(pending);
+          this._queueAutomatic(pending);
         }
+      });
+    }
+    /** Run the client-authorized auto action (tsumogiri / no-call) for a pending human wait, if one still applies. */
+    _queueAutomatic(pending) {
+      if (!this.automaticHumanAction(pending.kind)) return;
+      queueMicrotask(() => {
+        if (this._pending !== pending || !this.humanPresent) return;
+        const automatic = this.automaticHumanAction(pending.kind);
+        if (automatic) this.resolveHumanPending(pending, automatic);
       });
     }
     submitDraw(payload) {
@@ -15813,6 +15963,10 @@
       const resolve = this._pending.resolve;
       this._pending = null;
       resolve({});
+    }
+    /** Record for reload recovery, in the form accepted back as opts.replayLog. */
+    matchRecord() {
+      return this.humanLog.map((entry) => entry.slice());
     }
     // Debug snapshot
     snapshot() {
@@ -19172,8 +19326,15 @@
       settings: {
         internalState: { 0: true, 1: false, 2: false, 3: false, 4: false, 5: false }
       },
-      lobbyData: null
+      lobbyData: null,
+      // Unfinished match { v, table, log, lastSeen } (see profile_host.mjs recoverMatch), and a one-time message for the player.
+      activeMatch: null,
+      notice: null
     };
+  }
+  function normalizeActiveMatch(value) {
+    if (!value || typeof value !== "object" || !value.table || typeof value.table !== "object" || !Array.isArray(value.log)) return null;
+    return { ...value, lastSeen: Number(value.lastSeen) || 0 };
   }
   function normalizeStats(value, players) {
     const defaults = emptyStats(players);
@@ -19213,7 +19374,9 @@
         ...defaults.settings,
         ...profile.settings,
         internalState: { ...defaults.settings.internalState, ...profile.settings?.internalState }
-      }
+      },
+      activeMatch: normalizeActiveMatch(profile.activeMatch),
+      notice: typeof profile.notice === "string" ? profile.notice : null
     };
   }
   function sanitizeNickname(value) {
@@ -19280,6 +19443,7 @@
     "Legend",
     "Legend+"
   ];
+  var AWAY_LIMIT_MS = 5 * 6e4;
   var MAX_ITEM_COUNT = 2147483647;
   var MAX_RANK_POINT = 999999;
   var RANK_MODES = { yonma: "yonmaRanks", sanma: "sanmaRanks" };
@@ -19319,6 +19483,9 @@
     }
     function attach(sess) {
       session = sess;
+      return wire(sess);
+    }
+    function wire(sess) {
       sess.localProfile = profile;
       sess.internalState = { ...profile.settings.internalState };
       sess.onNicknameChange = (nickname) => {
@@ -19347,7 +19514,47 @@
         return result;
       };
       sess.onMatchFinish = () => persist();
+      sess.onMatchRecord = (record) => {
+        profile.activeMatch = record ? { ...record, lastSeen: profile.activeMatch?.lastSeen || Date.now() } : null;
+        persist();
+      };
       return sess;
+    }
+    function touch(now = Date.now()) {
+      if (profile.activeMatch) profile.activeMatch.lastSeen = now;
+    }
+    async function settleAway(record) {
+      const sess = wire(mock.createSession());
+      let outcome = null;
+      const onFinalResult = sess.onFinalResult;
+      sess.onFinalResult = (scores, engine) => outcome = onFinalResult(scores, engine);
+      try {
+        await mock.restoreMatch(sess, record, { finish: true });
+      } catch (error) {
+        log(`[local] \u65E0\u6CD5\u7528\u5BF9\u5C40\u8BB0\u5F55\u5B8C\u6210\u4E0A\u4E00\u573A\u6BD4\u8D5B\uFF0C\u5DF2\u4E22\u5F03\uFF1A${error.message}`);
+      }
+      profile.activeMatch = null;
+      const ordinal = (n) => n + ([, "st", "nd", "rd"][n] || "th");
+      profile.notice = outcome ? `You were away for more than 5 minutes, so the AI finished your last match: ${ordinal(outcome.placement)} place, ${outcome.rank.change >= 0 ? "+" : ""}${outcome.rank.change} PT, +${outcome.coins} coins.` : "You were away for more than 5 minutes, so the AI finished your last match.";
+      log(`[local] ${profile.notice}`);
+      await persist(true);
+      return { settled: true, notice: profile.notice };
+    }
+    async function recoverMatch({ session: target = null, maxAgeMs = AWAY_LIMIT_MS, now = Date.now() } = {}) {
+      const record = profile.activeMatch;
+      if (!record) return null;
+      const age = Math.max(0, now - record.lastSeen);
+      if (age > maxAgeMs) return settleAway(record);
+      if (!target) return null;
+      try {
+        const ready = mock.restoreMatch(target, record);
+        return { restored: true, remainingMs: maxAgeMs - age, ready };
+      } catch (error) {
+        log(`[local] \u5BF9\u5C40\u8BB0\u5F55\u65E0\u6CD5\u6062\u590D\uFF0C\u5DF2\u4E22\u5F03\uFF1A${error.message}`);
+        profile.activeMatch = null;
+        persist();
+        return null;
+      }
     }
     function inMatch() {
       return !!(session && (session.tableId || session.matchTimer || session.liveMatch()));
@@ -19362,7 +19569,8 @@
         rankNames: RANK_NAMES2.slice(0, ECONOMY_CATALOG.yonmaRanks.length),
         items: EDITABLE_ITEMS.map((item) => ({ ...item, count: mock.userdata.inventoryCount(6, item.id) })),
         games: { yonma: profile.stats.yonma.games, sanma: profile.stats.sanma.games },
-        inMatch: inMatch()
+        inMatch: inMatch(),
+        notice: profile.notice
       };
     }
     function edit(changes) {
@@ -19425,27 +19633,106 @@
         resetStats();
         return state();
       },
+      // An imported save never resumes the match it may have been exported in.
       import: (request) => {
-        replace(request.profile);
+        const next = request.profile;
+        replace(next && typeof next === "object" && !Array.isArray(next) ? { ...next, activeMatch: null } : next);
         return state();
       },
       reset: () => {
         replace(createDefaultProfile());
         return state();
+      },
+      dismissNotice: () => {
+        profile.notice = null;
+        return state();
       }
     };
     const READ_ONLY = /* @__PURE__ */ new Set(["state", "export"]);
+    const ALLOWED_IN_MATCH = /* @__PURE__ */ new Set(["state", "export", "dismissNotice"]);
     async function handle(request) {
       const action = ACTIONS[request?.action];
       if (!action) throw new RangeError("Unknown action");
-      if (!READ_ONLY.has(request.action) && inMatch()) throw new Error("Finish or leave the current match first");
+      if (!ALLOWED_IN_MATCH.has(request.action) && inMatch()) throw new Error("Finish or leave the current match first");
       const result = action(request);
       if (!READ_ONLY.has(request.action)) await persist(true);
       return result;
     }
-    return { load, snapshot, attach, handle, get session() {
+    return { load, snapshot, attach, handle, touch, recoverMatch, get session() {
       return session;
     } };
+  }
+
+  // mockjs/npc_roster.mjs
+  var npc_roster_exports = {};
+  __export(npc_roster_exports, {
+    NPCS: () => NPCS,
+    NPC_UID_BASE: () => NPC_UID_BASE,
+    npcById: () => npcById,
+    pickNpcs: () => pickNpcs
+  });
+  init_process_shim();
+  var NPCS = [
+    { id: 1, nick: "Saki", warrior: 8, skin: 8001, head: 1017, style: { attack: 3, call: 2, riichi: 3, value: 3, jitter: "mid", trait: "kan" } },
+    { id: 2, nick: "Nodoka", warrior: 10, skin: 10001, head: 1019, style: { attack: 3, call: 3, riichi: 3, value: 3, jitter: "low" } },
+    { id: 3, nick: "Yuuki", warrior: 2, skin: 2001, head: 1002, style: { attack: 4, call: 4, riichi: 3, value: 1, jitter: "mid", trait: "east" } },
+    { id: 4, nick: "Mako", warrior: 4, skin: 3704002, head: 1010, style: { attack: 2, call: 3, riichi: 3, value: 3, jitter: "low" } },
+    { id: 5, nick: "Hisa", warrior: 5, skin: 5001, head: 1005, style: { attack: 4, call: 2, riichi: 5, value: 3, jitter: "high" } },
+    { id: 6, nick: "Koromo", warrior: 2, skin: 3702002, head: 1007, style: { attack: 5, call: 3, riichi: 4, value: 4, jitter: "mid", trait: "late" } },
+    { id: 7, nick: "Teru", warrior: 4, skin: 4001, head: 1004, style: { attack: 4, call: 2, riichi: 4, value: 4, jitter: "low", trait: "dealer" } },
+    { id: 8, nick: "Momo", warrior: 1, skin: 1001, head: 1001, style: { attack: 3, call: 2, riichi: 1, value: 3, jitter: "mid" } },
+    { id: 9, nick: "Kana", warrior: 9, skin: 9001, head: 1011, style: { attack: 5, call: 3, riichi: 4, value: 2, jitter: "high" } },
+    { id: 10, nick: "Mihoko", warrior: 1, skin: 3701002, head: 1009, style: { attack: 1, call: 3, riichi: 2, value: 3, jitter: "low" } },
+    { id: 11, nick: "Toki", warrior: 6, skin: 6001, head: 1006, style: { attack: 2, call: 2, riichi: 3, value: 3, jitter: "low" } },
+    { id: 12, nick: "Sumire", warrior: 6, skin: 3706002, head: 1013, style: { attack: 4, call: 1, riichi: 2, value: 4, jitter: "low" } },
+    { id: 13, nick: "Awai", warrior: 5, skin: 3705002, head: 1012, style: { attack: 5, call: 1, riichi: 5, value: 5, jitter: "mid" } },
+    { id: 14, nick: "Kuro", warrior: 7, skin: 7001, head: 1015, style: { attack: 4, call: 3, riichi: 3, value: 5, jitter: "mid", trait: "dora" } },
+    { id: 15, nick: "Shiro", warrior: 8, skin: 3708002, head: 1018, style: { attack: 3, call: 1, riichi: 3, value: 5, jitter: "high" } },
+    { id: 16, nick: "Toyone", warrior: 9, skin: 3709002, head: 1014, style: { attack: 5, call: 2, riichi: 5, value: 3, jitter: "mid", trait: "chase" } },
+    { id: 17, nick: "Yumi", warrior: 7, skin: 3707002, head: 1016, style: { attack: 3, call: 3, riichi: 3, value: 3, jitter: "low", trait: "placement" } },
+    { id: 18, nick: "Akagi", warrior: 3, skin: 3001, head: 1003, style: { attack: 5, call: 2, riichi: 2, value: 4, jitter: "high" } },
+    { id: 19, nick: "Tetsuya", warrior: 3, skin: 3703002, head: 1008, style: { attack: 3, call: 3, riichi: 3, value: 4, jitter: "low" } }
+  ];
+  var NPC_UID_BASE = 1e4;
+  var BANG_POOL = [140001, 140002, 140003, 140004, 140006, 140007, 140009];
+  function levelRange(roomId, humanLevel) {
+    const lv = Math.max(1, Math.trunc(Number(humanLevel)) || 1);
+    let lo = Math.max(1, lv - 2), hi = Math.min(22, lv + 2);
+    const room = ECONOMY_CATALOG.dojos.find((d) => d.id === Number(roomId));
+    if (room) {
+      lo = Math.max(lo, room.minRank);
+      hi = Math.min(hi, room.maxRank);
+      if (lo > hi) [lo, hi] = [room.minRank, room.maxRank];
+    }
+    return [lo, hi];
+  }
+  function npcById(id) {
+    return NPCS.find((npc) => npc.id === Number(id)) || null;
+  }
+  function pickNpcs(rng, { count, humanWarrior, roomId = null, humanLevel = 1 }) {
+    const pool = NPCS.filter((npc) => npc.warrior !== Number(humanWarrior));
+    const picked = [];
+    const used = /* @__PURE__ */ new Set();
+    while (picked.length < count && pool.length) {
+      const npc = pool.splice(Math.floor(rng() * pool.length), 1)[0];
+      if (used.has(npc.warrior)) continue;
+      used.add(npc.warrior);
+      const [lo, hi] = levelRange(roomId, humanLevel);
+      picked.push({
+        npc: npc.id,
+        uid: NPC_UID_BASE + npc.id,
+        nick: npc.nick,
+        head: npc.head,
+        frame: 2001,
+        title: 3001,
+        bang: BANG_POOL[Math.floor(rng() * BANG_POOL.length)],
+        warrior: npc.warrior,
+        skin: npc.skin,
+        level: lo + Math.floor(rng() * (hi - lo + 1)),
+        pt: Math.floor(rng() * 60)
+      });
+    }
+    return picked;
   }
 
   // mockjs/browser_entry.mjs
@@ -19489,11 +19776,23 @@
         autoHuman: opts.autoHuman != null ? opts.autoHuman : false,
         // AI difficulty: intermediate / advanced (decided per room by the server)
         aiLevel: opts.aiLevel,
+        // Per-seat NPC play styles (seat 0 = player, null)
+        aiStyles: opts.aiStyles || null,
         // The current player's warrior affinity level: display only on the settlement panel, never changes it
         selfLoveLevel: opts.selfLoveLevel || 0,
         // Seat → real userID; must exactly match the table uids sent in 20408/20014
-        uids: opts.uids || null
+        uids: opts.uids || null,
+        // Reload recovery: saved human-decision log to replay, and whether the player is connected
+        replayLog: opts.replayLog || null,
+        humanPresent: opts.humanPresent !== false
       };
+      this.onRecord = opts.onRecord || (() => {
+      });
+      let replayDone;
+      this.replayDone = new Promise((resolve) => {
+        replayDone = resolve;
+      });
+      this._replayDone = replayDone;
       this.onFrame = opts.onFrame || (() => {
       });
       this.onFinish = opts.onFinish || (() => {
@@ -19552,7 +19851,19 @@
         uids: o.uids,
         autoHuman: o.autoHuman,
         aiLevel: o.aiLevel,
+        aiStyles: o.aiStyles,
         selfLoveLevel: o.selfLoveLevel,
+        replayLog: o.replayLog,
+        humanPresent: o.humanPresent,
+        // While replaying, the saved record is still the complete one; publish again only once the replay has caught up.
+        onRecord: () => {
+          if (!eng.replaying) this.onRecord(eng.matchRecord());
+        },
+        onReplayDone: (clean) => {
+          this.onRecord(eng.matchRecord());
+          this.log("[riichi] " + (clean ? "\u5BF9\u5C40\u8BB0\u5F55\u91CD\u6F14\u5B8C\u6210" : "\u5BF9\u5C40\u8BB0\u5F55\u91CD\u6F14\u5206\u53C9\uFF0C\u5DF2\u6309\u5F53\u524D\u5C40\u9762\u7EE7\u7EED"));
+          this._replayDone(clean);
+        },
         onFinalResult: (scores, engine, humanWin) => this.onFinalResult(scores, engine, humanWin),
         // false = human at seat 0, true = AI plays for them (for testing)
         emit: (ev, payload) => this.send(ev, payload),
@@ -19563,6 +19874,11 @@
         }
       });
       this.engine = eng;
+      eng.log = (s) => this.log(s);
+      if (!o.replayLog) {
+        this._replayDone(true);
+        this.onRecord(eng.matchRecord());
+      }
       this.log("[riichi] \u65B0\u5BF9\u5C40 players=" + o.players + " seed=" + seed + " maxHands=" + o.maxHands);
       eng.start().catch((e) => this.log("[riichi] \u5F15\u64CE\u5F02\u5E38: " + (e && e.stack || e)));
       return eng;
@@ -19661,6 +19977,7 @@
   var _MJ = _g.__mj || (_g.__mj = {});
   _MJ.shop = shop_exports;
   _MJ.oneRound = one_round_exports;
+  _MJ.npc = npc_roster_exports;
   _MJ.host = { createProfileHost, createDefaultProfile, normalizeProfile };
   _MJ.riichi = {
     RiichiSession,

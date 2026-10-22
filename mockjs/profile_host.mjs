@@ -18,6 +18,8 @@ export const EDITABLE_ITEMS = [
 // LanguageTbUIEN names of Rank2*CfgTb; level 11 is shown as "Novice" there, but it is 初段 (1st Dan).
 export const RANK_NAMES = ['Novice', 'D3', 'D2', 'D1', 'C2', 'C1', 'B2', 'B1', 'A2', 'A1', '1st Dan', '2nd Dan', '3rd Dan',
   '4th Dan', '5th Dan', '6th Dan', '7th Dan', '8th Dan', '9th Dan', '10th Dan', 'Legend', 'Legend+'];
+// A disconnected player's table waits this long; after that the AI finishes the match and it counts as played.
+export const AWAY_LIMIT_MS = 5 * 60_000;
 const MAX_ITEM_COUNT = 2_147_483_647;
 const MAX_RANK_POINT = 999_999;
 const RANK_MODES = { yonma: 'yonmaRanks', sanma: 'sanmaRanks' };
@@ -70,6 +72,10 @@ export function createProfileHost(mock, profile, { persist, log = () => {} }) {
 
   function attach(sess) {
     session = sess;
+    return wire(sess);
+  }
+
+  function wire(sess) {
     sess.localProfile = profile;
     sess.internalState = { ...profile.settings.internalState };
     sess.onNicknameChange = (nickname) => {
@@ -100,7 +106,61 @@ export function createProfileHost(mock, profile, { persist, log = () => {} }) {
       return result;
     };
     sess.onMatchFinish = () => persist();
+    // Keep the unfinished match in the save so a reload or restart can rebuild it (lastSeen moves only with touch()).
+    sess.onMatchRecord = (record) => {
+      profile.activeMatch = record ? { ...record, lastSeen: profile.activeMatch?.lastSeen || Date.now() } : null;
+      persist();
+    };
     return sess;
+  }
+
+  /** The player is here (any client message); the away clock of a saved match counts from the last call. */
+  function touch(now = Date.now()) {
+    if (profile.activeMatch) profile.activeMatch.lastSeen = now;
+  }
+
+  /** Play a saved match out with the AI in a detached session and leave a notice for the player. */
+  async function settleAway(record) {
+    const sess = wire(mock.createSession());
+    let outcome = null;
+    const onFinalResult = sess.onFinalResult;
+    sess.onFinalResult = (scores, engine) => (outcome = onFinalResult(scores, engine));
+    try {
+      await mock.restoreMatch(sess, record, { finish: true });
+    } catch (error) {
+      log(`[local] 无法用对局记录完成上一场比赛，已丢弃：${error.message}`);
+    }
+    profile.activeMatch = null;
+    const ordinal = (n) => n + ([, 'st', 'nd', 'rd'][n] || 'th');
+    profile.notice = outcome
+      ? `You were away for more than 5 minutes, so the AI finished your last match: ${ordinal(outcome.placement)} place, `
+        + `${outcome.rank.change >= 0 ? '+' : ''}${outcome.rank.change} PT, +${outcome.coins} coins.`
+      : 'You were away for more than 5 minutes, so the AI finished your last match.';
+    log(`[local] ${profile.notice}`);
+    await persist(true);
+    return { settled: true, notice: profile.notice };
+  }
+
+  /**
+   * Recover the saved unfinished match. Away longer than maxAgeMs: the AI finishes it now (no session needed).
+   * Otherwise, with a session: rebuild it there, frozen on the player's turn until the client re-syncs the table.
+   * Returns null (nothing to do), { settled, notice } or { restored, remainingMs, ready }.
+   */
+  async function recoverMatch({ session: target = null, maxAgeMs = AWAY_LIMIT_MS, now = Date.now() } = {}) {
+    const record = profile.activeMatch;
+    if (!record) return null;
+    const age = Math.max(0, now - record.lastSeen);
+    if (age > maxAgeMs) return settleAway(record);
+    if (!target) return null;
+    try {
+      const ready = mock.restoreMatch(target, record);
+      return { restored: true, remainingMs: maxAgeMs - age, ready };
+    } catch (error) {
+      log(`[local] 对局记录无法恢复，已丢弃：${error.message}`);
+      profile.activeMatch = null;
+      persist();
+      return null;
+    }
   }
 
   function inMatch() {
@@ -118,6 +178,7 @@ export function createProfileHost(mock, profile, { persist, log = () => {} }) {
       items: EDITABLE_ITEMS.map((item) => ({ ...item, count: mock.userdata.inventoryCount(6, item.id) })),
       games: { yonma: profile.stats.yonma.games, sanma: profile.stats.sanma.games },
       inMatch: inMatch(),
+      notice: profile.notice,
     };
   }
 
@@ -180,20 +241,27 @@ export function createProfileHost(mock, profile, { persist, log = () => {} }) {
     export: () => snapshot(),
     edit: (request) => { edit(request.changes || {}); return state(); },
     resetStats: () => { resetStats(); return state(); },
-    import: (request) => { replace(request.profile); return state(); },
+    // An imported save never resumes the match it may have been exported in.
+    import: (request) => {
+      const next = request.profile;
+      replace(next && typeof next === 'object' && !Array.isArray(next) ? { ...next, activeMatch: null } : next);
+      return state();
+    },
     reset: () => { replace(createDefaultProfile()); return state(); },
+    dismissNotice: () => { profile.notice = null; return state(); },
   };
   const READ_ONLY = new Set(['state', 'export']);
+  const ALLOWED_IN_MATCH = new Set(['state', 'export', 'dismissNotice']);
 
   /** Save editor entry used by both hosts: { action, changes?, profile? } -> result. Writes are refused during a match. */
   async function handle(request) {
     const action = ACTIONS[request?.action];
     if (!action) throw new RangeError('Unknown action');
-    if (!READ_ONLY.has(request.action) && inMatch()) throw new Error('Finish or leave the current match first');
+    if (!ALLOWED_IN_MATCH.has(request.action) && inMatch()) throw new Error('Finish or leave the current match first');
     const result = action(request);
     if (!READ_ONLY.has(request.action)) await persist(true);
     return result;
   }
 
-  return { load, snapshot, attach, handle, get session() { return session; } };
+  return { load, snapshot, attach, handle, touch, recoverMatch, get session() { return session; } };
 }

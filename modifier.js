@@ -30,7 +30,12 @@
     '#mj-mod button:disabled{opacity:.4;cursor:default}',
     '#mj-mod .close{border:0;background:none;color:#aaa;font-size:18px;line-height:1;cursor:pointer}',
     '#mj-mod .note{margin:6px 0 0;color:#9aa4b2;font-size:12px}',
-    '#mj-mod .msg{margin:8px 0 0;min-height:1em;color:#e8d9a8}#mj-mod .msg.error{color:#ff8a80}'
+    '#mj-mod .msg{margin:8px 0 0;min-height:1em;color:#e8d9a8}#mj-mod .msg.error{color:#ff8a80}',
+    // One-time host notice, e.g. a match the AI finished while the player was away.
+    '#mj-notice{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:2147483647;display:flex;gap:12px;',
+    'align-items:center;max-width:min(560px,90vw);box-sizing:border-box;padding:10px 14px;border-radius:8px;',
+    'background:rgba(20,24,32,.94);color:#eee;font:13px/1.4 system-ui,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.5)}',
+    '#mj-notice button{flex:none;padding:5px 12px;border:0;border-radius:5px;background:#b8862b;color:#fff;font:inherit;cursor:pointer}'
   ].join('');
 
   var HTML = [
@@ -200,6 +205,27 @@
         setBusy(false);
       });
     });
+
+    function showNotice(text) {
+      var box = document.createElement('div');
+      box.id = 'mj-notice';
+      box.setAttribute('role', 'status');
+      var span = document.createElement('span');
+      span.textContent = text;
+      var ok = document.createElement('button');
+      ok.type = 'button';
+      ok.textContent = 'OK';
+      ok.addEventListener('click', function () {
+        box.remove();
+        host.request({ action: 'dismissNotice' }).catch(function () {});
+      });
+      box.appendChild(span);
+      box.appendChild(ok);
+      document.body.appendChild(box);
+    }
+    host.ready.then(function () { return host.request({ action: 'state' }); }).then(function (state) {
+      if (state && state.notice) showNotice(state.notice);
+    }).catch(function () {});
 
     $('.import').addEventListener('click', function () { fileInput.click(); });
     fileInput.addEventListener('change', function () {

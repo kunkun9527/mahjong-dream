@@ -7,6 +7,7 @@ import * as oneRound from './one_round.mjs';
 import { buildRiichiReloadScene } from './riichi_reload.mjs';
 import { createProfileHost } from './profile_host.mjs';
 import { createDefaultProfile, normalizeProfile } from './profile.mjs';
+import * as npc from './npc_roster.mjs';
 
 var MSG_NAME = {
   1: "ReqPrepare",
@@ -48,11 +49,22 @@ var RiichiSession = class {
       autoHuman: opts.autoHuman != null ? opts.autoHuman : false,
       // AI difficulty: intermediate / advanced (decided per room by the server)
       aiLevel: opts.aiLevel,
+      // Per-seat NPC play styles (seat 0 = player, null)
+      aiStyles: opts.aiStyles || null,
       // The current player's warrior affinity level: display only on the settlement panel, never changes it
       selfLoveLevel: opts.selfLoveLevel || 0,
       // Seat → real userID; must exactly match the table uids sent in 20408/20014
-      uids: opts.uids || null
+      uids: opts.uids || null,
+      // Reload recovery: saved human-decision log to replay, and whether the player is connected
+      replayLog: opts.replayLog || null,
+      humanPresent: opts.humanPresent !== false
     };
+    // Called with the full record after every human decision (and once when the engine starts)
+    this.onRecord = opts.onRecord || (() => {
+    });
+    let replayDone;
+    this.replayDone = new Promise((resolve) => { replayDone = resolve; });
+    this._replayDone = replayDone;
     this.onFrame = opts.onFrame || (() => {
     });
     this.onFinish = opts.onFinish || (() => {
@@ -113,7 +125,19 @@ var RiichiSession = class {
       uids: o.uids,
       autoHuman: o.autoHuman,
       aiLevel: o.aiLevel,
+      aiStyles: o.aiStyles,
       selfLoveLevel: o.selfLoveLevel,
+      replayLog: o.replayLog,
+      humanPresent: o.humanPresent,
+      // While replaying, the saved record is still the complete one; publish again only once the replay has caught up.
+      onRecord: () => {
+        if (!eng.replaying) this.onRecord(eng.matchRecord());
+      },
+      onReplayDone: (clean) => {
+        this.onRecord(eng.matchRecord());
+        this.log("[riichi] " + (clean ? "对局记录重演完成" : "对局记录重演分叉，已按当前局面继续"));
+        this._replayDone(clean);
+      },
       onFinalResult: (scores, engine, humanWin) => this.onFinalResult(scores, engine, humanWin),
       // false = human at seat 0, true = AI plays for them (for testing)
       emit: (ev, payload) => this.send(ev, payload),
@@ -124,6 +148,11 @@ var RiichiSession = class {
       }
     });
     this.engine = eng;
+    eng.log = (s) => this.log(s);
+    if (!o.replayLog) {
+      this._replayDone(true);
+      this.onRecord(eng.matchRecord());
+    }
     this.log("[riichi] \u65B0\u5BF9\u5C40 players=" + o.players + " seed=" + seed + " maxHands=" + o.maxHands);
     eng.start().catch((e) => this.log("[riichi] \u5F15\u64CE\u5F02\u5E38: " + (e && e.stack || e)));
     return eng;
@@ -222,6 +251,7 @@ var _g = typeof window !== "undefined" ? window : globalThis;
 var _MJ = _g.__mj || (_g.__mj = {});
 _MJ.shop = shop;
 _MJ.oneRound = oneRound;
+_MJ.npc = npc;
 // Used by web-host.js when the page runs without the Node service.
 _MJ.host = { createProfileHost, createDefaultProfile, normalizeProfile };
 _MJ.riichi = {

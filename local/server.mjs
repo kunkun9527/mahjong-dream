@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
 
 import { loadProfile, saveProfile } from './profile.mjs';
-import { createProfileHost } from '../mockjs/profile_host.mjs';
+import { createProfileHost, AWAY_LIMIT_MS } from '../mockjs/profile_host.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const requiredResources = ['index.html', 'game.html', 'Build_intl/mj-h5.loader.js',
@@ -53,6 +53,27 @@ const profileHost = createProfileHost(mock, profile, {
 // The grant and the completion marker must be persisted together before serving; a failed write must not pretend the upgrade succeeded.
 if (profileHost.load()) await saveProfile(userdataDirectory, profileHost.snapshot());
 const session = profileHost.attach(mock.createSession());
+
+// The table freezes on the player's decision while the page is away; after AWAY_LIMIT_MS the neutral AI takes the seat
+// and finishes the match at once, and it counts as played.
+let awayTimer = null;
+function armAwayTimer(ms) {
+  clearTimeout(awayTimer);
+  awayTimer = setTimeout(() => {
+    awayTimer = null;
+    const engine = session.riichi?.engine;
+    if (activeSocket || !engine || session.riichi.matchOver) return;
+    engine.speed = 0;
+    engine.setHumanAutoplay(true);
+    console.log('[local] 玩家离开超过 %d 分钟，AI 已代打并完成本场比赛', AWAY_LIMIT_MS / 60_000);
+  }, Math.max(0, ms));
+}
+// A match left unfinished by the previous run: finish it if the player has been away too long, otherwise rebuild it frozen.
+const recovered = await profileHost.recoverMatch({ session });
+if (recovered?.restored) {
+  armAwayTimer(recovered.remainingMs);
+  console.log('[local] 已恢复上次未完成的对局，等待玩家重连');
+}
 
 const MIME = new Map([
   ['.html', 'text/html; charset=utf-8'],
@@ -190,10 +211,6 @@ const server = http.createServer((request, response) => {
 
 const websocketServer = new WebSocketServer({ noServer: true, maxPayload: 2 * 1024 * 1024 });
 let activeSocket = null;
-// After a disconnect, the AI plays on at normal speed for a while to leave a window for same-process reconnect (20163.f100 snapshot restore);
-// if the player still has not returned after the timeout, speed up to finish the current match.
-const RECONNECT_GRACE_MS = 60_000;
-let fastForwardTimer = null;
 
 function applyGameOptions(requestUrl) {
   const url = new URL(requestUrl, 'http://127.0.0.1');
@@ -241,12 +258,10 @@ websocketServer.on('connection', (websocket) => {
     },
   };
   session.resume(adapter);
-  clearTimeout(fastForwardTimer);
-  fastForwardTimer = null;
-  if (session.riichi?.engine) {
-    session.riichi.engine.speed = mock.config.speed;
-    session.riichi.engine.setHumanAutoplay(false);
-  }
+  clearTimeout(awayTimer);
+  awayTimer = null;
+  // The frozen turn resumes its clock once the client has re-synced the table (mock/server.js playerBack).
+  profileHost.touch();
   console.log('[local] 游戏页面已连接');
 
   websocket.on('message', (data, isBinary) => {
@@ -256,6 +271,7 @@ websocketServer.on('connection', (websocket) => {
       recentRequests.push(Number(globalThis.__mj.proto.dict(new Uint8Array(data))[2]) || 0);
       if (recentRequests.length > 12) recentRequests.shift();
     } catch { /* Diagnostic parse failures must not change the original dispatch behavior */ }
+    profileHost.touch();
     const frames = mock.dispatch(session, new Uint8Array(data));
     for (const frame of frames) adapter._deliver(frame);
     persistSoon();
@@ -280,15 +296,11 @@ websocketServer.on('connection', (websocket) => {
       session.table = null;
     }
     session.suspend();
+    profileHost.touch();
     if (session.riichi?.engine && !session.riichi.matchOver) {
-      const engine = session.riichi.engine;
-      engine.setHumanAutoplay(true);
-      clearTimeout(fastForwardTimer);
-      fastForwardTimer = setTimeout(() => {
-        fastForwardTimer = null;
-        if (session.riichi?.engine === engine && !activeSocket) engine.speed = 0;
-      }, RECONNECT_GRACE_MS);
-      console.log('[local] 页面断开，AI 已接管真人席；%d 秒内未重连则快速完成当前比赛', RECONNECT_GRACE_MS / 1000);
+      session.riichi.engine.setHumanPresent(false);
+      armAwayTimer(AWAY_LIMIT_MS);
+      console.log('[local] 页面断开，牌桌停在你的回合；%d 分钟内未重连则由 AI 代打完成本场', AWAY_LIMIT_MS / 60_000);
     } else {
       console.log('[local] 游戏页面已断开');
     }

@@ -81,7 +81,15 @@ export function createDefaultProfile() {
       internalState: { 0: true, 1: false, 2: false, 3: false, 4: false, 5: false },
     },
     lobbyData: null,
+    // Unfinished match { v, table, log, lastSeen } (see profile_host.mjs recoverMatch), and a one-time message for the player.
+    activeMatch: null,
+    notice: null,
   };
+}
+
+function normalizeActiveMatch(value) {
+  if (!value || typeof value !== 'object' || !value.table || typeof value.table !== 'object' || !Array.isArray(value.log)) return null;
+  return { ...value, lastSeen: Number(value.lastSeen) || 0 };
 }
 
 function normalizeStats(value, players) {
@@ -125,6 +133,8 @@ export function normalizeProfile(value) {
       ...profile.settings,
       internalState: { ...defaults.settings.internalState, ...profile.settings?.internalState },
     },
+    activeMatch: normalizeActiveMatch(profile.activeMatch),
+    notice: typeof profile.notice === 'string' ? profile.notice : null,
   };
 }
 

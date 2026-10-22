@@ -1,6 +1,6 @@
 import { tileId, decodeId, toRiichi, doraFromIndicator, buildWall, shuffle, tileName } from './tiles.mjs';
 import { tileIndex, indexToTileId, countsOf, shantenOfCounts, waitsOfCounts, discardOptionsOfCounts } from './shanten.mjs';
-import { normalizeAiLevel, chooseDiscardByPolicy, shouldFoldHand, claimPolicy, riichiPolicy, createDecisionBudget } from './riichi_ai_policy.mjs';
+import { normalizeAiLevel, resolveStyle, chooseDiscardByPolicy, shouldFoldHand, claimPolicy, riichiPolicy, createDecisionBudget } from './riichi_ai_policy.mjs';
 import { kindOf, concealedStr, realMelds, furoGroupStr, furoStr, handStr, calcWin, handShanten, handWaits, chooseDiscard, pickIdFromHand, discardSecondaryScore } from './ai.mjs';
 import { Result, RiichiMsg, PlayAction, ManType, YiType, LiuJuType } from './proto_enum.mjs';
 import { mapYaku, manTypeFromResult } from './yaku_map.mjs';
@@ -37,6 +37,12 @@ var GameEngine = class {
     this.setInternalState(opts.internalState || {});
     this.seed = seed != null ? Number(seed) >>> 0 : null;
     this.rng = this.seed != null ? mulberry32(this.seed) : Math.random;
+    // NPC play styles per seat (null = neutral AI). Each styled seat gets its own RNG derived from the match seed,
+    // so style noise never shifts the wall shuffle and a replay with the same seed and inputs repeats every decision.
+    const styles = Array.isArray(opts.aiStyles) ? opts.aiStyles : [];
+    this.aiStyles = Array.from({ length: players }, (_, seat) => styles[seat] || null);
+    this._styleRngs = this.aiStyles.map((style, seat) => !style ? null
+      : this.seed != null ? mulberry32((this.seed ^ Math.imul(0x9e3779b1, seat + 1)) >>> 0) : Math.random);
     this.handIndex = 0;
     this.juNum = 0;
     this.matchLength = opts.matchLength === "hanchan" ? "hanchan" : "east";
@@ -65,6 +71,52 @@ var GameEngine = class {
     this._finalResult = null;
     this.matchStats = { hands: 0, wins: 0, dealIns: 0, riichi: 0, calls: 0, tsumo: 0, ron: 0, winPoints: 0, winTurns: 0, maxRenchan: 0 };
     this.uids = opts.uids && opts.uids.length >= players ? opts.uids.slice(0, players) : Array.from({ length: players }, (_, s) => 1e4 + s);
+    // Match record for crash/reload recovery: every resolved human wait, in order. Together with the seed and the table settings
+    // it reproduces the whole match, because AI decisions and the wall depend only on the seed and the position.
+    //   ['p']                    ready for the next hand (ReqPrepare or its timeout)
+    //   ['d'|'c', payload, bank] turn / claim decision as finally applied (client, auto setting or timeout) and the time bank after it
+    this.humanLog = [];
+    this.onRecord = opts.onRecord || null;
+    // Replay: feed a saved log back at speed 0; when it runs out the engine goes live at the next human wait.
+    this._replay = Array.isArray(opts.replayLog) && opts.replayLog.length ? opts.replayLog.slice() : null;
+    this.replaying = !!opts.replayLog;
+    this._liveSpeed = this.speed;
+    if (this.replaying) this.speed = 0;
+    this.onReplayDone = opts.onReplayDone || null;
+    // false while the player is disconnected: the AI keeps playing, but human waits have no timeout (the table freezes on the player's turn).
+    this.humanPresent = opts.humanPresent !== false;
+  }
+  _record(entry) {
+    this.humanLog.push(entry);
+    if (this.onRecord) this.onRecord(entry);
+  }
+  /** Take the next replay entry for a human wait of `kind`; ends the replay (and goes live) when the log is used up or diverges. */
+  _replayNext(kind) {
+    if (!this.replaying) return null;
+    const next = this._replay?.[0];
+    if (next && next[0] === kind) return this._replay.shift();
+    if (next) this.log && this.log(`[riichi] 记录重演分叉：期望 ${next[0]}，实际 ${kind}，按当前局面继续`);
+    this.replaying = false;
+    this._replay = null;
+    this.speed = this._liveSpeed;
+    if (this.onReplayDone) this.onReplayDone(!next);
+    return null;
+  }
+  /** Player connection state. Leaving pauses the current human wait; returning restarts its clock from the saved time bank. */
+  setHumanPresent(present) {
+    this.humanPresent = !!present;
+    const pending = this._pending;
+    if (!this.humanPresent) {
+      if (pending?.timer) { clearTimeout(pending.timer); pending.timer = null; }
+      if (this._prepareWaiter?.timer) { clearTimeout(this._prepareWaiter.timer); this._prepareWaiter.timer = null; }
+      return;
+    }
+    if (pending && !pending.timer && !this.autoHuman) {
+      pending.startedAt = Date.now();
+      this._armHumanTimer(pending);
+      this._queueAutomatic(pending);
+    }
+    if (this._prepareWaiter && !this._prepareWaiter.timer) this._armPrepareTimer(this._prepareWaiter);
   }
   uidOf(seat) {
     return this.uids[seat];
@@ -83,9 +135,14 @@ var GameEngine = class {
    *  a new match is a newly matched room with a new engine (see finishHand).
    *  autoHuman (self-test, no client) skips directly; human mode keeps a fallback timeout to prevent a hang. */
   waitPrepare(timeoutMs = 15e3) {
+    if (this._replayNext("p")) {
+      this._record(["p"]);
+      return Promise.resolve();
+    }
     if (this.autoHuman) return Promise.resolve();
     if (this._prepared) {
       this._prepared = false;
+      this._record(["p"]);
       return Promise.resolve();
     }
     return new Promise((resolve) => {
@@ -93,16 +150,24 @@ var GameEngine = class {
       const fin = () => {
         if (done) return;
         done = true;
+        if (fin.timer) clearTimeout(fin.timer);
+        if (this._prepareWaiter === fin) this._prepareWaiter = null;
         this._prepared = false;
+        // A stopped engine (session ended) releases its waiter without the player being ready.
+        if (!this.finished) this._record(["p"]);
         resolve();
       };
+      fin.timeoutMs = timeoutMs;
       this._prepareWaiter = fin;
-      setTimeout(() => {
-        if (done) return;
-        this.log && this.log("[riichi] \u7B49 ReqPrepare \u8D85\u65F6\uFF0C\u81EA\u884C\u5F00\u5C40");
-        fin();
-      }, timeoutMs);
+      if (this.humanPresent) this._armPrepareTimer(fin);
     });
+  }
+  _armPrepareTimer(fin) {
+    fin.timer = setTimeout(() => {
+      fin.timer = null;
+      this.log && this.log("[riichi] \u7B49 ReqPrepare \u8D85\u65F6\uFF0C\u81EA\u884C\u5F00\u5C40");
+      fin();
+    }, fin.timeoutMs);
   }
   _d(ms) {
     return this.speed > 0 ? sleep(ms * this.speed) : Promise.resolve();
@@ -1553,6 +1618,9 @@ var GameEngine = class {
   aiLevelOf(seat) {
     return this.aiLevels?.[seat] || "intermediate";
   }
+  styleRngOf(seat) {
+    return this._styleRngs?.[seat] || null;
+  }
   aiTurn(seat, drew, can, cantPlays = []) {
     const level = this.aiLevelOf(seat);
     const p = this.players[seat];
@@ -1635,7 +1703,10 @@ var GameEngine = class {
   aiWantsKan(p, danger = null) {
     const scores = this.players.map((player) => player.score);
     const leading = p.score === Math.max(...scores);
-    if (danger || this.isAllLast() && leading) return false;
+    if (danger) return false;
+    // Kan-loving style: any safe-looking kan is taken.
+    if (resolveStyle(this, p.seat).kan) return true;
+    if (this.isAllLast() && leading) return false;
     if (p.riichi) return true;
     const shanten = this.currentShanten(p);
     const dora = p.hand.filter((tile) => this.doraKinds().has(kindOf2(tile)) || this.akaSet.has(tile)).length;
@@ -1707,7 +1778,7 @@ var GameEngine = class {
     if (kind === "pon" && this.isYakuhaiKind(p, kindOf2(card))) return true;
     const doraKinds = this.doraKinds();
     const dora = p.hand.filter((tile) => doraKinds.has(kindOf2(tile)) || this.akaSet.has(tile)).length;
-    return current <= 2 || dora >= 2;
+    return current <= resolveStyle(this, p.seat).callReach || dora >= 2;
   }
   shantenAfterClaim(p, card, kind, chiTiles = null) {
     const hand = p.hand.slice();
@@ -1765,7 +1836,9 @@ var GameEngine = class {
   }
   setHumanAutoplay(enabled) {
     this.autoHuman = !!enabled;
-    if (!this.autoHuman || !this._pending) return;
+    if (!this.autoHuman) return;
+    if (this._prepareWaiter) this._prepareWaiter();
+    if (!this._pending) return;
     const pending = this._pending;
     this.resolveHumanPending(pending, this.timeoutHumanAction(pending.kind));
   }
@@ -1804,9 +1877,28 @@ var GameEngine = class {
     if (pending.kind === "draw") this._expectedDraw = null;
     else this._expectedClaim = null;
     this._pending = null;
+    const applied = {};
+    for (const key of ["action", "card", "otherCards"]) if (payload?.[key] != null) applied[key] = payload[key];
+    this._record([pending.kind === "draw" ? "d" : "c", applied, player.timeBank]);
     pending.resolve(payload || {});
   }
+  _armHumanTimer(pending) {
+    const player = this.players[0];
+    const timeoutMs = Math.max(0, this.baseTime + player.timeBank) * 1_000;
+    pending.timer = setTimeout(() => {
+      const payload = this.timeoutHumanAction(pending.kind);
+      this.resolveHumanPending(pending, payload);
+    }, timeoutMs);
+  }
   waitHuman(kind) {
+    const replayed = this._replayNext(kind === "draw" ? "d" : "c");
+    if (replayed) {
+      if (kind === "draw") this._expectedDraw = null;
+      else this._expectedClaim = null;
+      this.players[0].timeBank = replayed[2];
+      this._record(replayed);
+      return Promise.resolve({ ...replayed[1] });
+    }
     return new Promise((resolve) => {
       const pending = { kind, resolve, startedAt: Date.now(), timer: null };
       this._pending = pending;
@@ -1822,21 +1914,23 @@ var GameEngine = class {
         queueMicrotask(() => this.resolveHumanPending(pending, payload));
         return;
       }
-      const player = this.players[0];
-      const timeoutMs = Math.max(0, this.baseTime + player.timeBank) * 1_000;
-      pending.timer = setTimeout(() => {
-        const payload = this.timeoutHumanAction(kind);
-        this.resolveHumanPending(pending, payload);
-      }, timeoutMs);
-      if (this.automaticHumanAction(kind)) {
-        // The client may cancel the no-call before the microtask runs, or clear the old authorization after reconnecting.
-        // In that case keep the original deadline and wait for the human; do not keep executing the captured stale auto-action.
-        queueMicrotask(() => {
-          if (this._pending !== pending) return;
-          const automatic = this.automaticHumanAction(kind);
-          if (automatic) this.resolveHumanPending(pending, automatic);
-        });
+      // Disconnected: freeze on the player's decision (no timeout) until they return or the host hands the seat to the AI.
+      // Auto tsumogiri / no-call also stays frozen while away; it resumes when the player returns (setHumanPresent).
+      if (this.humanPresent) {
+        this._armHumanTimer(pending);
+        this._queueAutomatic(pending);
       }
+    });
+  }
+  /** Run the client-authorized auto action (tsumogiri / no-call) for a pending human wait, if one still applies. */
+  _queueAutomatic(pending) {
+    if (!this.automaticHumanAction(pending.kind)) return;
+    // The client may cancel the no-call before the microtask runs, or clear the old authorization after reconnecting.
+    // In that case keep the original deadline and wait for the human; do not keep executing the captured stale auto-action.
+    queueMicrotask(() => {
+      if (this._pending !== pending || !this.humanPresent) return;
+      const automatic = this.automaticHumanAction(pending.kind);
+      if (automatic) this.resolveHumanPending(pending, automatic);
     });
   }
   submitDraw(payload) {
@@ -1873,6 +1967,10 @@ var GameEngine = class {
     const resolve = this._pending.resolve;
     this._pending = null;
     resolve({});
+  }
+  /** Record for reload recovery, in the form accepted back as opts.replayLog. */
+  matchRecord() {
+    return this.humanLog.map((entry) => entry.slice());
   }
   // Debug snapshot
   snapshot() {

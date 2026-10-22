@@ -323,6 +323,7 @@
         self._resyncTimer = null;
         if (!self.replaying) return;
         self.replaying = false; self._replayStarted = false;
+        playerBack(self);
         log('[mock] 重连后 10s 未收到 20162，恢复实时下推');
       }, 10000);
     }
@@ -757,16 +758,33 @@
     }
     // Seat → uid; must exactly match the uids sent in 20408 TableInfo / 20014 EnterSeatBc:
     // the client finds itself in the NtfToPrepare roster by userID; a mismatch discards the whole match.
+    var robots = sess.table && sess.table.robots ? sess.table.robots : [];
+    // A restored match carries its own settings; the URL/global config only applies to newly matched tables.
+    var players = sess.table ? (sess.table.sanma ? 3 : 4) : CONFIG.players;
     var uids = [sess.uid];
-    for (var i = 0; i + 1 < CONFIG.players; i++) uids.push(ROBOTS[i].uid);
+    var styles = [null];
+    for (var i = 0; i + 1 < players; i++) {
+      var r = robots[i];
+      var def = r && MJ.npc ? MJ.npc.npcById(r.npc) : null;
+      uids.push(r ? r.uid : 10000 + i);
+      styles.push(def ? def.style : null);
+    }
 
+    var restore = sess.restore || null;
+    sess.restore = null;
     sess.riichi = new R.RiichiSession({
-      players: CONFIG.players,
+      players: players,
       // Three-player starting score 35000 (in the capture, score/initScore in NtfGameStart are 35000)
-      startScore: CONFIG.players === 3 ? 35000 : 25000,
+      startScore: players === 3 ? 35000 : 25000,
       // A one-round match plays a single hand; other rules are the same as the ranked match
       maxHands: sess.table && sess.table.oneRound ? 1 : undefined,
-      matchLength: CONFIG.matchLength,
+      matchLength: sess.table ? sess.table.matchLength : CONFIG.matchLength,
+      replayLog: restore ? restore.log : null,
+      humanPresent: !restore || restore.present,
+      // The table snapshot plus the human-decision log is enough to rebuild this match after a reload or restart.
+      onRecord: function (log) {
+        if (typeof sess.onMatchRecord === 'function' && sess.table) sess.onMatchRecord({ v: 1, table: sess.table, log: log });
+      },
       akaCount: CONFIG.akaCount,
       speed: CONFIG.speed,
       seed: sess.table && sess.table.seed != null ? sess.table.seed : CONFIG.seed,
@@ -774,6 +792,7 @@
       autoHuman: CONFIG.autoHuman,
       // Ranked rooms: Qihang/Zhumeng basic, Chengfeng intermediate, Yulong advanced.
       aiLevel: sess.rankRoomId === 4 ? 'advanced' : sess.rankRoomId === 1 || sess.rankRoomId === 2 ? 'basic' : 'intermediate',
+      aiStyles: styles,
       selfLoveLevel: sess.table && sess.table.self ? sess.table.self.loveLevel || 0 : 0,
       internalState: sess.internalState || {},
       onSettingsChange: function (state) {
@@ -792,6 +811,7 @@
         return null;
       },
       onFinish: function (scores, engine) {
+        clearMatchRecord(sess);
         if (typeof sess.onMatchFinish === 'function') sess.onMatchFinish(scores, engine);
       },
       log: function (s) { log(s); },
@@ -833,7 +853,17 @@
    *  "Bye! → reconnect → exit the match directly".
    *
    *  Note: f3 is always -1; in the captures it is also -1 while a match is in progress, so the criterion is whether f4 is present, not f3. */
-  HANDLERS[20162] = function (sess) {
+  HANDLERS[20162] = function (sess, payload, seq) {
+    // A match restored from a saved record is still replaying: answer once the engine has caught up.
+    if (sess.restoring) {
+      var restoring = sess.restoring;
+      restoring.then(function () {
+        if (sess.restoring === restoring) sess.restoring = null;
+        var out = HANDLERS[20162](sess, payload, seq);
+        sess.push(out[0][0], out[0][1], out[0][2], out[0][3], seq);
+      });
+      return [];
+    }
     var live = !!(sess.table && sess.liveMatch());
 
     var w = P.W();
@@ -882,10 +912,18 @@
    *  During the replay, onFrame only does bookkeeping and no live push (sess.replaying); new frames are queued at the tail,
    *  otherwise "historical frames being replayed" and "new frames just produced by the engine" would interleave and scramble the client's match.
    *  Here we walk the live array sess.handFrames by index; the engine appends as it runs, and we are done once caught up. */
+  /** The client shows the table again: a turn frozen while the player was away gets its clock back now, not on reconnect,
+   *  because login and the resync take a few seconds. */
+  function playerBack(sess) {
+    var eng = sess.riichi && sess.riichi.engine;
+    if (eng && !eng.humanPresent) eng.setHumanPresent(true);
+  }
+
   function replayHand(sess, from) {
     var frames = sess.handFrames || [];
     if (!frames.length || !sess.socket || sess.socket.readyState !== OPEN) {
       sess.replaying = false; sess._replayStarted = false;
+      if (sess.socket && sess.socket.readyState === OPEN) playerBack(sess);
       return;
     }
 
@@ -918,6 +956,7 @@
       if (i >= sess.handFrames.length) {
         sess.replaying = false; sess._replayStarted = false;
         log('  [resync] 重放完成，共 %d 帧，恢复实时下推', i);
+        playerBack(sess);
         return;
       }
       setTimeout(next, BATCH_GAP);
@@ -940,35 +979,7 @@
   // Only riichi mahjong matchmaking requests are handled; other game types (Sichuan 50xx / Dou Dizhu 4101 / Guandan 4111 etc.) show "offline unavailable"
   var RIICHI_GAME_TYPES = { 4001: true, 4002: true };
 
-  /** Offline opponent profiles; warrior/skin are randomly assigned at matchmaking. */
-  var ROBOTS = [
-    {
-      uid: 10000, nick: '赤木茂', frame: 2001, title: 3001, level: 6, pt: 14
-    },
-    {
-      uid: 10001, nick: '鹫巢岩', frame: 2001, title: 3001, level: 8, pt: 92
-    },
-    {
-      uid: 10002, nick: '天贵史', frame: 2001, title: 3001, level: 4, pt: 0
-    }
-  ];
-
-  var BANG_POOL = [140001, 140002, 140003, 140004, 140006, 140007, 140009];
-
-  /** Warrior → skin/avatar mapping (skin and avatar come in pairs; one set is drawn at random).
-   *  Data source: the role,skin,avatar mapping table. Its keys form the pool of available warrior IDs. */
-  var WARRIOR_TABLE = {
-    1:  [{ skin: 1001, head: 1001 }, { skin: 3701002, head: 1009 }],
-    2:  [{ skin: 2001, head: 1002 }, { skin: 3702002, head: 1007 }],
-    3:  [{ skin: 3001, head: 1003 }, { skin: 3703002, head: 1008 }],
-    4:  [{ skin: 4001, head: 1004 }, { skin: 3704002, head: 1010 }],
-    5:  [{ skin: 5001, head: 1005 }, { skin: 3705002, head: 1012 }],
-    6:  [{ skin: 6001, head: 1006 }, { skin: 3706002, head: 1013 }],
-    7:  [{ skin: 7001, head: 1015 }, { skin: 3707002, head: 1016 }],
-    8:  [{ skin: 8001, head: 1017 }, { skin: 3708002, head: 1018 }],
-    9:  [{ skin: 9001, head: 1011 }, { skin: 3709002, head: 1014 }],
-    10: [{ skin: 10001, head: 1019 }]
-  };
+  // Offline opponents are the 19 NPCs in mockjs/npc_roster.mjs (fixed character/skin and play style each), exposed as MJ.npc.
 
   /** Read the local player's currently selected equipment from USERDATA and assemble a SimpleInGameSummaryInfo.
    *  Read dynamically at each match, so that a change of character/skin in the lobby takes effect in the next match. */
@@ -1014,23 +1025,6 @@
       log('  [profile] 读取用户装备失败，使用默认值: ' + e.message);
     }
     return profile;
-  }
-
-  /** Randomly assign a warrior and its skin/avatar to an AI bot */
-  function makeRobot(idx, humanWarrior, rng) {
-    var base = ROBOTS[idx];
-    var ids = Object.keys(WARRIOR_TABLE).filter(function (id) { return Number(id) !== Number(humanWarrior); });
-    if (!ids.length) ids = Object.keys(WARRIOR_TABLE);
-    var w = parseInt(ids[Math.floor(rng() * ids.length)], 10);
-    var pair = WARRIOR_TABLE[w];
-    var pick = pair[Math.floor(rng() * pair.length)];
-    var b = BANG_POOL[Math.floor(rng() * BANG_POOL.length)];
-    return {
-      uid: base.uid, nick: base.nick, head: pick.head, frame: base.frame,
-      title: base.title, bang: b,
-      warrior: w, skin: pick.skin,
-      level: base.level, pt: base.pt
-    };
   }
 
   /** SimpleInGameSummaryInfo */
@@ -1140,6 +1134,7 @@
 
     sess.tableId = 1;
     sess.seat = 0;
+    clearMatchRecord(sess);
 
     // On re-matching (re-clicking after cancel, or a leftover from the previous hand), the old session must be dropped,
     // otherwise ensureEngine would get the previous hand's engine and would not push NtfToPrepare again.
@@ -1168,6 +1163,7 @@
         seed: matchSeed,
         roomId: Number(srm[4] || 1),
         roomType: Number(srm[3] || 0),
+        rankRoomId: sess.rankRoomId,
         oneRound: oneRound,
         self: selfProfile,
         robots: [],
@@ -1181,8 +1177,12 @@
 
       // 2) Each opponent is "offline-managed + seated" one by one: randomly assigned warriors
       var n = (sanma ? 3 : 4) - 1;
+      var robots = MJ.npc.pickNpcs(matchRng, {
+        count: n, humanWarrior: selfProfile.warrior,
+        roomId: oneRound ? null : sess.rankRoomId, humanLevel: selfProfile.level
+      });
       for (var i = 0; i < n; i++) {
-        var r = makeRobot(i, selfProfile.warrior, matchRng);
+        var r = robots[i];
         var seat = i + 1;
         sess.table.robots.push(r);
         log('  [match] => 20164/20014 seat%d %s(%d) warrior=%s', seat, r.nick, r.uid, r.warrior);
@@ -1252,6 +1252,45 @@
     return { itemRewardLevel: result.itemRewardLevel, itemRewards: result.itemRewards };
   }
 
+  function clearMatchRecord(sess) {
+    if (typeof sess.onMatchRecord === 'function') sess.onMatchRecord(null);
+  }
+
+  /** Rebuild a match from its saved record ({ table, log }) into a session that has no match yet.
+   *  The engine replays the log at speed 0, so the AI's moves after the player's last decision are repeated exactly and the table
+   *  stops at the player's next decision, frozen (no timeout) until the client re-syncs the table (playerBack).
+   *  finish=true hands the player's seat to the neutral AI once the replay has caught up and plays the match out instantly.
+   *  Resolves when the replay has caught up (finish: when the match is over). */
+  function restoreMatch(sess, record, opts) {
+    opts = opts || {};
+    if (!record || !record.table || !Array.isArray(record.log)) throw new TypeError('invalid match record');
+    sess.table = record.table;
+    sess.tableId = 1;
+    sess.seat = 0;
+    sess.rankRoomId = record.table.rankRoomId || null;
+    sess.handFrames = [];
+    sess.restore = { log: record.log, present: false };
+    var g = getRiichi(sess);
+    if (!g) throw new Error('riichi backend not loaded');
+    var finished = new Promise(function (resolve) {
+      var onFinish = g.onFinish;
+      g.onFinish = function (scores, engine) { onFinish.call(g, scores, engine); resolve(); };
+    });
+    // Frames produced while replaying only fill the hand cache; the client gets them through 20162 like any reconnect.
+    sess.replaying = true;
+    var eng = g.ensureEngine();
+    var caughtUp = g.replayDone.then(function () {
+      if (!opts.finish) return;
+      eng.speed = 0;
+      eng.setHumanAutoplay(true);
+      return finished;
+    });
+    sess.restoring = caughtUp;
+    return caughtUp.then(function () {
+      if (sess.restoring === caughtUp) sess.restoring = null;
+    });
+  }
+
   /** 20405 cancel matchmaking -> 20406 */
   HANDLERS[20405] = function (sess) {
     log('  [match] 取消匹配');
@@ -1267,6 +1306,7 @@
   /** 20025 LeaveTable -> 20026: the player clicks "return to lobby" during the match or on the settlement screen */
   HANDLERS[20025] = function (sess) {
     log('  [leave] 离桌');
+    clearMatchRecord(sess);
     if (sess.matchTimer) { clearTimeout(sess.matchTimer); sess.matchTimer = null; }
     if (sess.engineStartTimer) { clearTimeout(sess.engineStartTimer); sess.engineStartTimer = null; }
     sess.matchToken += 1;
@@ -1280,6 +1320,7 @@
    *  Real capture: after isFinal settlement the client sends this message to confirm exit; the server replies 20103 and then returns to the lobby. */
   HANDLERS[20102] = function (sess) {
     log('  [finish] 客户端确认结算完成，退出对局');
+    clearMatchRecord(sess);
     if (sess.matchTimer) { clearTimeout(sess.matchTimer); sess.matchTimer = null; }
     if (sess.engineStartTimer) { clearTimeout(sess.engineStartTimer); sess.engineStartTimer = null; }
     sess.matchToken += 1;
@@ -1536,6 +1577,7 @@
     riichiNames: RIICHI_NAMES,
     dispatch: dispatch,
     createSession: function () { return new Session(); },
+    restoreMatch: restoreMatch,
     setUserdata: function (bytes) { USERDATA = new U.UserData(bytes, UID); },
     updateNickname: function (nickname) { return USERDATA.updateNickname(nickname); },
     updateRanks: function (ranks) { return USERDATA.updateRanks(ranks); },
