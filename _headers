@@ -2,6 +2,10 @@
 # Build_intl/*.unityweb are Brotli files: declaring the encoding lets the browser decompress them natively
 # and compile the wasm while it streams, instead of the Unity loader's slower JavaScript fallback.
 
+# Asset bundle file names end with a content hash, so a cached copy never goes stale: skip revalidation round trips.
+/StreamingAssets/Bundles/WebGL/*.bundle
+  Cache-Control: public, max-age=31536000, immutable
+
 /Build_intl/*.wasm.unityweb
   Content-Encoding: br
   Content-Type: application/wasm

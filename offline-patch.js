@@ -111,6 +111,7 @@
     var args = Array.prototype.slice.call(arguments);
     var assetUrl = localAssetUrl(u);
     this._mjOfflineBlocked = typeof u === 'string' && !assetUrl && !localUrl(u);
+    this._mjAsset = !!assetUrl;
     if (assetUrl) {
       args[1] = assetUrl;
     } else if (this._mjOfflineBlocked) {
@@ -120,7 +121,12 @@
     return open.apply(this, args);
   };
   XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
-    if (this._mjOfflineBlocked && String(name).toLowerCase() === 'range') return;
+    if (String(name).toLowerCase() === 'range') {
+      if (this._mjOfflineBlocked) return;
+      // The game asks for StreamingAssets with "Range: bytes=0-" (the whole file). Dropping it keeps the request a plain
+      // GET, so the browser HTTP cache can serve the bundle on later visits instead of downloading it again.
+      if (this._mjAsset && /^bytes=0-$/i.test(String(value).trim())) return;
+    }
     return setRequestHeader.call(this, name, value);
   };
 
