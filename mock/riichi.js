@@ -12563,11 +12563,7 @@
     return s;
   }
 
-  // mockjs/riichi_ai_policy.mjs
-  var AI_LEVELS = ["basic", "intermediate", "advanced"];
-  function normalizeAiLevel(level) {
-    return AI_LEVELS.includes(level) ? level : "intermediate";
-  }
+  // mockjs/riichi_ai_read.mjs
   var KO_POINTS = [0, 1e3, 2e3, 3900, 7700, 8e3, 12e3, 12e3, 16e3, 16e3, 16e3, 24e3, 24e3, 32e3];
   function pointsForHan(han, dealer) {
     const h = Math.max(0, Math.min(13, han));
@@ -12576,9 +12572,248 @@
     const base2 = KO_POINTS[lo] + (KO_POINTS[hi] - KO_POINTS[lo]) * (h - lo);
     return base2 * (dealer ? 1.5 : 1);
   }
+  var SHAPE_WEIGHT = { ryanmen: 1, kanchan: 0.19, penchan: 0.27, shanpon: 0.43, tanki: 0.37 };
+  var WAIT_MULTIPLICITY = 1.2;
+  var HIT_CAP = 0.6;
+  function kindToIndex(kind) {
+    const suit = Math.floor(kind / 10);
+    const rank = kind % 10;
+    return suit === 4 ? 27 + rank - 1 : (suit - 1) * 9 + rank - 1;
+  }
+  function indexToKind(idx) {
+    return idx >= 27 ? 40 + (idx - 27 + 1) : (Math.floor(idx / 9) + 1) * 10 + idx % 9 + 1;
+  }
+  var isYaochuIndex = (idx) => idx >= 27 || idx % 9 === 0 || idx % 9 === 8;
+  var SHAPES = (() => {
+    const out = [];
+    for (let s = 0; s < 3; s++) {
+      const b = s * 9;
+      for (let r = 1; r <= 8; r++) {
+        const i = b + r - 1;
+        if (r === 1) out.push({ type: "penchan", held: [i, i + 1], waits: [i + 2], suit: s });
+        else if (r === 8) out.push({ type: "penchan", held: [i, i + 1], waits: [i - 1], suit: s });
+        else out.push({ type: "ryanmen", held: [i, i + 1], waits: [i - 1, i + 2], suit: s });
+      }
+      for (let r = 1; r <= 7; r++) {
+        const i = b + r - 1;
+        out.push({ type: "kanchan", held: [i, i + 2], waits: [i + 1], suit: s });
+      }
+    }
+    for (let i = 0; i < 34; i++) {
+      const suit = i >= 27 ? 3 : Math.floor(i / 9);
+      out.push({ type: "shanpon", held: [i, i], waits: [i], suit });
+      out.push({ type: "tanki", held: [i], waits: [i], suit });
+    }
+    return out;
+  })();
+  var OPEN_TYPES = /* @__PURE__ */ new Set(["chi", "pon", "kan"]);
+  function logOf(engine) {
+    if (Array.isArray(engine.discardLog)) return engine.discardLog;
+    const out = [];
+    for (const q of engine.players) {
+      for (const tile of q.discards || []) {
+        const { suit, rank } = decodeId(tile);
+        out.push({ seat: q.seat, kind: suit * 10 + rank, tsumogiri: false, riichi: false, synthetic: true });
+      }
+    }
+    return out;
+  }
+  function furitenSet(engine, q, log) {
+    const safe = /* @__PURE__ */ new Set();
+    for (const kind of q.discardKinds || []) safe.add(kindToIndex(kind));
+    if (log.length && !log[0].synthetic) {
+      let riichiAt = -1;
+      let lastOwn = -1;
+      for (let i = 0; i < log.length; i++) {
+        if (log[i].seat !== q.seat) continue;
+        lastOwn = i;
+        if (log[i].riichi) riichiAt = i;
+      }
+      const from = q.riichi && riichiAt >= 0 ? riichiAt + 1 : lastOwn + 1;
+      if (from > 0) for (let i = from; i < log.length; i++) safe.add(kindToIndex(log[i].kind));
+    }
+    return safe;
+  }
+  function openMeldsOf(q) {
+    return (q.melds || []).filter((m) => OPEN_TYPES.has(m.type));
+  }
+  function tenpaiProbability(q, log) {
+    if (q.riichi) return 1;
+    const own = log.filter((e) => e.seat === q.seat);
+    const d = own.length || (q.discards || []).length;
+    const m = openMeldsOf(q).length;
+    let p;
+    if (m >= 4) p = 0.95;
+    else if (m === 3) p = Math.min(0.9, 0.35 + 0.05 * d);
+    else if (m === 2) p = Math.min(0.72, 0.12 + 0.045 * d);
+    else if (m === 1) p = Math.min(0.38, 0.03 + 0.025 * d);
+    else p = d <= 6 ? 0.01 : Math.min(0.28, 0.02 * (d - 6));
+    if (m >= 1) {
+      let streak = 0;
+      for (let i = own.length - 1; i >= 0 && own[i].tsumogiri; i--) streak++;
+      p = Math.min(0.97, p + 0.05 * Math.min(4, streak));
+    }
+    return p;
+  }
+  function openHandShape(engine, q) {
+    const melds = openMeldsOf(q);
+    const tiles = melds.flatMap((m) => m.tiles);
+    if (!melds.length) return { factor: null, han: 0 };
+    const decoded = tiles.map(decodeId);
+    const suits = new Set(decoded.filter(({ suit }) => suit !== 4).map(({ suit }) => suit - 1));
+    const honors = decoded.some(({ suit }) => suit === 4);
+    const allSimples = decoded.every(({ suit, rank }) => suit !== 4 && rank >= 2 && rank <= 8);
+    const pons = melds.filter((m) => m.type !== "chi").length;
+    const chis = melds.length - pons;
+    const flushSuit = melds.length >= 2 && suits.size === 1 ? [...suits][0] : -1;
+    const allHonor = melds.length >= 2 && suits.size === 0;
+    const toitoi = pons >= 2 && chis === 0;
+    let han = 0;
+    if (flushSuit >= 0) han += honors ? 2 : 5;
+    if (toitoi && pons >= 3) han += 2;
+    const factor = (shape) => {
+      let f = 1;
+      if (flushSuit >= 0 && shape.suit !== 3 && shape.suit !== flushSuit) f *= 0.08;
+      if (allHonor && shape.suit !== 3) f *= 0.3;
+      if (allSimples) {
+        if (shape.held.some(isYaochuIndex) || shape.waits.some(isYaochuIndex)) f *= 0.15;
+      }
+      if (toitoi && (shape.type === "ryanmen" || shape.type === "kanchan" || shape.type === "penchan")) f *= 0.25;
+      if (toitoi && (shape.type === "shanpon" || shape.type === "tanki")) f *= 2.5;
+      return f;
+    };
+    return { factor, han, allSimples };
+  }
+  function yakuhaiHan(engine, q, idx) {
+    if (idx < 27) return 0;
+    const rank = idx - 26;
+    let han = 0;
+    if (rank >= 5) han++;
+    if (rank === engine.roundWind) han++;
+    if (rank === engine.seatWindOf(q.seat)) han++;
+    return han;
+  }
+  function threatValue(engine, q, shapeInfo) {
+    const dealer = q.seat === engine.dealerSeat;
+    const honba = (engine.honba || 0) * 300;
+    if (q.riichi) {
+      const kanDora = Math.max(0, (engine.doraIndicators?.length || 1) - 1);
+      return (dealer ? 8700 : 5800) * (1 + 0.15 * kanDora) + honba;
+    }
+    const melds = openMeldsOf(q);
+    if (!melds.length) return (dealer ? 6800 : 4500) + honba;
+    const doraKinds = engine.doraKinds ? engine.doraKinds() : /* @__PURE__ */ new Set();
+    let dora = 0;
+    let yaku = 0;
+    for (const m of q.melds || []) {
+      if (m.type === "babei") {
+        dora += 1;
+        continue;
+      }
+      for (const t of m.tiles) {
+        const { suit, rank } = decodeId(t);
+        if (doraKinds.has(suit * 10 + rank)) dora++;
+        if (engine.akaSet?.has(t)) dora++;
+      }
+      if (m.type !== "chi") {
+        const { suit, rank } = decodeId(m.tiles[0]);
+        yaku += yakuhaiHan(engine, q, kindToIndex(suit * 10 + rank));
+      }
+    }
+    yaku += shapeInfo.han;
+    if (!yaku) yaku = 1;
+    return pointsForHan(yaku + dora + 0.6, dealer) + honba;
+  }
+  function readThreats(engine, seat, remainOf, { lossUtil = null } = {}) {
+    const log = logOf(engine);
+    const avail = new Array(34);
+    for (let i = 0; i < 34; i++) avail[i] = Math.max(0, remainOf(i));
+    const threats = [];
+    for (const q of engine.players) {
+      if (q.seat === seat) continue;
+      const tenpai = tenpaiProbability(q, log);
+      if (tenpai < 5e-3) continue;
+      const furiten = furitenSet(engine, q, log);
+      const shapeInfo = openHandShape(engine, q);
+      const num = new Float64Array(34);
+      let den = 0;
+      for (const shape of SHAPES) {
+        if (shape.waits.some((w2) => furiten.has(w2))) continue;
+        let w = SHAPE_WEIGHT[shape.type];
+        if (shape.type === "shanpon") {
+          const a = avail[shape.held[0]];
+          w *= a >= 2 ? a * (a - 1) / 2 : 0;
+        } else if (shape.type === "tanki") {
+          w *= avail[shape.held[0]] * (shape.suit === 3 ? 1.5 : 1);
+        } else {
+          w *= avail[shape.held[0]] * avail[shape.held[1]];
+        }
+        if (!w) continue;
+        if (shapeInfo.factor) w *= shapeInfo.factor(shape);
+        den += w;
+        for (const t of shape.waits) num[t] += w;
+      }
+      const hit = new Float64Array(34);
+      if (den > 0) {
+        for (let i = 0; i < 34; i++) if (!furiten.has(i)) hit[i] = Math.min(HIT_CAP, WAIT_MULTIPLICITY * num[i] / den);
+      }
+      const value = threatValue(engine, q, shapeInfo);
+      threats.push({
+        seat: q.seat,
+        riichi: !!q.riichi,
+        dealer: q.seat === engine.dealerSeat,
+        tenpai,
+        value,
+        loss: lossUtil ? lossUtil(q.seat, value) : value,
+        hit,
+        furiten
+      });
+    }
+    const dealOf = new Float64Array(34);
+    const lossOf = new Float64Array(34);
+    let tenpaiMass = 0;
+    let threatValueSum = 0;
+    for (const t of threats) {
+      tenpaiMass += t.tenpai;
+      threatValueSum += t.tenpai * t.loss;
+      for (let i = 0; i < 34; i++) {
+        dealOf[i] += t.tenpai * t.hit[i];
+        lossOf[i] += t.tenpai * t.hit[i] * t.loss;
+      }
+    }
+    let unseen = 0;
+    let drawLoss = 0;
+    for (let i = 0; i < 34; i++) {
+      unseen += avail[i];
+      drawLoss += avail[i] * lossOf[i];
+    }
+    return {
+      threats,
+      dealOf,
+      lossOf,
+      tenpaiMass,
+      threatValue: threatValueSum,
+      // 随机摸到的一张牌直接打出的期望放铳损失（推进/立直后摸切用）。
+      avgDrawLoss: unseen ? drawLoss / unseen : 0
+    };
+  }
+
+  // mockjs/riichi_ai_policy.mjs
+  var AI_LEVELS = ["basic", "intermediate", "advanced"];
+  function normalizeAiLevel(level) {
+    return AI_LEVELS.includes(level) ? level : "intermediate";
+  }
+  var KO_POINTS2 = [0, 1e3, 2e3, 3900, 7700, 8e3, 12e3, 12e3, 16e3, 16e3, 16e3, 24e3, 24e3, 32e3];
+  function pointsForHan2(han, dealer) {
+    const h = Math.max(0, Math.min(13, han));
+    const lo = Math.floor(h);
+    const hi = Math.min(13, lo + 1);
+    const base2 = KO_POINTS2[lo] + (KO_POINTS2[hi] - KO_POINTS2[lo]) * (h - lo);
+    return base2 * (dealer ? 1.5 : 1);
+  }
   var DEFAULT_UKEIRE = [6, 18, 30, 40, 48, 54, 60, 60, 60];
   var RON_CHANCE_PER_OPPONENT = 0.25;
-  function publicContext(engine, seat, hypothetical = null) {
+  function publicContext(engine, seat, hypothetical = null, level = "intermediate") {
     const p = hypothetical?.player || engine.players[seat];
     const n = engine.playersN;
     const baseRemain = engine.remainOfFor(p);
@@ -12606,7 +12841,7 @@
         lossScale = 0.8;
       }
     }
-    return {
+    const ctx = {
       engine,
       seat,
       p,
@@ -12623,8 +12858,108 @@
       gainScale,
       lossScale,
       survival: danger ? 0.9 : n === 3 ? 0.94 : 0.95,
-      tableBonus: (engine.riichiSticks || 0) * 1e3 + (engine.honba || 0) * 300
+      tableBonus: (engine.riichiSticks || 0) * 1e3 + (engine.honba || 0) * 300,
+      gainUtil: (v) => v,
+      advanced: false
     };
+    if (level === "advanced") attachAdvanced(ctx);
+    return ctx;
+  }
+  var PLACEMENT_UMA = { 3: [15e3, 0, -15e3], 4: [15e3, 5e3, -5e3, -15e3] };
+  function placementUtility(engine, seat) {
+    if (!engine.isAllLast()) return null;
+    const scores = engine.players.map((pl) => pl.score);
+    const n = scores.length;
+    const uma = PLACEMENT_UMA[n] || PLACEMENT_UMA[4];
+    const rankOf = (arr) => arr.filter((v, j) => j !== seat && (v > arr[seat] || v === arr[seat] && j < seat)).length;
+    const base2 = uma[rankOf(scores)];
+    const umaDiff = (other, d) => {
+      const a = scores.slice();
+      a[seat] += d;
+      a[other] -= d;
+      return uma[rankOf(a)] - base2;
+    };
+    return {
+      gain(v) {
+        if (v <= 0) return v;
+        let s = 0;
+        for (let j = 0; j < n; j++) if (j !== seat) s += umaDiff(j, v);
+        return v + s / (n - 1);
+      },
+      loss(who, v) {
+        return v - umaDiff(who, -v);
+      }
+    };
+  }
+  function attachAdvanced(ctx) {
+    const util = placementUtility(ctx.engine, ctx.seat);
+    if (util) ctx.gainUtil = util.gain;
+    const read = readThreats(ctx.engine, ctx.seat, ctx.remainOf, { lossUtil: util ? util.loss : null });
+    ctx.read = read;
+    ctx.advanced = true;
+    ctx.threatActive = read.tenpaiMass >= 0.25;
+    ctx.survival = 1 - Math.min(0.25, 0.015 * (ctx.n - 1) + 0.08 * read.tenpaiMass);
+    ctx.gainScale = 1;
+    ctx.lossScale = 1;
+  }
+  function discardRisk(ctx, idx, kind) {
+    if (ctx.advanced) return ctx.read.lossOf[idx];
+    return dealInProbability(ctx, kind) * ctx.threatLoss * ctx.lossScale;
+  }
+  function pushExposure(ctx, win, foldable = true) {
+    const T = ctx.ownDraws;
+    if (!T) return 0;
+    const growth = (ctx.n - 1) * 2 * (foldable ? 0.45 : 1);
+    const base2 = ctx.read.avgDrawLoss * (foldable ? 0.75 : 1);
+    let alive = 1;
+    let total = 0;
+    for (let t = 1; t <= T; t++) {
+      alive *= ctx.survival;
+      total += alive * Math.max(0, 1 - win * t / T) * (base2 + growth * t);
+    }
+    return total;
+  }
+  function foldLoss(ctx, counts) {
+    const losses = [];
+    for (let i = 0; i < 34; i++) for (let c = 0; c < counts[i]; c++) losses.push(ctx.read.lossOf[i]);
+    losses.sort((a, b) => a - b);
+    const T = Math.min(ctx.ownDraws, losses.length);
+    let alive = 1;
+    let total = 0;
+    for (let t = 0; t < T; t++) {
+      alive *= ctx.survival;
+      total += alive * losses[t] * 0.75;
+    }
+    return total;
+  }
+  function tenpaiBonus(ctx, win) {
+    if (ctx.ownDraws > 4) return 0;
+    return Math.pow(ctx.survival, ctx.ownDraws) * Math.max(0, 1 - win) * (ctx.n === 4 ? 1500 : 1e3);
+  }
+  function oneShantenQuality(ctx, counts, meldCount) {
+    let weight = 0;
+    let total = 0;
+    for (let t = 0; t < 34; t++) {
+      const r = Math.max(0, ctx.remainOf(t));
+      if (!r || counts[t] >= 4) continue;
+      counts[t]++;
+      if (shantenOfCounts(counts, meldCount) === 1) {
+        let best = 0;
+        for (let d = 0; d < 34; d++) {
+          if (!counts[d] || d === t) continue;
+          counts[d]--;
+          if (shantenOfCounts(counts, meldCount) === 1) {
+            const u = waitsOfCounts(counts, meldCount, ctx.remainOf).ukeire;
+            if (u > best) best = u;
+          }
+          counts[d]++;
+        }
+        weight += r;
+        total += r * best;
+      }
+      counts[t]--;
+    }
+    return weight ? total / weight : DEFAULT_UKEIRE[1];
   }
   function threatLossOf(engine, seat, danger) {
     if (!danger) return 0;
@@ -12646,22 +12981,42 @@
     if (!Number.isFinite(risk)) return 0;
     return Math.min(0.25, risk * 65e-4 * Math.min(1.6, 1 + (ctx.danger.threats - 1) * 0.3));
   }
-  function turnWinChance(ctx, ukeire) {
+  function turnWinChance(ctx, ukeire, ronUkeire = ukeire) {
     const h = Math.min(1, Math.max(0, ukeire) / ctx.unseen);
-    return 1 - Math.pow(1 - h, 1 + RON_CHANCE_PER_OPPONENT * (ctx.n - 1));
+    const hr = Math.min(1, Math.max(0, ronUkeire) / ctx.unseen);
+    return 1 - (1 - h) * Math.pow(1 - hr, RON_CHANCE_PER_OPPONENT * (ctx.n - 1));
   }
-  function tenpaiWin(ctx, ukeire, draws) {
-    return winCurve(ctx, 0, ukeire, draws);
+  function tenpaiWin(ctx, ukeire, draws, ronUkeire = null) {
+    return winCurve(ctx, 0, ukeire, draws, DEFAULT_UKEIRE[0], null, ronUkeire);
   }
-  function winCurve(ctx, shanten, ukeire, draws, tenpaiUkeire = DEFAULT_UKEIRE[0]) {
+  function ronWeight(ctx, idx) {
+    if (!ctx.advanced) return 1;
+    const kind = indexToKind(idx);
+    let w;
+    if (idx >= 27) w = 1.25;
+    else {
+      const rank = idx % 9 + 1;
+      const suit = Math.floor(idx / 9) + 1;
+      w = rank === 1 || rank === 9 ? 1.2 : rank === 2 || rank === 8 ? 1.05 : rank === 5 ? 0.85 : 0.92;
+      const own = ctx.p.discardKinds;
+      if (own && [rank - 3, rank + 3].some((x) => x >= 1 && x <= 9 && own.has(suit * 10 + x))) w *= 1.3;
+    }
+    if (ctx.doraKinds.has(kind)) w *= 0.7;
+    return w;
+  }
+  function isFuritenWait(ctx, waits) {
+    const own = ctx.p.discardKinds;
+    return !!own && waits.some((idx) => own.has(indexToKind(idx)));
+  }
+  function winCurve(ctx, shanten, ukeire, draws, tenpaiUkeire = DEFAULT_UKEIRE[0], nextUkeire = null, ronUkeire = null) {
     if (shanten < 0) return 1;
     if (draws <= 0 || ukeire <= 0) return 0;
     const hits = [];
     for (let k = shanten; k >= 1; k--) {
-      const u = k === shanten ? ukeire : DEFAULT_UKEIRE[Math.min(k, DEFAULT_UKEIRE.length - 1)];
+      const u = k === shanten ? ukeire : k === shanten - 1 && nextUkeire != null && k >= 1 ? nextUkeire : DEFAULT_UKEIRE[Math.min(k, DEFAULT_UKEIRE.length - 1)];
       hits[k] = Math.min(1, u / ctx.unseen);
     }
-    const pw = turnWinChance(ctx, shanten === 0 ? ukeire : tenpaiUkeire);
+    const pw = shanten === 0 ? turnWinChance(ctx, ukeire, ronUkeire ?? ukeire) : turnWinChance(ctx, tenpaiUkeire);
     const dist = new Array(shanten + 1).fill(0);
     dist[shanten] = 1;
     let win = 0;
@@ -12719,7 +13074,7 @@
     if (suits.size === 1) yaku += honors ? menzen ? 3 : 2 : menzen ? 6 : 5;
     if (menzen) yaku += 1.35;
     if (yaku < 0.5 && !menzen) return 0;
-    return pointsForHan(yaku + dora, ctx.dealer) + ctx.tableBonus;
+    return pointsForHan2(yaku + dora, ctx.dealer) + ctx.tableBonus;
   }
   function tieBreak(ctx, id, handIds) {
     const { suit, rank } = decodeId(id);
@@ -12780,14 +13135,16 @@
       }
       return indexToTileId(idx, 1);
     };
-    function tenpaiProfile(ids) {
+    function tenpaiProfile(ids, extra = []) {
       const counts = countsOf(ids);
-      const key = counts.join("");
+      const key = ctx.advanced ? `${counts.join("")}|${extra.slice().sort((a, b) => a - b).join(",")}` : counts.join("");
       const cached = tenpaiMemo.get(key);
       if (cached) return cached;
       const used = new Set(ids);
       const w = waitsOfCounts(counts, meldCount, ctx.remainOf);
+      const furiten = ctx.advanced && (isFuritenWait(ctx, w.waits) || w.waits.some((idx) => extra.includes(idx)));
       let ukeire = 0;
+      let ronUkeire = 0;
       let points = 0;
       for (const idx of w.waits) {
         const r = Math.max(0, ctx.remainOf(idx));
@@ -12805,20 +13162,21 @@
           seatWind
         });
         if (!win.hasYaku) continue;
-        const base2 = nukiDora ? Math.max(win.ten, pointsForHan(win.han + nukiDora, ctx.dealer)) : win.ten;
-        const ten = base2 * (menzen ? 1.3 : 1.05) + ctx.tableBonus;
+        const base2 = nukiDora ? Math.max(win.ten, pointsForHan2(win.han + nukiDora, ctx.dealer)) : win.ten;
+        const ten = ctx.gainUtil(base2 * (menzen ? 1.3 : 1.05) + ctx.tableBonus);
         ukeire += r;
+        if (!furiten) ronUkeire += r * ronWeight(ctx, idx);
         points += r * ten;
       }
-      const profile = { ukeire, points: ukeire ? points / ukeire : 0 };
+      const profile = { ukeire, ronUkeire, points: ukeire ? points / ukeire : 0 };
       tenpaiMemo.set(key, profile);
       return profile;
     }
-    function tenpaiEV(ids, draws) {
-      const prof = tenpaiProfile(ids);
-      return tenpaiWin(ctx, prof.ukeire, draws) * prof.points;
+    function tenpaiEV(ids, draws, extra = []) {
+      const prof = tenpaiProfile(ids, extra);
+      return tenpaiWin(ctx, prof.ukeire, draws, prof.ronUkeire) * prof.points;
     }
-    function oneShantenEV(ids, draws) {
+    function oneShantenEV(ids, draws, extra = []) {
       const counts = countsOf(ids);
       const used = new Set(ids);
       const outcomes = [];
@@ -12841,8 +13199,8 @@
           const rest = hand14.slice();
           rest.splice(rest.indexOf(pickIdFromHand(hand14, idx, ctx.akaSet)), 1);
           if (shantenOfCounts(countsOf(rest), meldCount) !== 0) continue;
-          const prof = tenpaiProfile(rest);
-          const score = prof.ukeire * prof.points;
+          const prof = tenpaiProfile(rest, extra.concat([idx]));
+          const score = (prof.ukeire + prof.ronUkeire) * prof.points;
           if (!best || score > best.score) best = { score, prof };
           if (state.exhausted) return null;
         }
@@ -12857,7 +13215,7 @@
       for (let j = 1; j <= draws; j++) {
         alive *= ctx.survival;
         let stage = 0;
-        for (const o of outcomes) stage += o.r / hitTotal * tenpaiWin(ctx, o.prof.ukeire, draws - j) * o.prof.points;
+        for (const o of outcomes) stage += o.r / hitTotal * tenpaiWin(ctx, o.prof.ukeire, draws - j, o.prof.ronUkeire) * o.prof.points;
         total += alive * h * stage;
         alive *= 1 - h;
         if (alive < 1e-4) break;
@@ -12866,10 +13224,12 @@
     }
     return { state, tenpaiEV, oneShantenEV, tenpaiProfile };
   }
-  var SEARCH_BUDGET = 900;
-  var SEARCH_CANDIDATES = 6;
+  var SEARCH_BUDGET = 1200;
+  var SEARCH_CANDIDATES = 8;
+  var QUALITY_CANDIDATES = 5;
   function chooseDiscardByPolicy(engine, seat, { forbiddenKinds = null, level = "intermediate", hypothetical = null } = {}) {
-    const ctx = publicContext(engine, seat, hypothetical);
+    const ctx = publicContext(engine, seat, hypothetical, level);
+    if (ctx.advanced) return chooseDiscardAdvanced(ctx, forbiddenKinds);
     const { p } = ctx;
     const meldCount = realMelds(p.melds).length;
     const counts = countsOf(p.hand);
@@ -12942,9 +13302,105 @@
       score: best.ev
     };
   }
+  function chooseDiscardAdvanced(ctx, forbiddenKinds) {
+    const { p } = ctx;
+    const meldCount = realMelds(p.melds).length;
+    const counts = countsOf(p.hand);
+    const candidates = [];
+    for (let idx = 0; idx < 34; idx++) {
+      if (!counts[idx]) continue;
+      const id = pickIdFromHand(p.hand, idx, ctx.akaSet);
+      if (id == null || forbiddenKinds?.has(kindOf(id))) continue;
+      counts[idx]--;
+      const w = waitsOfCounts(counts, meldCount, ctx.remainOf);
+      const quality = w.shanten === 1 ? tenpaiQuality(ctx, counts, meldCount) : DEFAULT_UKEIRE[0];
+      const fold = ctx.threatActive ? -foldLoss(ctx, counts) : -Infinity;
+      counts[idx]++;
+      const rest = p.hand.slice();
+      rest.splice(rest.indexOf(id), 1);
+      const value = ctx.gainUtil(estimateValue(ctx, rest, p.melds));
+      const win = winCurve(ctx, w.shanten, w.ukeire, ctx.ownDraws, quality);
+      candidates.push({
+        id,
+        idx,
+        rest,
+        value,
+        quality,
+        shanten: w.shanten,
+        ukeire: w.ukeire,
+        waits: w.waits,
+        win,
+        risk: discardRisk(ctx, idx, kindOf(id)),
+        push: win * value + (w.shanten === 0 ? tenpaiBonus(ctx, win) : 0) - pushExposure(ctx, win),
+        foldBase: fold,
+        tie: tieBreak(ctx, id, p.hand)
+      });
+    }
+    if (!candidates.length) throw new Error("\u6CA1\u6709\u5408\u6CD5\u7684\u53EF\u6253\u724C");
+    const minShanten = Math.min(...candidates.map((c) => c.shanten));
+    if (minShanten === 2) {
+      const twos = candidates.filter((c) => c.shanten === 2).sort((a, b) => b.push - a.push || a.id - b.id);
+      for (const c of twos.slice(0, QUALITY_CANDIDATES)) {
+        const cc = countsOf(c.rest);
+        const next = oneShantenQuality(ctx, cc, meldCount);
+        c.win = winCurve(ctx, 2, c.ukeire, ctx.ownDraws, DEFAULT_UKEIRE[0], next);
+        c.push = c.win * c.value - pushExposure(ctx, c.win);
+        c.refined = true;
+      }
+      for (const c of twos.slice(QUALITY_CANDIDATES)) {
+        const floor = Math.min(...twos.slice(0, QUALITY_CANDIDATES).map((x) => x.push));
+        c.push = Math.min(c.push, floor);
+      }
+    }
+    const ranked = candidates.filter((c) => c.shanten <= 1).sort((a, b) => b.push - a.push || a.id - b.id);
+    if (ranked.length) {
+      const search = makeSearch(ctx, p.melds, SEARCH_BUDGET);
+      for (const c of ranked.slice(0, SEARCH_CANDIDATES)) {
+        const ev = c.shanten === 0 ? search.tenpaiEV(c.rest, ctx.ownDraws, [c.idx]) : search.oneShantenEV(c.rest, ctx.ownDraws, [c.idx]);
+        if (ev == null || search.state.exhausted) break;
+        c.push = ev + (c.shanten === 0 ? tenpaiBonus(ctx, c.win) : 0) - pushExposure(ctx, c.win);
+        c.searched = true;
+      }
+      const searched = candidates.filter((c) => c.searched);
+      if (searched.length) {
+        const floor = Math.min(...searched.map((c) => c.push));
+        for (const c of candidates) if (!c.searched && c.shanten <= 1) c.push = Math.min(c.push, floor);
+      }
+    }
+    let best = null;
+    for (const c of candidates) {
+      if (!ctx.threatActive && c.shanten > minShanten) continue;
+      const pushEV = c.push - c.risk;
+      const foldEV = c.foldBase - c.risk;
+      c.fold = foldEV > pushEV;
+      c.ev = Math.max(pushEV, foldEV) + c.tie;
+      if (!best || c.ev > best.ev || c.ev === best.ev && c.id < best.id) best = c;
+    }
+    return {
+      discardId: best.id,
+      shanten: best.shanten,
+      ukeire: best.ukeire,
+      waits: best.waits.map((i) => indexToTileId(i)),
+      ev: best.ev,
+      fold: best.fold,
+      score: best.ev
+    };
+  }
   function handOutlook(ctx, hand, melds, valueScale = 1) {
     const meldCount = realMelds(melds).length;
     const w = waitsOfCounts(countsOf(hand), meldCount, ctx.remainOf);
+    if (ctx.advanced) {
+      const counts = countsOf(hand);
+      const value2 = ctx.gainUtil(estimateValue(ctx, hand, melds) * valueScale);
+      const quality = w.shanten === 1 ? tenpaiQuality(ctx, counts, meldCount) : DEFAULT_UKEIRE[0];
+      const win2 = winCurve(ctx, w.shanten, w.ukeire, ctx.ownDraws, quality);
+      let meanLoss = 0;
+      for (const id of hand) meanLoss += ctx.read.lossOf[tileIndex(id)];
+      meanLoss /= Math.max(1, hand.length);
+      const push2 = win2 * value2 + (w.shanten === 0 ? tenpaiBonus(ctx, win2) : 0) - pushExposure(ctx, win2) - meanLoss;
+      const fold2 = ctx.threatActive ? -foldLoss(ctx, counts) : -Infinity;
+      return { push: push2, fold: fold2, ev: Math.max(push2, fold2) };
+    }
     const value = estimateValue(ctx, hand, melds) * ctx.gainScale * valueScale;
     const win = winCurve(ctx, w.shanten, w.ukeire, ctx.ownDraws);
     const nextRisk = ctx.danger ? 0.06 * ctx.threatLoss * ctx.lossScale : 0;
@@ -12952,16 +13408,16 @@
     const fold = ctx.danger ? -0.012 * ctx.threatLoss * ctx.lossScale * Math.min(ctx.ownDraws, 6) : -Infinity;
     return { push, fold, ev: Math.max(push, fold) };
   }
-  function shouldFoldHand(engine, seat) {
-    const ctx = publicContext(engine, seat);
-    if (!ctx.danger) return false;
+  function shouldFoldHand(engine, seat, level = "intermediate") {
+    const ctx = publicContext(engine, seat, null, level);
+    if (ctx.advanced ? !ctx.threatActive : !ctx.danger) return false;
     const outlook = handOutlook(ctx, ctx.p.hand, ctx.p.melds);
     return outlook.fold > outlook.push;
   }
   function claimPolicy(engine, seat, card, options, level = "intermediate") {
     if (!options.length) return null;
     const p = engine.players[seat];
-    const passCtx = publicContext(engine, seat);
+    const passCtx = publicContext(engine, seat, null, level);
     const pass = handOutlook(passCtx, p.hand, p.melds).ev;
     let best = null;
     for (const option of options) {
@@ -12971,7 +13427,7 @@
       const hypothetical = { player, extraSeen: option.used };
       let ev;
       if (option.type === "kan") {
-        ev = handOutlook(publicContext(engine, seat, hypothetical), hand, player.melds, 1.2).ev;
+        ev = handOutlook(publicContext(engine, seat, hypothetical, level), hand, player.melds, 1.2).ev;
       } else {
         try {
           ev = chooseDiscardByPolicy(engine, seat, { forbiddenKinds: option.forbiddenKinds, level, hypothetical }).ev;
@@ -12983,8 +13439,8 @@
     }
     return best;
   }
-  function riichiPolicy(engine, seat, discardKinds) {
-    const ctx = publicContext(engine, seat);
+  function riichiPolicy(engine, seat, discardKinds, level = "intermediate") {
+    const ctx = publicContext(engine, seat, null, level);
     const { p } = ctx;
     const seatWind = engine.seatWindOf(seat);
     let best = null;
@@ -12996,39 +13452,48 @@
       const w = waitsOfCounts(counts, realMelds(p.melds).length, ctx.remainOf);
       const used = new Set(hand);
       let ukeire = 0;
+      let ronUkeire = 0;
+      let damaRonUkeire = 0;
       let riichiPts = 0;
       let damaPts = 0;
       let damaUkeire = 0;
+      const furiten = ctx.advanced && (isFuritenWait(ctx, w.waits) || w.waits.some((idx) => indexToKind(idx) === kind));
       for (const idx of w.waits) {
         const r = Math.max(0, ctx.remainOf(idx));
         if (!r) continue;
+        const rw = furiten ? 0 : r * ronWeight(ctx, idx);
         let ron = indexToTileId(idx, 1);
         for (let copy = 1; copy <= 4 && used.has(ron); copy++) ron = indexToTileId(idx, copy);
         const base2 = { ronTile: ron, doraTiles: ctx.doraTiles, roundWind: engine.roundWind, seatWind };
         const r1 = calcWin(hand, p.melds, ctx.akaSet, { ...base2, riichi: true });
         const r0 = calcWin(hand, p.melds, ctx.akaSet, base2);
         ukeire += r;
+        ronUkeire += rw;
         riichiPts += r * (r1.ten || 0);
         if (r0.hasYaku) {
           damaUkeire += r;
+          damaRonUkeire += rw;
           damaPts += r * r0.ten;
         }
       }
       const candidate = {
         card,
         ukeire,
+        ronUkeire,
+        damaRonUkeire,
         waitCount: w.waits.length,
         riichiPts: ukeire ? riichiPts / ukeire : 0,
         damaPts: damaUkeire ? damaPts / damaUkeire : 0,
         damaUkeire,
-        risk: dealInProbability(ctx, kind) * ctx.threatLoss * ctx.lossScale
+        risk: discardRisk(ctx, tileIndex(card), kind)
       };
-      const score = candidate.ukeire * candidate.riichiPts - candidate.risk * 10;
+      const score = ctx.advanced ? (candidate.ukeire + candidate.ronUkeire) * candidate.riichiPts - candidate.risk * 10 : candidate.ukeire * candidate.riichiPts - candidate.risk * 10;
       if (!best || score > best.score || score === best.score && card < best.card) best = { ...candidate, score };
     }
     if (!best) return null;
     const draws = ctx.ownDraws;
     const winR = tenpaiWin(ctx, best.ukeire, draws);
+    if (ctx.advanced) return riichiAdvanced(ctx, best);
     const riichiEV = winR * (best.riichiPts * 1.25 + 1e3 + ctx.tableBonus) * ctx.gainScale - 1e3 - (ctx.danger ? Math.min(draws, 6) * 0.06 * ctx.threatLoss * ctx.lossScale : 0) - best.risk;
     const damaEV = best.damaUkeire ? tenpaiWin(ctx, best.damaUkeire, draws) * 0.92 * (best.damaPts + ctx.tableBonus) * ctx.gainScale - futureExposure(ctx, 0) - best.risk : -Infinity;
     const scores = engine.players.map((pl) => pl.score);
@@ -13036,6 +13501,28 @@
     if (best.damaUkeire && engine.isAllLast() && lead >= 8e3) return { action: "dama", card: best.card };
     if (damaEV >= riichiEV) return { action: "dama", card: best.card };
     if (riichiEV < -1e3 && ctx.danger) return null;
+    return { action: "riichi", card: best.card };
+  }
+  function riichiAdvanced(ctx, best) {
+    const { engine, p } = ctx;
+    const draws = ctx.ownDraws;
+    const winR = tenpaiWin(ctx, best.ukeire, draws, best.ronUkeire * 0.85);
+    const riichiEV = winR * ctx.gainUtil(best.riichiPts * 1.25 + 1e3 + ctx.tableBonus) - 1e3 + tenpaiBonus(ctx, winR) - pushExposure(ctx, winR, false) - best.risk;
+    let damaEV = -Infinity;
+    if (best.damaUkeire) {
+      const winD = tenpaiWin(ctx, best.damaUkeire, draws, best.damaRonUkeire);
+      damaEV = winD * ctx.gainUtil(best.damaPts + ctx.tableBonus) + tenpaiBonus(ctx, winD) - pushExposure(ctx, winD, true) - best.risk;
+    }
+    const scores = engine.players.map((pl) => pl.score);
+    const lead = p.score - Math.max(...scores.filter((_, s) => s !== ctx.seat));
+    if (best.damaUkeire && engine.isAllLast() && lead >= 8e3) return { action: "dama", card: best.card };
+    if (ctx.threatActive) {
+      const counts = countsOf(p.hand);
+      counts[tileIndex(best.card)]--;
+      const foldEV = -foldLoss(ctx, counts) - best.risk;
+      if (foldEV > Math.max(riichiEV, damaEV)) return null;
+    }
+    if (damaEV >= riichiEV) return { action: "dama", card: best.card };
     return { action: "riichi", card: best.card };
   }
 
@@ -13383,6 +13870,7 @@
       this.kanCount = 0;
       this.firstGoAround = true;
       this.lastDiscard = null;
+      this.discardLog = [];
       const { tiles, akaSet } = buildWall({ sanma: this.sanma, akaCount: this.akaCount });
       this.akaSet = akaSet;
       const wall = shuffle(tiles, this.rng);
@@ -13976,6 +14464,7 @@
       const idx = p.hand.lastIndexOf(card);
       p.hand.splice(idx, 1);
       p.hand.sort((a, b) => a - b);
+      this.discardLog?.push({ seat, kind: kindOf2(card), tsumogiri: p.drawnTile === card, riichi: action === PlayAction.Riichi });
       p.discards.push(card);
       p.discardKinds.add(kindOf2(card));
       this.updateWaits(p);
@@ -14780,11 +15269,11 @@
         if (north != null) return { action: PlayAction.BaBei, card: north };
       }
       if (can.includes(PlayAction.Riichi)) {
-        const decision = riichiPolicy(this, seat, this.formalTenpaiDiscards(p));
+        const decision = riichiPolicy(this, seat, this.formalTenpaiDiscards(p), level);
         if (decision?.action === "riichi") return { action: PlayAction.Riichi, card: decision.card };
         if (decision?.action === "dama") return { action: PlayAction.Normal, card: decision.card };
       }
-      const kanOk = (can.includes(PlayAction.AnGang) || can.includes(PlayAction.PengGang)) && this.aiWantsKan(p, danger) && !shouldFoldHand(this, seat);
+      const kanOk = (can.includes(PlayAction.AnGang) || can.includes(PlayAction.PengGang)) && this.aiWantsKan(p, danger) && !shouldFoldHand(this, seat, level);
       if (kanOk && can.includes(PlayAction.AnGang)) {
         return { action: PlayAction.AnGang, card: this.concealedQuadTile(p) };
       }

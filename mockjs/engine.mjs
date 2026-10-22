@@ -129,6 +129,8 @@ var GameEngine = class {
     this.kanCount = 0;
     this.firstGoAround = true;
     this.lastDiscard = null;
+    // 公开牌河日志（含被鸣走的弃牌），只记牌种与公开属性，供 AI 读牌使用。
+    this.discardLog = [];
     const { tiles, akaSet } = buildWall({ sanma: this.sanma, akaCount: this.akaCount });
     this.akaSet = akaSet;
     const wall = shuffle(tiles, this.rng);
@@ -733,6 +735,7 @@ var GameEngine = class {
     const idx = p.hand.lastIndexOf(card);
     p.hand.splice(idx, 1);
     p.hand.sort((a, b) => a - b);
+    this.discardLog?.push({ seat, kind: kindOf2(card), tsumogiri: p.drawnTile === card, riichi: action === PlayAction.Riichi });
     p.discards.push(card);
     p.discardKinds.add(kindOf2(card));
     this.updateWaits(p);
@@ -1561,12 +1564,12 @@ var GameEngine = class {
       if (north != null) return { action: PlayAction.BaBei, card: north };
     }
     if (can.includes(PlayAction.Riichi)) {
-      const decision = riichiPolicy(this, seat, this.formalTenpaiDiscards(p));
+      const decision = riichiPolicy(this, seat, this.formalTenpaiDiscards(p), level);
       if (decision?.action === "riichi") return { action: PlayAction.Riichi, card: decision.card };
       if (decision?.action === "dama") return { action: PlayAction.Normal, card: decision.card };
     }
     const kanOk = (can.includes(PlayAction.AnGang) || can.includes(PlayAction.PengGang))
-      && this.aiWantsKan(p, danger) && !shouldFoldHand(this, seat);
+      && this.aiWantsKan(p, danger) && !shouldFoldHand(this, seat, level);
     if (kanOk && can.includes(PlayAction.AnGang)) {
       return { action: PlayAction.AnGang, card: this.concealedQuadTile(p) };
     }
