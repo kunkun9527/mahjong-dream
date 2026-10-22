@@ -972,7 +972,7 @@
   function getSelfProfile(sess, sanma) {
     var localRank = sess && sess.localProfile ? sess.localProfile.ranks[sanma ? 'sanma' : 'yonma'] : null;
     var profile = {
-      uid: UID, nick: sess && sess.localProfile ? sess.localProfile.nickname : '离线玩家', head: 1009, frame: 2001, title: 3001,
+      uid: UID, nick: sess && sess.localProfile ? sess.localProfile.nickname : 'player', head: 1009, frame: 2001, title: 3001,
       bang: 140009, warrior: 1, skin: 1001, level: localRank ? localRank.level : 1, likability: 6, pt: localRank ? localRank.point : 0
     };
     try {

@@ -69,7 +69,7 @@ function emptyStats(players) {
 export function createDefaultProfile() {
   return {
     version: PROFILE_VERSION,
-    nickname: '离线玩家',
+    nickname: 'player',
     coins: 999_999,
     ranks: {
       yonma: { ...C.defaults.rank },
@@ -111,6 +111,8 @@ function normalizeProfile(value) {
   return {
     ...defaults,
     ...profile,
+    // 旧默认昵称迁移为新默认昵称；玩家自行改过的昵称不受影响。
+    nickname: profile.nickname === '离线玩家' ? defaults.nickname : (profile.nickname ?? defaults.nickname),
     version: PROFILE_VERSION,
     ranks: {
       yonma: { ...defaults.ranks.yonma, ...profile.ranks?.yonma },

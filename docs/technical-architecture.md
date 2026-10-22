@@ -481,7 +481,7 @@ userdata/profile.json
 ```json
 {
   "version": 1,
-  "nickname": "离线玩家",
+  "nickname": "player",
   "coins": 999999,
   "ranks": {
     "yonma": { "level": 17, "point": 2300 },

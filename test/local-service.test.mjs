@@ -46,10 +46,21 @@ test('损坏存档会保留备份并回退到新档案', async () => {
   try {
     await fs.writeFile(path.join(directory, 'profile.json'), '{broken', 'utf8');
     const profile = await loadProfile(directory);
-    assert.equal(profile.nickname, '离线玩家');
+    assert.equal(profile.nickname, 'player');
     const files = await fs.readdir(directory);
     assert.equal(files.includes('profile.json'), false);
     assert.equal(files.filter((name) => name.startsWith('profile.corrupt-')).length, 1);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+test('旧默认昵称存档迁移为 player，自定义昵称保留', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mj-nickname-migrate-'));
+  try {
+    await fs.writeFile(path.join(directory, 'profile.json'), JSON.stringify({ nickname: '离线玩家' }), 'utf8');
+    assert.equal((await loadProfile(directory)).nickname, 'player');
+    await fs.writeFile(path.join(directory, 'profile.json'), JSON.stringify({ nickname: '阿明' }), 'utf8');
+    assert.equal((await loadProfile(directory)).nickname, '阿明');
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }
