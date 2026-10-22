@@ -6,7 +6,7 @@
 
 - **100% Offline**: Runs strictly on localhost (`127.0.0.1`). No internet connection is required, and no private data or telemetry is transmitted.
 - **Bilingual Support**: Includes both the international English client (*Mahjong Dream*) and the original Chinese client (*激情麻将*).
-- **Dedicated Riichi Experience**: Focused exclusively on Riichi Mahjong (4-Player, 3-Player, and One-Round Quick Match). Non-Riichi modes (Sichuan Mahjong, Fight the Landlord, Guandan) have been cleanly removed from the lobby.
+- **Dedicated Riichi Experience**: Focused exclusively on Riichi Mahjong (4-Player, 3-Player, and One-Round Quick Match). The lobby still shows the original non-Riichi entries (Sichuan Mahjong, Fight the Landlord, Guandan); starting them shows an "unavailable offline" prompt instead of a match. The Unity client files are kept unmodified.
 - **Full Unlock by Default**: All 10 characters, 23 costumes, max affection levels, avatars, and cosmetics are unlocked and ready to use immediately.
 
 ---

@@ -98,8 +98,8 @@
 ## 范围收敛：只保留单机立直
 
 - [x] 2026-10-18 起项目只做单机立直麻将。四川麻将后端（`mockjs/sichuan_*`、`majiang_*`、提取脚本、相关测试与多玩法计划）已删除，最后完整版本见提交 `a469df1`；ADR 0004/0005 标为已废弃。
-- [x] 匹配请求 20403 中非立直的 gameType（四川 5021/5022/5023、斗地主 4101、掼蛋 4111 等）返回 20404 `f1=10` 并推 20106 离线提示，不组桌；回归见 `test/offline-content.test.mjs`。
-- [x] **大厅移除非立直玩法入口**：`tools/patch_remove_nonriichi.py` 把 `commonconfigs` 里 `GamePlayHudPanelCfgTb` 的行裁剪为立直子入口（0–7 行，对应 4001/4002；8–13 行为四川/斗地主/掼蛋），`tools/patch_ui_bundle.py` 负责重打包并同步整条校验链：bundle 文件名用新整文件 MD5，前缀 33 字节（空格 + body MD5）保持正确，Arts 清单（根与 WebGL 两份副本）更新该 bundle 的 hash/size，Arts 自身重命名并同步根 `versions.json`、`WebGL/versions_v316/317` 与 `updateinfo.json`。校验链依据见 Oracle 调查：客户端 `DownloadRequest_VerifyContent` 核对整文件 MD5 与 size；加载链 CRC=0 不启用 Unity CRC。必须从 git 原版 bundle 出发重新生成；验证时需换全新 Chrome 用户目录并清 IndexedDB/Cache，避免旧缓存误判。2026-10-18 浏览器实测：大厅不再显示四川/斗地主/掼蛋，其余磁贴自动回填无空洞，立直段位战选房、快速开始与对局正常。已知限制：首次进大厅立直磁贴有约 1–2 秒的动画排布过程，可能闪现占位磁贴。
+- [x] 匹配请求 20403 中非立直的 gameType（四川 5021/5022/5023、斗地主 4101、掼蛋 4111 等）返回 20404 `f1=10` 并推 20106 离线提示，不组桌；回归见 `test/offline-content.test.mjs`。浏览器实测四川快速开始弹出提示且停留在选房页。
+- [ ] 斗地主、掼蛋快速开始的浏览器表现未确认（客户端是否发 20403 未观察到）。
 
 ## P1：本地档案与原界面接通
 

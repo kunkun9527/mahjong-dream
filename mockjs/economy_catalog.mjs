@@ -1,7 +1,6 @@
 // 由 tools/extract_economy_config.py 从原客户端配置生成；勿手改。
-// source 指向 assets/pristine/ 下的原始 bundle 快照（UI 改包管线会裁剪并重命名 StreamingAssets 里的文件）。
 export const ECONOMY_CATALOG = {
-  "source": "assets/pristine/commonconfigs.bundle",
+  "source": "StreamingAssets/Bundles/WebGL/commonconfigs_d005e1531b1cf360239da815293e48c6.bundle",
   "sha256": "ed720b8300fcf05a69e59a524562f6d67220697239bcebfe86a2e35a70b0e581",
   "shopTypes": {
     "GROCERY": 2,
