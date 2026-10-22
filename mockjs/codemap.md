@@ -8,13 +8,14 @@
 - `riichi_ai_policy.mjs` — 立直三档 AI 共用期望值弃牌/鸣牌、押引与立直/默听框架；低级裁减待牌质量与顺位，中级保留但不搜索，高级加公开读牌和固定预算摸牌搜索（ADR 0006）。`engine.mjs` 的 `aiTurn/aiClaim` 按 `aiLevels` 控制能力，合法性与关键北保护三档共用。
 - `riichi_ai_read.mjs` — 高级 AI 读牌模型：只用公开信息（牌河顺序/摸切/立直/副露/宝牌/余牌）估计各家听牌概率、逐张放铳率与威胁打点；公开牌河日志由 `engine.mjs` 的 `discardLog` 提供。
 - `riichi_reload.mjs` — 重连快照：把本手已下发通知帧折叠为客户端可见局面，构造 `Offline2OnlineGameScene`（20163 `f100`）；不安全切点返回 `null` 退回整手重放。
-- `engine.mjs` — 立直 `GameEngine`：牌山、动作窗口、鸣牌/立直/杠/拔北、和了与流局、计分、局序（东风/半庄/一局）。牌局唯一真相。
+- `engine.mjs` — 立直 `GameEngine`：牌山、动作窗口、鸣牌/立直/杠/拔北、和了与流局、计分、局序（东风/半庄/一局）。牌局唯一真相。记录真人决策（`matchRecord()`），可按记录重演恢复（`replayLog`）、冻结真人计时（`setHumanPresent`）。
 - `ai.mjs`、`shanten.mjs` — AI 决策与向听；`yaku_map.mjs` 役种映射（计分依赖 `riichi` 包）。
 - `tiles.mjs` — 实体牌 ID ↔ 牌种转换，红宝依赖它。
 - `pb.mjs` + `riichi_desc.mjs` + `proto_enum.mjs` — 立直协议（protobufjs）。
 - `shop.mjs` — 杂货铺/雀币/招募/荣耀积分四类商店的购买、限购与刷新（DT 30）。
 - `one_round.mjs` — 一局战报名费与番数奖励。
 - `profile.mjs`、`economy.mjs`、`profile_host.mjs` — 档案规则、一次性经济补给、共享档案宿主（装载/会话回调/结算记账/存档修改器操作）。网页版经 bundle 的 `__mj.host` 使用，Node 版直接 import（ADR 0007）。
+- `npc_roster.mjs` — 19 位 NPC（固定角色/皮肤/头像、风格五轴与情景特性）与按种子抽人 `pickNpcs`；风格由 `riichi_ai_policy.mjs` 的 `resolveStyle` 应用，真人席保持中性（ADR 0008）。
 - `process_shim.mjs` — 构建时注入的 `process` 替身；缺它时 bundle 在浏览器里报 `process is not defined`。
 - 生成数据：`economy_catalog.mjs`、`riichi_desc.mjs`，由 `tools/` 脚本生成，不要手改。
 

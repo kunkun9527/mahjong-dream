@@ -21,8 +21,8 @@ The original 3D anime-style client, characters, voices and table animations are 
 ## Why Play It
 
 - 🀄 **Real Riichi Mahjong.** 4-player and 3-player games, East-only and Hanchan matches, plus quick **1-Round** showdowns. Scoring follows Mahjong Soul–style ranked rules: every yaku and yakuman, furiten, abortive draws, Nagashi Mangan, pao liability and accurate fu.
-- 🎎 **Everything Unlocked.** All 10 characters, 23 outfits, max affection (Lv.6 MAX) and every avatar, title, table cloth, tile back, riichi BGM and win animation are unlocked from the start.
-- 🤖 **AI Opponents Who Play Fair.** Three difficulty tiers across four ranked rooms. The strongest reads discards, tsumogiri and riichi timing to judge danger. All AI see only public information and never peek at the wall or your hand.
+- 🎎 **Everything Unlocked.** All 10 characters, 19 outfits, max affection (Lv.6 MAX) and every avatar, title, table cloth, tile back, riichi BGM and win animation are unlocked from the start.
+- 🤖 **AI Opponents Who Play Fair.** 19 opponents with their own names, looks and play styles, from reckless pushers to patient defenders. Three difficulty tiers across four ranked rooms. The strongest reads discards, tsumogiri and riichi timing to judge danger. All AI see only public information and never peek at the wall or your hand.
 - 🏆 **Climb the Ranks.** Ranked rooms (Launch → Pursuit → Ascension → Conquest) with rank points, promotion and match records, just like the live game.
 - 🛍️ **Working Shops.** Four in-game shops work, and your wallet starts with plenty of coins and gems to spend freely.
 - 🛠️ **Built-in Save Editor.** Set your rank, coins and nickname, reset your record, or back up your save. It's your game.
@@ -88,7 +88,7 @@ npm run build   # rebuild mock/riichi.js from mockjs/
 
 - Browser and offline versions share one backend: [ADR 0007](docs/adr/0007-browser-and-node-hosts.md)
 - Architecture: [`docs/technical-architecture.md`](docs/technical-architecture.md) · Code map: [`codemap.md`](codemap.md)
-- Rules baseline: [ADR 0002](docs/adr/0002-use-mahjong-soul-ranked-rules.md) · AI tiers: [ADR 0006](docs/adr/0006-riichi-ai-levels.md)
+- Rules baseline: [ADR 0002](docs/adr/0002-use-mahjong-soul-ranked-rules.md) · AI tiers: [ADR 0006](docs/adr/0006-riichi-ai-levels.md) · NPCs and match recovery: [ADR 0008](docs/adr/0008-npc-roster-and-match-recovery.md)
 - History: [`docs/handoff.md`](docs/handoff.md), [`docs/repair-backlog.md`](docs/repair-backlog.md)
 
 <details>
@@ -114,7 +114,9 @@ npm run build   # rebuild mock/riichi.js from mockjs/
 - Advanced (Conquest): adds a bounded tenpai search with exact scoring and reads each opponent's tenpai chance and danger from public discards, tsumogiri, riichi and calls. Uses placement-aware play in All Last.
 - With a fixed seed, every match is deterministic and reproducible.
 
-**Offline version reconnect:** if you refresh mid-match, the hand, river, calls, scores and timers are restored. The AI waits 60 seconds before playing for you.
+**Opponents:** 19 NPCs named after famous mahjong characters (Saki, Nodoka, Koromo, Awai, Akagi and more). Each has a fixed character and outfit and a style: how hard they push, how often they call, riichi or stay dama, speed or value. The room still sets their strength.
+
+**Leaving mid-match:** close or refresh the page and the match waits for you, frozen on your turn. Come back within 5 minutes to keep playing. After that, the AI finishes the match for you the next time you open the game, and the result counts.
 
 </details>
 

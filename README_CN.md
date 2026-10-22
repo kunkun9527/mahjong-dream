@@ -21,8 +21,8 @@
 ## 有什么好玩的
 
 - 🀄 **正统日麻**：支持四麻、三麻的东风战和半庄战，还有一局决胜负的**一局战**。规则参照雀魂段位战，役种和役满齐全，振听、途中流局、流局满贯、包牌和符数计算都很严谨。
-- 🎎 **开局全解锁**：10 位雀士、23 套服装、满级好感（Lv.6 MAX），以及全部头像、称号、桌布、牌背、立直音乐和和牌特效，一开始就能用。
-- 🤖 **不作弊的 AI**：三档难度分布在四个段位房间，最强的 AI 会根据牌河、摸切和立直时机读牌防守。所有 AI 只看公开信息，绝不偷看牌山和你的手牌。
+- 🎎 **开局全解锁**：10 位雀士、19 套服装、满级好感（Lv.6 MAX），以及全部头像、称号、桌布、牌背、立直音乐和和牌特效，一开始就能用。
+- 🤖 **不作弊的 AI**：19 位对手各有名字、造型和打法，有猛攻的，也有稳守的。三档难度分布在四个段位房间，最强的 AI 会根据牌河、摸切和立直时机读牌防守。所有 AI 只看公开信息，绝不偷看牌山和你的手牌。
 - 🏆 **段位冲分**：启航 → 逐梦 → 乘风 → 御龙，段位 PT、升降段和战绩都和原版一样。
 - 🛍️ **商店能用**：四个商店都能正常购买，开局就有充足的雀币和梦石，随便花。
 - 🛠️ **自带存档修改器**：段位、金币、昵称想改就改，也能重置战绩、备份存档。单机游戏，你说了算。
@@ -88,7 +88,7 @@ npm run build   # 由 mockjs/ 重新生成 mock/riichi.js
 
 - 网页版与离线版共用同一后端：[ADR 0007](docs/adr/0007-browser-and-node-hosts.md)
 - 架构：[`docs/technical-architecture.md`](docs/technical-architecture.md) · 代码地图：[`codemap.md`](codemap.md)
-- 规则基线：[ADR 0002](docs/adr/0002-use-mahjong-soul-ranked-rules.md) · AI 分级：[ADR 0006](docs/adr/0006-riichi-ai-levels.md)
+- 规则基线：[ADR 0002](docs/adr/0002-use-mahjong-soul-ranked-rules.md) · AI 分级：[ADR 0006](docs/adr/0006-riichi-ai-levels.md) · NPC 与对局恢复：[ADR 0008](docs/adr/0008-npc-roster-and-match-recovery.md)
 - 历史记录：[`docs/handoff.md`](docs/handoff.md)、[`docs/repair-backlog.md`](docs/repair-backlog.md)
 
 <details>
@@ -114,7 +114,9 @@ npm run build   # 由 mockjs/ 重新生成 mock/riichi.js
 - 高级（御龙）：增加限定计算量的听牌搜索和精确打点估算；根据公开的牌河、摸切、立直和副露判断各家的听牌概率与危险度；All Last 会按顺位调整打法。
 - 固定随机种子时，对局完全可复现。
 
-**离线版断线恢复**：对局中刷新，手牌、牌河、副露、分数和计时都会恢复；断线后 AI 会等待 60 秒再替你出牌。
+**对手**：19 位 NPC，名字致敬知名麻将角色（Saki、Nodoka、Koromo、Awai、Akagi 等）。每人有固定的角色和服装，打法也各不相同：押得多狠、爱不爱鸣牌、立直还是默听、求快还是做大。强弱仍由房间决定。
+
+**中途离开**：关闭或刷新页面后，对局会停在你的回合等你。5 分钟内回来可以接着打；超过 5 分钟，下次打开游戏时由 AI 替你打完，成绩照常计入。
 
 </details>
 

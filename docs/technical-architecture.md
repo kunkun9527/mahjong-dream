@@ -229,10 +229,10 @@ HTTP upgrade 只接受 `/ws`。`ws` 的 `maxPayload` 为 2 MiB。
 
 - 尚在匹配且引擎未创建：取消全部计时器并清空牌桌；
 - 对局进行中：保留引擎，切换真人为 AI 托管；
-- 断线后 AI 先按正常速度托管 60 秒（`RECONNECT_GRACE_MS`），超时才切到 `speed=0` 快速打完；
+- 断线后冻结真人当前决策（计时暂停，AI 只打到轮到真人为止），起 5 分钟计时（`AWAY_LIMIT_MS`）；超时由中性 AI 以 `speed=0` 快速打完并结算；
 - 重连后：先暂停实时下推，等待客户端发 20162。立直对局优先由 `mockjs/riichi_reload.mjs` 把本手已下发帧折叠为 `Offline2OnlineGameScene`，放进 20163 的 `f100`，之后只补发切点之后的新帧；快照不可安全构造（准备阶段、本手结束、余牌为 0 等）时，退回重放本手事件。
 
-重连仍限**当前服务进程内**；服务重启后不会恢复未完成比赛。
+未完成比赛以“牌桌快照（含种子）+ 真人决策记录”存进档案的 `activeMatch`。服务重启或网页版刷新后，`restoreMatch` 以速度 0 重演到原局面并冻结，客户端 20162 时等重演追上再回 20163；离开超过 5 分钟则代打结算并留下英文提示（ADR 0008）。
 
 ## 8. 协议架构
 
@@ -640,6 +640,8 @@ npm test
 | --- | --- |
 | `test/action-validation.test.mjs` | 非法动作不变性、实体杠牌、食替、振听、抢杠/抢北、超时和断线托管 |
 | `test/ai-strategy.test.mjs` | 防守风险、无役副露、All Last 默听、确定性与预算、隐藏字段读取隔离 |
+| `test/match-recovery.test.mjs` | 决策记录任意切点重演一致、断线冻结、恢复后 20162 与计时、超时代打结算与提示 |
+| `test/npc-style.test.mjs` | NPC 名单与皮肤合法、按种子抽人、风格对局合法守恒可复现、风格方向差异 |
 | `test/build-smoke.test.mjs` | 内层 Protobuf 往返、浏览器 bundle 全局导出契约 |
 | `test/engine-smoke.test.mjs` | 固定 seed、四模式终局守恒、三麻牌池、计分上下文 |
 | `test/local-service.test.mjs` | 档案原子写入/损坏恢复、段位、HTTP/Range/HEAD、WS 和单页面限制 |
@@ -740,6 +742,7 @@ npm test
 | `docs/adr/0001-filesystem-owned-local-save.md` | 档案所有权决策 |
 | `docs/adr/0002-use-mahjong-soul-ranked-rules.md` | 唯一规则基线决策 |
 | `docs/adr/0007-browser-and-node-hosts.md` | 浏览器/Node 两种宿主与存档位置 |
+| `docs/adr/0008-npc-roster-and-match-recovery.md` | 19 位 NPC 风格与对局记录重演恢复 |
 | `docs/repair-backlog.md` | 已完成、未完成与验收清单 |
 | `docs/technical-architecture.md` | 本文，当前技术全景 |
 | `test/*.test.mjs` | 自动回归测试 |
@@ -792,8 +795,8 @@ MJ_DEBUG=1 MJ_PORT=8765 MJ_USERDATA_DIR=.tmp-profile npm start
 - 没有身份认证：安全模型依赖服务仅监听本机；
 - 静态服务可以读取项目根目录内任意已知文件路径，不是面向不可信网络的通用文件服务器；
 - 单进程、单档案、单活动页面；
-- 重连不跨服务进程；
-- 没有完整牌谱持久化；立直重连快照只在同进程内由已下发帧构造；
+- 跨进程恢复依赖引擎确定性；升级引擎/AI 后旧半局可能在重演中分叉（记录日志后从当前局面继续）；
+- 没有完整牌谱持久化；立直重连快照由重演或实时产生的本手帧构造；
 - 原 Unity 二进制不可维护，UI 逻辑只能通过兼容层和协议适配；
 - 原协议并未全部还原，当前实现以实际本地流程所需消息为范围；
 - AI 尚未达到完整策略搜索水平；
