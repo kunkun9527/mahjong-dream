@@ -207,40 +207,72 @@
         document.body.appendChild(script);
       }
 
-      // The Chinese build writes PlayerPrefs LanguageID as 6 (Simplified Chinese) at startup; the international build prefers this saved value over the browser language;
-      // the English entry changes it to 4 (English) before Unity mounts the save. Record format: key length, key name, 0xFE, little-endian int32.
+      // Keep the existing English-entry language choice and accept the offline terms before Unity starts.
+      // IDBFS v21 and UnityPrf v1 are the formats used by both bundled Unity clients.
       function useEnglishPlayerPrefs() {
         return new Promise(function (done) {
-          var open = indexedDB.open("/idbfs");
+          var url = location.href.split(/[?#]/)[0];
+          var directory = "/idbfs/" + SparkMD5.hash(url.substring(0, url.lastIndexOf("/")));
+          var prefsPath = directory + "/PlayerPrefs";
+          var open = indexedDB.open("/idbfs", 21);
           open.onerror = function () { done(); };
+          open.onupgradeneeded = function () {
+            var db = open.result;
+            var store = db.objectStoreNames.contains("FILE_DATA")
+              ? open.transaction.objectStore("FILE_DATA") : db.createObjectStore("FILE_DATA");
+            if (!store.indexNames.contains("timestamp")) store.createIndex("timestamp", "timestamp", { unique: false });
+          };
           open.onsuccess = function () {
             var db = open.result;
-            if (!db.objectStoreNames.contains("FILE_DATA")) { db.close(); return done(); }
             var tx = db.transaction("FILE_DATA", "readwrite");
-            var cursor = tx.objectStore("FILE_DATA").openCursor();
-            cursor.onsuccess = function () {
-              var c = cursor.result;
-              if (!c) return;
-              if (/\/PlayerPrefs$/.test(c.key) && c.value && c.value.contents && setPrefsInt(c.value.contents, "LanguageID", 4)) c.update(c.value);
-              c.continue();
+            var store = tx.objectStore("FILE_DATA");
+            var request = store.get(prefsPath);
+            request.onsuccess = function () {
+              var file = request.result;
+              var before = file ? file.contents : new Uint8Array([85, 110, 105, 116, 121, 80, 114, 102, 0, 0, 1, 0, 0, 0, 0, 0]);
+              var contents = setPrefsInt(setPrefsInt(before, "LanguageID", 4), "user_terms", 1);
+              if (contents === before) return;
+              if (!file) {
+                var parent = store.get(directory);
+                parent.onsuccess = function () {
+                  if (!parent.result) store.put({ timestamp: new Date(), mode: 16895 }, directory);
+                };
+              }
+              file = file || { mode: 33206 };
+              file.contents = contents;
+              file.timestamp = new Date();
+              store.put(file, prefsPath);
             };
             tx.oncomplete = tx.onerror = tx.onabort = function () { db.close(); done(); };
           };
         });
       }
 
+      // Extend the existing integer patch without reserializing unrelated preferences.
       function setPrefsInt(bytes, key, value) {
-        outer: for (var i = 1; i + key.length + 5 <= bytes.length; i++) {
+        if (!bytes || bytes.length < 16 || String.fromCharCode.apply(null, bytes.subarray(0, 8)) !== "UnityPrf") return bytes;
+        if (new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(8, true) !== 65536) return bytes;
+        outer: for (var i = 17; i + key.length + 5 <= bytes.length; i++) {
           if (bytes[i - 1] !== key.length) continue;
           for (var j = 0; j < key.length; j++) if (bytes[i + j] !== key.charCodeAt(j)) continue outer;
           var at = i + key.length;
-          if (bytes[at] !== 0xfe) return false;
+          if (bytes[at] !== 0xfe) return bytes;
           var old = bytes[at + 1] | (bytes[at + 2] << 8) | (bytes[at + 3] << 16) | (bytes[at + 4] << 24);
-          if (old === value) return false;
-          for (var k = 0; k < 4; k++) bytes[at + 1 + k] = (value >>> (8 * k)) & 0xff;
-          return true;
+          if (old === value) return bytes;
+          var changed = bytes.slice();
+          for (var k = 0; k < 4; k++) changed[at + 1 + k] = (value >>> (8 * k)) & 0xff;
+          return changed;
         }
-        return false;
+        var changed = new Uint8Array(bytes.length + key.length + 6);
+        changed.set(bytes);
+        var at = bytes.length;
+        changed[at++] = key.length;
+        for (var j = 0; j < key.length; j++) changed[at++] = key.charCodeAt(j);
+        changed[at++] = 0xfe;
+        for (var k = 0; k < 4; k++) changed[at++] = (value >>> (8 * k)) & 0xff;
+        var view = new DataView(changed.buffer);
+        view.setUint32(12, view.getUint32(12, true) + 1, true);
+        return changed;
       }
 
       function receiveOrientationFromUnity(param) {

@@ -86,6 +86,8 @@
 - **English Version**: Double-click [`start-game-en.bat`](start-game-en.bat).
 - **Chinese Version**: Double-click [`start-game.bat`](start-game.bat).
 
+The English entry defaults to accepting the local client terms. Event and Notifications badges are suppressed in both entries; normal match results and shop feedback are retained.
+
 The launcher starts the local server on loopback (`127.0.0.1`) and automatically launches Microsoft Edge or Google Chrome. **Close the command prompt window to stop the game server.**
 
 #### Command-Line Arguments (Optional)

@@ -161,10 +161,14 @@ start-game.bat --players=3 --length=hanchan
 
 - `index.html` 是外层页面，以 iframe 加载 `game.html`，转发查询串并处理横竖屏；
 - `game.html` 创建 Unity canvas，先加载离线补丁，再加载 Unity loader；
-- `game.html` 中的 Unity 配置指向 `Build/` 和 `StreamingAssets/`；
+- `game.html` 默认加载 `Build/`，`?mjLang=en` 改载 `Build_intl/`；两者共享 `StreamingAssets/` 与同一套本地立直后端；
 - `QuickSDK`、`H5SDK`、`QuickService` 被本地 stub，避免原渠道 SDK 缺失导致初始化崩溃。
 
-当前中文构建产品版本为 `1.1.107241726.0`。`Build_intl/` 是国际版资源，不属于当前中文客户端的主要验收范围。
+当前中文构建产品版本为 `1.1.107241726.0`，国际版为 `1.1.107211826.0`。2026-10-22 静态提取的 45 份协议描述逐份完全相同，涵盖立直动作、结算、重连、匹配与用户数据；另外 2 个反射初始化器未恢复。立直类型未发现缺失，国际版语言配置包含简体中文。此结果支持后端/协议兼容，不表示两个不同版本的所有 UI 与运行行为完全一致；本轮未合并入口。四川/斗地主等非立直模式仍按离线不可用处理。
+
+英文入口在 Unity 启动前初始化同源 IndexedDB `/idbfs` v21 的 `FILE_DATA`：按 Unity 的 URL 目录 MD5 定位 `PlayerPrefs`，保留现有 `LanguageID=4` 行为，并写入 `user_terms=1` 作为本地默认同意。首次启动会建立有效的 UnityPrf v1 头、目录和整数记录，已有音量等偏好保持不变；不改 Unity 文件。仅修改当前路径，不扫描或覆盖其他目录的偏好。语言记忆行为没有在本轮调整。
+
+大厅 `normalizeOfflineLobby()` 另移除 DT27 中活动/公告类型（3/4）的红点，补齐 DT33 中内置活动、系统公告与服务器公告的已读 ID。其他红点、公告内容、未知字段、余额和对局数据保留；登录/资料查询前应用，借模块版本失效旧缓存。针对性测试见 `test/intl-preferences.test.mjs` 与 `test/offline-content.test.mjs`；本轮按维护者要求不继续逐项浏览器验收。
 
 ### 6.2 `offline-patch.js`
 
@@ -617,6 +621,7 @@ npm test
 | `test/build-smoke.test.mjs` | 内层 Protobuf 往返、浏览器 bundle 全局导出契约 |
 | `test/engine-smoke.test.mjs` | 固定 seed、四模式终局守恒、三麻牌池、计分上下文 |
 | `test/local-service.test.mjs` | 档案原子写入/损坏恢复、段位、HTTP/Range/HEAD、WS 和单页面限制 |
+| `test/intl-preferences.test.mjs` | 国际版首次/已有 PlayerPrefs 的条款默认同意、语言、目录路径、无关偏好保持与 IDB 错误退出 |
 | `test/match-progression.test.mjs` | 南入、半庄推进、和了止、延长赛和必要点 |
 | `test/match-routing.test.mjs` | 模式路由、未知请求失败、seed、取消匹配竞态 |
 | `test/proto-wire.test.mjs` | int64/fixed64 和标量字段替换 |

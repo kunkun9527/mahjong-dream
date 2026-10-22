@@ -7,7 +7,7 @@
 ## Entry points
 - `start-game.bat` / `local/launcher.mjs` — 启动服务并打开浏览器。
 - `local/server.mjs` — HTTP + WebSocket 服务，装载 `mock/` 兼容层。
-- `game.html` + `offline-patch.js` — Unity 入口与离线补丁（WebSocket 指向本机、拦截外网请求）；`?mjLang=en` 改载 `Build_intl/` 英文国际版。
+- `game.html` + `offline-patch.js` — Unity 入口与离线补丁（WebSocket 指向本机、拦截外网请求）；`?mjLang=en` 改载 `Build_intl/` 英文国际版，启动前写入本地条款默认同意及英文偏好。
 - `mock/server.js` — 全部消息处理器。
 - `mockjs/engine.mjs` — 立直权威引擎。
 

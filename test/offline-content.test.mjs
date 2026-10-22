@@ -171,10 +171,10 @@ test('大厅奖励推广归一：不弹签到、新手、礼包或活动，不�
   ud.setRow(31, '0', P.W().s(1, P.W().v(1, 7).s(2, act).bytes()).v(99, 42).bytes());
   const pay = P.W().v(2, 100).v(7, now - 1000).v(8, now + 100000).bytes();
   ud.setRow(29, '0', pay);
-  const stable = Object.fromEntries(ud.moduleOrder.filter((dt) => ![31, 34, 43, 44].includes(dt)).map((dt) => [dt, ud.modules[dt].serialize()]));
+  const stable = Object.fromEntries(ud.moduleOrder.filter((dt) => ![31, 33, 34, 43, 44].includes(dt)).map((dt) => [dt, ud.modules[dt].serialize()]));
   const signHistory = P.parse(ud.row(34, '0')).filter(([f]) => f !== 1);
   const changes = ud.normalizeOfflineLobby(now);
-  assert.deepEqual(Object.keys(changes).sort(), ['31', '34', '43', '44']);
+  assert.deepEqual(Object.keys(changes).sort(), ['31', '33', '34', '43', '44']);
   assert.equal(P.get(ud.row(34, '0'), 1), now);
   assert.deepEqual(P.parse(ud.row(34, '0')).filter(([f]) => f !== 1), signHistory);
   assert.equal(P.get(ud.row(44, '0'), 6), now);
@@ -199,12 +199,40 @@ test('大厅奖励推广归一：不弹签到、新手、礼包或活动，不�
   assert.ok(tomorrow.modules[34].version > ud.modules[34].version, '旧快照跨日重新加载也必须使昨日客户端缓存失效');
 });
 
+test('活动和公告红点归一：移除对应红点、标记内置及服务器公告已读，保留其他模块与未知字段', () => {
+  const ud = new U.UserData(P.b64decode(data.userdataB64), 10_000_001);
+  const entry = (id, type) => P.W().v(1, id).s(2, P.W().v(1, type).v(2, id).v(3, 1).s(99, 'dot').bytes()).bytes();
+  const kept = entry(81, 10);
+  ud.setRow(27, '0', P.W().s(1, entry(71, 3)).s(1, entry(72, 4)).s(1, kept).v(98, 7).bytes());
+  const serverNotice = P.W().v(1, 234567).v(2, 1).v(5, 123).s(99, 'notice').bytes();
+  ud.setRow(33, '0', P.W().v(1, 9999).packed(1, [8888, 100001]).s(2, serverNotice).s(99, 'unknown').bytes());
+  const stable = Object.fromEntries(ud.moduleOrder.filter((dt) => ![27, 33, 34, 43, 44].includes(dt)).map((dt) => [dt, ud.modules[dt].serialize()]));
+  const before = ud.modules[27].version;
+  const changes = ud.normalizeOfflineLobby();
+  assert.ok(changes[27] && changes[33]);
+  assert.ok(ud.modules[27].version > before);
+  assert.deepEqual(P.parse(ud.row(27, '0')), [[1, 2, kept], [98, 0, 7]]);
+  const notice = ud.row(33, '0');
+  const ids = P.unpack(P.get(notice, 1));
+  for (const id of [9999, 8888, 234567, 1, 2, 3, 4, 5, 6, 100001, 100004, 100005, 100006, 100007, 100008, 100009]) assert.ok(ids.includes(id), `公告 ${id} 已读`);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.deepEqual(P.get(notice, 2), serverNotice, '只改已读列表，不删公告数据');
+  assert.equal(P.fromUtf8(P.get(notice, 99)), 'unknown');
+  for (const [dt, bytes] of Object.entries(stable)) assert.deepEqual(ud.modules[dt].serialize(), bytes);
+  assert.equal(ud.normalizeOfflineLobby(), null);
+  const restored = new U.UserData(ud.serialize(), ud.uid);
+  assert.equal(restored.normalizeOfflineLobby(), null, '序列化后重载也幂等');
+});
+
 test('资料查询和重新登录前刷新奖励弹窗标记，旧客户端版本得到完整新模块，跨日查询不再弹奖励', () => {
   const before = mock.userdata.serialize();
   const session = mock.createSession();
   try {
     const ud = new U.UserData(P.b64decode(data.userdataB64), mock.uid);
     const oldVersion = ud.modules[34].version;
+    ud.setRow(27, '0', P.W().s(1, P.W().v(1, 19).s(2, P.W().v(1, 3).v(2, 19).v(3, 1).bytes()).bytes()).bytes());
+    ud.setRow(33, '0', P.W().v(1, 9999).bytes());
+    const oldBadges = Object.fromEntries([27, 33].map((dt) => [dt, ud.modules[dt].version]));
     mock.setUserdata(ud.serialize());
     mock.handlers[20001](session);
     const now = Math.floor(Date.now() / 1000);
@@ -214,6 +242,18 @@ test('资料查询和重新登录前刷新奖励弹窗标记，旧客户端版�
     const module = P.parse(frame[1]).find(([f]) => f === 3)[2];
     assert.ok(P.get(module, 2) > oldVersion);
     assert.ok(P.parse(module).some(([f]) => f === 3), '返回新模块行，而非旧版本的空响应');
+    const badgeQuery = P.W();
+    for (const dt of [27, 33]) badgeQuery.s(2, P.W().v(1, dt).v(2, oldBadges[dt]).bytes());
+    const [badges] = mock.handlers[100141](session, badgeQuery.bytes());
+    const modules = P.parse(badges[1]).filter(([f]) => f === 3).map(([, , value]) => value);
+    assert.equal(modules.length, 2);
+    for (const value of modules) {
+      const dt = P.get(value, 1);
+      assert.ok(P.get(value, 2) > oldBadges[dt], `DT${dt} 旧红点缓存版本失效`);
+      assert.ok(P.parse(value).some(([f]) => f === 3), `DT${dt} 下发完整新模块`);
+    }
+    assert.equal(P.get(mock.userdata.row(27, '0'), 1), undefined);
+    assert.ok(P.unpack(P.get(mock.userdata.row(33, '0'), 1)).includes(100009));
     mock.userdata.setRow(34, '0', P.setVarint(mock.userdata.row(34, '0'), 1, now - 86400));
     mock.handlers[100141](session, query);
     assert.ok(Math.abs(P.get(mock.userdata.row(34, '0'), 1) - now) < 3);

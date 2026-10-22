@@ -293,6 +293,41 @@
         update(43, key, P.setBytes(row, 3, data));
       }
     });
+    // Only remove activity/announcement red-dot entries; keep shop, rank and gameplay data.
+    var dots = this.modules[27];
+    if (dots) dots.order.forEach(function (key) {
+      var w = P.W();
+      P.parse(dots.rows[key]).forEach(function (f) {
+        if (f[0] === 1 && f[1] === 2) {
+          var data = P.get(f[2], 2), type = data ? P.get(data, 1) : 0;
+          if (type === 3 || type === 4) return;
+        }
+        P.reencode(w, f[0], f[1], f[2]);
+      });
+      update(27, key, w.bytes());
+    });
+    // IDs from this snapshot's Notice*CfgTb tables; both clients share these assets.
+    var readIds = [1, 2, 3, 4, 5, 6, 100001, 100004, 100005, 100006, 100007, 100008, 100009];
+    var notice = this.modules[33];
+    var noticeKeys = notice ? notice.order : ['0'];
+    noticeKeys.forEach(function (key) {
+      var row = self.row(33, key) || new Uint8Array(0), seen = [], w = P.W();
+      P.parse(row).forEach(function (f) {
+        if (f[0] === 1 && (f[1] === 0 || f[1] === 2)) {
+          (f[1] === 2 ? P.unpack(f[2]) : [f[2]]).forEach(function (id) { if (seen.indexOf(id) < 0) seen.push(id); });
+        } else {
+          if (f[0] === 2 && f[1] === 2) {
+            var id = P.get(f[2], 1);
+            if (id && seen.indexOf(id) < 0) seen.push(id);
+          }
+          P.reencode(w, f[0], f[1], f[2]);
+        }
+      });
+      readIds.forEach(function (id) { if (seen.indexOf(id) < 0) seen.push(id); });
+      seen.sort(function (a, b) { return a - b; });
+      w.packed(1, seen);
+      update(33, key, w.bytes());
+    });
     var acts = this.modules[31];
     if (acts) acts.order.forEach(function (key) {
       var row = acts.rows[key], w = P.W();

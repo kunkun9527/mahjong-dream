@@ -81,6 +81,8 @@
 - **中文版**：双击根目录下的 [`start-game.bat`](start-game.bat)。
 - **英文版**：双击根目录下的 [`start-game-en.bat`](start-game-en.bat)。
 
+英文入口默认同意本地客户端条款；两个入口均不再显示 Event（活动）和 Notifications（公告）的红点，正常对局结算与商店反馈保留。
+
 启动后会自动在本机启动服务，并优先通过 Microsoft Edge 或 Google Chrome 打开游戏。**关闭启动器黑色命令行窗口即可停止服务**。
 
 #### 命令行启动参数（可选）
