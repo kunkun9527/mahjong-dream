@@ -192,7 +192,7 @@ start-game.bat --players=3 --length=hanchan
 
 这层是运行时离线边界。项目不应重新接入生产域名、远端日志或远端 WSS。
 
-`StreamingAssets/` 与 `mock/empty.json` 按 `game.html` 所在目录解析，因此站点可部署在 `/mahjong-dream/` 这类子路径。浏览器宿主下游戏 WebSocket 直接换成 `__mj.server.FakeWebSocket`，在页面内派发协议。
+`StreamingAssets/` 与 `mock/empty.json` 按 `game.html` 所在目录解析，因此站点可部署在 `/mahjong-dream/` 这类子路径。游戏请求资源包时带 `Range: bytes=0-`，`offline-patch.js` 去掉这个整文件 Range，让浏览器 HTTP 缓存能复用资源包；Cloudflare Pages 上 `_headers` 为 `Build_intl/*.unityweb` 声明 `Content-Encoding: br`（浏览器原生解压、wasm 流式编译），并给带内容哈希的 `*.bundle` 设 `immutable` 长缓存。浏览器宿主下游戏 WebSocket 直接换成 `__mj.server.FakeWebSocket`，在页面内派发协议。
 
 ### 6.3 宿主与存档修改器
 
@@ -684,6 +684,7 @@ npm test
 | `modifier.js` | 手写 | 存档修改器浮窗 |
 | `spark-md5.js` | 第三方/原资源 | Unity 资源校验相关辅助脚本 |
 | `.nojekyll` | 静态托管 | GitHub Pages 原样发布文件；本地服务不依赖它 |
+| `_headers` | 静态托管 | Cloudflare Pages 响应头：Unity 构建文件的 Brotli 编码、资源包长缓存；其他宿主忽略 |
 | `.gitignore` | 手写 | 忽略依赖、存档和 `.tmp-*` 调试产物 |
 
 ### 16.2 Unity 与资源

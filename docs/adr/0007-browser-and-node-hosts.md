@@ -4,7 +4,7 @@
 
 同一套 `mock/` + `mockjs/` 后端支持两种宿主，由 `host-mode.js` 决定：
 
-- **浏览器宿主**（默认，静态托管如 GitHub Pages）：`web-host.js` 在页面内加载后端，`FakeWebSocket` 派发协议，档案存在该站点的 `localStorage['mahjong-dream/profile']`。
+- **浏览器宿主**（默认，静态托管如 Cloudflare Pages / GitHub Pages）：`web-host.js` 在页面内加载后端，`FakeWebSocket` 派发协议，档案存在该站点的 `localStorage['mahjong-dream/profile']`。
 - **Node 宿主**（`start-game.bat` / `npm start`）：`local/server.mjs` 运行后端并改写 `host-mode.js` 为 `node`；档案仍按 ADR 0001 存在 `userdata/profile.json`。
 
 档案规则、一次性经济补给、结算记账和存档修改器操作都放在共享的 `mockjs/profile_host.mjs`，两种宿主只负责“怎么持久化”。网页默认入口为国际版英文（中文客户端已归档到 `archive/zh-client/`）。

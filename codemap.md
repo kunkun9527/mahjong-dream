@@ -16,7 +16,7 @@
 | 目的 | 命令 |
 | --- | --- |
 | 启动 | `npm start` / `start-game.bat --players=3 --length=hanchan`（唯一 BAT，默认端口 8765） |
-| 网页版 | 任意静态服务器发布仓库根目录；GitHub Pages 选 `main` / root |
+| 网页版 | Cloudflare Pages 关联仓库发布根目录（`_headers` 声明 Brotli 编码与资源包长缓存）；任意静态服务器也可 |
 | 构建 bundle | `npm run build`（`mockjs/` → `mock/riichi.js`） |
 | 语法检查 | `npm run check`（新增源码要加进 `package.json` 的 check 列表） |
 | 测试 | `npm test`；单个：`node --test test/engine-smoke.test.mjs` |

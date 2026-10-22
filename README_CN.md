@@ -12,7 +12,7 @@
 
 ## ▶ 马上开玩
 
-**用 Chrome 或 Edge 打开 <https://kunkun9527.github.io/mahjong-dream/>**，无需安装或注册。
+**用 Chrome 或 Edge 打开 <https://mahjong-dream.pages.dev>**，无需安装或注册。
 
 - 首次加载约 30 MB，牌桌资源会在游戏中按需下载；浏览器缓存后再次打开会更快。
 - 默认显示英文，可在 ⚙ Settings → Language 切换为简体中文等语言，游戏会记住你的选择。
@@ -75,7 +75,7 @@ start-game.bat --players=3 --length=east
 
 ## 自己部署一份
 
-Fork 本仓库，然后在 **Settings → Pages → Deploy from a branch** 中选择 **`main` / root**。也可以用任意静态文件服务器部署，并支持 `/mahjong-dream/` 这类子路径。
+Fork 本仓库，然后在 Cloudflare 用它新建一个 **Pages** 项目：不填构建命令，输出目录留空，并添加环境变量 `SKIP_DEPENDENCY_INSTALL=true`。仓库自带的 `_headers` 能让浏览器原生解压游戏文件，并缓存资源包。也可以用 GitHub Pages（**Settings → Pages → `main` / root**）或任意静态文件服务器，支持子路径，但加载会慢一些。
 
 ## 开发者
 
