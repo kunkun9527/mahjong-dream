@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { initializeOfflineEconomy } from '../local/economy.mjs';
+import { initializeOfflineEconomy } from '../mockjs/economy.mjs';
 import { createDefaultProfile } from '../local/profile.mjs';
 import { ECONOMY_CATALOG as C } from '../mockjs/economy_catalog.mjs';
 import { purchase, refreshShop, synchronizeShop } from '../mockjs/shop.mjs';

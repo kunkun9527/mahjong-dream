@@ -42,7 +42,7 @@ class Table:
 
 
 def shop_types():
-    source = 'Build/mj-h5.data.unityweb'
+    source = 'Build_intl/mj-h5.data.unityweb'
     packed = (ROOT / source).read_bytes()
     raw = brotli.decompress(packed)
     offset = raw.find(bytes.fromhex('af1bb1fa1f000000'))

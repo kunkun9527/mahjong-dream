@@ -3,13 +3,17 @@
   <head>
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <title>Unity WebGL Player | 激情麻将</title>
+    <title>Mahjong Dream</title>
     <link rel="shortcut icon" href="TemplateData/favicon.ico">
     <link rel="stylesheet" href="TemplateData/style.css">
 
-    <!-- The local service provides the authoritative WebSocket; the patch installs its hijacks before Unity initializes. -->
+    <!-- host-mode.js says whether the Node service or this page (static hosting) runs the backend; the patch installs its hijacks
+         before Unity initializes, and web-host.js loads the in-page backend and save host. -->
+    <script type="text/javascript" src="host-mode.js"></script>
     <script type="text/javascript" src="offline-patch.js"></script>
     <script type="text/javascript" src="spark-md5.js"></script>
+    <script type="text/javascript" src="web-host.js"></script>
+    <script type="text/javascript" src="modifier.js" defer></script>
 
     <script>
         // Stub the QuickSDK global so _init does not crash PlayerLoop recursion when QuickSDK is undefined
@@ -155,7 +159,7 @@
       script.onerror = () => {
         clearInterval(time);
         loadingBar.style.display = "none";
-        alert("离线游戏加载失败，请确认已通过 start-game.bat 启动。");
+        alert("Failed to load the game files. Please reload the page.");
       };
       script.src = loaderUrl;
       var currentProgress = 0;
@@ -201,7 +205,7 @@
       if (!launchUrl.searchParams.has("uid")) launchUrl.searchParams.set("uid", "1");
       if (!launchUrl.searchParams.has("sign")) launchUrl.searchParams.set("sign", "19a5aaae0d826f5ac640a4dbfafb1612");
       history.replaceState(null, "", launchUrl.pathname + launchUrl.search + launchUrl.hash);
-      preparePlayerPrefs().then(function () { document.body.appendChild(script); });
+      __mjHost.ready.then(preparePlayerPrefs).then(function () { document.body.appendChild(script); });
 
       // Seed English only when no language is saved, and accept the offline terms before Unity starts.
       // IDBFS v21 and UnityPrf v1 are the formats used by the bundled Unity client.

@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
 
 import { encodeMsg, decodeMsg } from '../mockjs/pb.mjs';
 
@@ -22,4 +24,14 @@ test('生成的浏览器 bundle 保持原全局导出契约', async () => {
       'encodeMsg', 'tileId', 'tileName',
     ].sort(),
   );
+});
+
+test('浏览器 bundle 在没有 Node process 的环境里可加载并导出档案宿主', () => {
+  const source = readFileSync(new URL('../mock/riichi.js', import.meta.url), 'utf8');
+  const context = vm.createContext({ console, TextEncoder, TextDecoder, setTimeout, clearTimeout, __mj: {} });
+  context.globalThis = context;
+  vm.runInContext(source, context);
+  assert.equal(typeof context.process, 'undefined');
+  assert.equal(typeof context.__mj.host.createProfileHost, 'function');
+  assert.equal(typeof context.__mj.riichi.RiichiSession, 'function');
 });

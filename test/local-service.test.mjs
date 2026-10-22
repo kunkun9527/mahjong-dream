@@ -82,15 +82,12 @@ test('段位 PT 使用资源表并正确升降段', () => {
   assert.equal(applyRankResult(profile, { players: 3, matchLength: 'hanchan', placement: 3 }).change, -270);
 });
 
-test('loopback 服务提供静态文件、WebSocket，并拒绝第二活动页面', async () => {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mj-service-'));
+async function startService(directory) {
   const child = fork(new URL('../local/server.mjs', import.meta.url), {
     env: { ...process.env, MJ_PORT: '0', MJ_USERDATA_DIR: directory },
     execArgv: [],
     stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
   });
-  let output = '';
-  child.stdout.on('data', (chunk) => { output += chunk; });
   const url = await new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('本地服务启动超时')), 10_000);
     child.once('error', reject);
@@ -100,10 +97,24 @@ test('loopback 服务提供静态文件、WebSocket，并拒绝第二活动页�
       resolve(message.url);
     });
   });
+  return { child, url };
+}
+
+async function stopService(child, directory) {
+  child.kill('SIGTERM');
+  await new Promise((resolve) => child.once('exit', resolve));
+  await fs.rm(directory, { recursive: true, force: true });
+}
+
+test('loopback 服务提供静态文件、WebSocket，并拒绝第二活动页面', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mj-service-'));
+  const { child, url } = await startService(directory);
+  let output = '';
+  child.stdout.on('data', (chunk) => { output += chunk; });
   try {
     const response = await fetch(url);
     assert.equal(response.status, 200);
-    assert.match(await response.text(), /激情麻将/);
+    assert.match(await response.text(), /Mahjong Dream/);
 
     const readme = await fs.readFile(new URL('../README.md', import.meta.url));
     const suffix = await fetch(`${url}README.md`, { headers: { Range: 'bytes=-12' } });
@@ -172,8 +183,39 @@ test('loopback 服务提供静态文件、WebSocket，并拒绝第二活动页�
     assert.equal(diagnostic.source, 'peer-or-transport');
     assert.deepEqual(diagnostic.recentRequests, Array(12).fill(100141));
   } finally {
-    child.kill('SIGTERM');
-    await new Promise((resolve) => child.once('exit', resolve));
-    await fs.rm(directory, { recursive: true, force: true });
+    await stopService(child, directory);
+  }
+});
+
+test('本地服务声明 node 宿主，存档编辑接口立即写盘并拒绝跨站或非 JSON 请求', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mj-service-'));
+  const { child, url } = await startService(directory);
+  child.stdout.resume();
+  const api = (body, headers = { 'Content-Type': 'application/json' }) =>
+    fetch(`${url}api/profile`, { method: 'POST', headers, body: JSON.stringify(body) });
+  try {
+    assert.match(await (await fetch(`${url}host-mode.js`)).text(), /__mjHostMode = 'node'/);
+    assert.match(await fs.readFile(new URL('../host-mode.js', import.meta.url), 'utf8'), /__mjHostMode = 'browser'/);
+
+    const state = await (await api({ action: 'state' })).json();
+    assert.equal(state.ok, true);
+    assert.equal(state.result.inMatch, false);
+    const edited = await (await api({ action: 'edit', changes: { nickname: '雀士', ranks: { sanma: { level: 21, point: 8000 } }, items: { 60002: 123 } } })).json();
+    assert.equal(edited.ok, true);
+    assert.equal(edited.result.items.find((item) => item.id === 60002).count, 123);
+    const saved = JSON.parse(await fs.readFile(path.join(directory, 'profile.json'), 'utf8'));
+    assert.equal(saved.nickname, '雀士');
+    assert.deepEqual(saved.ranks.sanma, { level: 21, point: 8000 });
+
+    const rejected = await (await api({ action: 'edit', changes: { items: { 60002: -1 } } })).json();
+    assert.equal(rejected.ok, false);
+    assert.equal((await fetch(`${url}api/profile`)).status, 405);
+    assert.equal((await api({ action: 'reset' }, { 'Content-Type': 'text/plain' })).status, 403);
+    assert.equal((await api({ action: 'reset' }, { 'Content-Type': 'application/json', Origin: 'https://example.com' })).status, 403);
+    const exported = await (await api({ action: 'export' })).json();
+    assert.equal(exported.result.nickname, '雀士');
+    assert.equal(typeof exported.result.lobbyData, 'string');
+  } finally {
+    await stopService(child, directory);
   }
 });

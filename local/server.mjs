@@ -5,9 +5,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
 
-import { loadProfile, saveProfile, recordMatch } from './profile.mjs';
-import { initializeOfflineEconomy } from './economy.mjs';
-import { ECONOMY_CATALOG } from '../mockjs/economy_catalog.mjs';
+import { loadProfile, saveProfile } from './profile.mjs';
+import { createProfileHost } from '../mockjs/profile_host.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const requiredResources = ['index.html', 'game.html', 'Build_intl/mj-h5.loader.js',
@@ -28,61 +27,32 @@ await import('../mock/server.js');
 
 const mock = globalThis.__mj.server;
 mock.quiet(process.env.MJ_DEBUG !== '1');
-if (profile.lobbyData) mock.setUserdata(Buffer.from(profile.lobbyData, 'base64'));
-const economyUpgraded = initializeOfflineEconomy(profile, mock.userdata, ECONOMY_CATALOG.defaults);
-// Content unlocks are normalized on every load (idempotent), separate from the one-time currency grant.
-const contentNormalized = mock.userdata.normalizeOfflineContent() !== null;
-mock.updateNickname(profile.nickname);
-mock.updateRanks(profile.ranks);
-mock.updateProfileStats(profile.stats);
-if (economyUpgraded || contentNormalized) {
-  profile.lobbyData = Buffer.from(mock.userdata.serialize()).toString('base64');
-  // The grant and the completion marker must be persisted together before serving; a failed write must not pretend the upgrade succeeded.
-  await saveProfile(userdataDirectory, profile);
-}
 
 let saveTimer = null;
 let saveChain = Promise.resolve();
+/** Write the current profile now; queued after earlier writes so the newest snapshot lands last. */
+function saveNow() {
+  clearTimeout(saveTimer);
+  const current = profileHost.snapshot();
+  const write = saveChain.then(() => saveProfile(userdataDirectory, current));
+  saveChain = write.catch(() => {});
+  return write;
+}
 function persistSoon() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    profile.lobbyData = Buffer.from(mock.userdata.serialize()).toString('base64');
-    saveChain = saveChain.then(() => saveProfile(userdataDirectory, profile))
-      .catch((error) => console.error('[local] 存档失败:', error));
+    saveNow().catch((error) => console.error('[local] 存档失败:', error));
   }, 50);
 }
 
-const session = mock.createSession();
-session.localProfile = profile;
-session.onNicknameChange = (nickname) => {
-  profile.nickname = nickname;
-  persistSoon();
-};
-session.internalState = { ...profile.settings.internalState };
-session.onSettingsChange = (state) => {
-  profile.settings.internalState = { ...state };
-  persistSoon();
-};
-session.onFinalResult = (scores, engine) => {
-  const result = recordMatch(profile, {
-    players: engine.playersN,
-    matchLength: engine.matchLength,
-    scores,
-    matchStats: engine.matchStats,
-    roomId: session.rankRoomId,
-  });
-  // Match-end coins are credited to the real wallet (inventory currency); rank, record and wallet changes are sent in the f24 of the leave-table reply,
-  // otherwise the client's rank bar and balance on the room-select page stay at their old values.
-  result.changes = [
-    mock.userdata.changeInventory([{ dtype: 6, id: ECONOMY_CATALOG.defaults.coinId, count: result.coins }]),
-    ...mock.updateRanks(profile.ranks),
-    mock.updateProfileStats(profile.stats),
-  ];
-  console.log(`[local] 对局结束：${engine.playersN}麻 ${engine.matchLength}，第${result.placement}名，段位 PT ${result.rank.change >= 0 ? '+' : ''}${result.rank.change}，金币 +${result.coins}`);
-  persistSoon();
-  return result;
-};
-session.onMatchFinish = () => persistSoon();
+// Match callbacks batch their writes; the save editor (urgent) waits until the file is written.
+const profileHost = createProfileHost(mock, profile, {
+  persist: (urgent) => (urgent ? saveNow() : persistSoon()),
+  log: (line) => console.log(line),
+});
+// The grant and the completion marker must be persisted together before serving; a failed write must not pretend the upgrade succeeded.
+if (profileHost.load()) await saveProfile(userdataDirectory, profileHost.snapshot());
+const session = profileHost.attach(mock.createSession());
 
 const MIME = new Map([
   ['.html', 'text/html; charset=utf-8'],
@@ -134,7 +104,6 @@ async function sendStatic(request, response) {
     'Cache-Control': extension === '.html' || extension === '.js' ? 'no-cache' : 'public, max-age=3600',
     'X-Content-Type-Options': 'nosniff',
   };
-  if (extension === '.unityweb' && file.includes(`${path.sep}Build${path.sep}`)) headers['Content-Encoding'] = 'br';
 
   const range = request.headers.range?.match(/^bytes=(\d*)-(\d*)$/);
   if (range) {
@@ -161,9 +130,55 @@ async function sendStatic(request, response) {
   else fs.createReadStream(file).pipe(response);
 }
 
+// Static hosting serves host-mode.js as-is ('browser'); this service answers it so the page uses /ws and /api/profile instead.
+const HOST_MODE_SCRIPT = "window.__mjHostMode = 'node';\n";
+const MAX_API_BODY = 16 * 1024 * 1024;
+
+async function readJson(request) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of request) {
+    size += chunk.length;
+    if (size > MAX_API_BODY) throw new RangeError('Request body is too large');
+    chunks.push(chunk);
+  }
+  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+}
+
+/** Save editor API. JSON content type plus a same-origin check keeps other web pages from changing the local save. */
+async function handleProfileApi(request, response) {
+  const send = (status, body) => response.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store',
+  }).end(JSON.stringify(body));
+  const origin = request.headers.origin;
+  if (request.method !== 'POST') return send(405, { ok: false, error: 'POST only' });
+  if (!/^application\/json\s*(?:;|$)/i.test(request.headers['content-type'] || '') || (origin && origin !== `http://${request.headers.host}`)) {
+    return send(403, { ok: false, error: 'Forbidden' });
+  }
+  let body;
+  try { body = await readJson(request); }
+  catch (error) { return send(400, { ok: false, error: error.message }); }
+  try { send(200, { ok: true, result: await profileHost.handle(body) }); }
+  catch (error) { send(400, { ok: false, error: error.message }); }
+}
+
 const server = http.createServer((request, response) => {
+  const pathname = new URL(request.url, 'http://127.0.0.1').pathname;
+  if (pathname === '/api/profile') {
+    void handleProfileApi(request, response).catch((error) => {
+      console.error('[local] 存档接口错误:', error);
+      if (!response.headersSent) response.writeHead(500);
+      response.end();
+    });
+    return;
+  }
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     response.writeHead(405, { Allow: 'GET, HEAD' }).end();
+    return;
+  }
+  if (pathname === '/host-mode.js') {
+    response.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache' });
+    response.end(request.method === 'HEAD' ? undefined : HOST_MODE_SCRIPT);
     return;
   }
   void sendStatic(request, response).catch((error) => {
@@ -300,10 +315,7 @@ server.listen(port, host, () => {
 });
 
 async function shutdown() {
-  clearTimeout(saveTimer);
-  await saveChain;
-  profile.lobbyData = Buffer.from(mock.userdata.serialize()).toString('base64');
-  await saveProfile(userdataDirectory, profile).catch((error) => console.error('[local] 存档失败:', error));
+  await saveNow().catch((error) => console.error('[local] 存档失败:', error));
   server.close();
   websocketServer.close();
 }

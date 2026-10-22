@@ -4,6 +4,7 @@ await build({
   entryPoints: ['mockjs/browser_entry.mjs'],
   outfile: 'mock/riichi.js',
   bundle: true,
+  inject: ['mockjs/process_shim.mjs'],
   platform: 'browser',
   format: 'iife',
   target: ['es2020'],

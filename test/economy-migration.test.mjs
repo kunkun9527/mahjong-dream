@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createDefaultProfile, loadProfile, saveProfile } from '../local/profile.mjs';
-import { initializeOfflineEconomy } from '../local/economy.mjs';
+import { initializeOfflineEconomy } from '../mockjs/economy.mjs';
 
 await import('../mock/proto.js');
 await import('../mock/data.js');

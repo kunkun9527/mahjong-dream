@@ -1,7 +1,10 @@
-/* Offline single-player patch for Mahjong Dream: the game WebSocket connects to the local service, and all external network requests are blocked. */
+/* Offline single-player patch for Mahjong Dream: the game WebSocket connects to the local service (or to the in-page backend
+   on static hosting, see web-host.js), and all external network requests are blocked. */
 (function () {
   'use strict';
 
+  // Directory of game.html; static hosting may serve the game under a sub-path such as /mahjong-dream-snapshot/.
+  var BASE = location.href.split(/[?#]/)[0].replace(/[^/]*$/, '');
   var LOCAL_WS = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws' + location.search;
   function localUrl(value) {
     if (!value || /^(data:|blob:|about:)/i.test(String(value))) return true;
@@ -12,7 +15,7 @@
     try {
       var parsed = new URL(String(value), location.href);
       if (parsed.pathname.indexOf('/StreamingAssets/') === 0) {
-        return location.origin + parsed.pathname + parsed.search;
+        return new URL(parsed.pathname.slice(1) + parsed.search, BASE).href;
       }
     } catch (e) { /* block below */ }
     return null;
@@ -53,8 +56,10 @@
     var isGame = /riichiproxy|mahjongproxy|riichi_proxy/i.test(String(url));
     var target = isGame ? LOCAL_WS : url;
     if (!isGame && !localUrl(url)) throw new Error('离线模式阻止外部 WebSocket: ' + url);
-    var ws = protocols === undefined ? new NativeWS(target) : new NativeWS(target, protocols);
-    if (isGame) console.log('[offline] 游戏 WS 接到本机服务:', target);
+    var InPage = isGame && window.__mjHostMode !== 'node' && window.__mj && window.__mj.server && window.__mj.server.FakeWebSocket;
+    var Socket = InPage || NativeWS;
+    var ws = protocols === undefined ? new Socket(target) : new Socket(target, protocols);
+    if (isGame) console.log(InPage ? '[offline] 游戏 WS 交给页内后端' : '[offline] 游戏 WS 接到本机服务:', target);
     ws.binaryType = 'arraybuffer';
     var _send = ws.send.bind(ws);
     ws.send = function (d) {
@@ -77,7 +82,8 @@
   try {
     Object.defineProperty(PatchedWS, Symbol.hasInstance, {
       value: function (o) {
-        return o instanceof NativeWS;
+        var Fake = window.__mj && window.__mj.server && window.__mj.server.FakeWebSocket;
+        return o instanceof NativeWS || (!!Fake && o instanceof Fake);
       }
     });
   } catch (e) { /* Ignore on old browsers */ }
@@ -109,7 +115,7 @@
       args[1] = assetUrl;
     } else if (this._mjOfflineBlocked) {
       console.log('[offline] 拦截外部 XHR:', u);
-      args[1] = location.origin + '/mock/empty.json';
+      args[1] = BASE + 'mock/empty.json';
     }
     return open.apply(this, args);
   };

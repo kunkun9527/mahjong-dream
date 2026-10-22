@@ -6,7 +6,9 @@
 
 ## 1. 项目定位
 
-本项目是《激情麻将 / 雀梦麻将》关服前 Unity WebGL 客户端的离线修复版。原 Unity 客户端及美术资源继续负责画面、输入和演出；新增的 Node.js 回环服务替代已关闭的远端服务，负责大厅协议、本地档案、匹配、权威牌局、AI 和结算。
+本项目是《激情麻将 / 雀梦麻将》关服前 Unity WebGL 客户端的离线修复版。原 Unity 客户端及美术资源继续负责画面、输入和演出；新增的本地后端替代已关闭的远端服务，负责大厅协议、本地档案、匹配、权威牌局、AI 和结算。
+
+后端有两种宿主（见 [ADR 0007](adr/0007-browser-and-node-hosts.md) 与第 6.3 节）：静态托管（GitHub Pages 等）时在页面内运行、存档在 `localStorage`；`start-game.bat` / `npm start` 时由 Node.js 回环服务运行、存档在 `userdata/profile.json`。两者共用 `mock/` 与 `mockjs/` 的同一套逻辑。下文涉及 HTTP、WebSocket、启动器的章节只描述 Node 宿主。
 
 项目目标是：
 
@@ -138,10 +140,12 @@ start-game.bat --players=3 --length=hanchan
 主要行为：
 
 - `/` 映射到 `/index.html`；
-- 仅接受 `GET` 和 `HEAD`；
+- 静态文件仅接受 `GET` 和 `HEAD`；
 - 对 URL 解码后执行 `path.resolve`，拒绝逃逸项目根目录的路径；
 - 为 HTML、JS、CSS、JSON、WASM、图片、音频、bundle 和 `.unityweb` 设置 MIME；
-- `*.unityweb` 带 `Content-Encoding: br`；
+- 不为 `*.unityweb` 加 `Content-Encoding`，由 Unity loader 自行解压，与静态托管行为一致；
+- `/host-mode.js` 返回 `window.__mjHostMode = 'node'`，让页面改用 `/ws` 和 `/api/profile`；
+- `POST /api/profile` 只接受同源 `application/json` 请求（其他方法 405，跨源或非 JSON 403），转给共享档案宿主处理存档修改器操作；
 - 支持普通、前缀和后缀 byte Range；非法或越界 Range 返回 416；
 - `HEAD` 返回与 GET 一致的头但不发送 body；
 - HTML/JS 使用 `no-cache`，其余资源使用一小时缓存；
@@ -163,11 +167,11 @@ start-game.bat --players=3 --length=hanchan
 ### 6.1 页面结构
 
 - `index.html` 是外层页面，以 iframe 加载 `game.html`，转发查询串并处理横竖屏；
-- `game.html` 创建 Unity canvas，先加载离线补丁，再加载 Unity loader；
+- `game.html` 创建 Unity canvas，依次加载 `host-mode.js`、`offline-patch.js`、`web-host.js`、`modifier.js`，等 `__mjHost.ready` 后再准备 PlayerPrefs 并加载 Unity loader；
 - `game.html` 始终加载 `Build_intl/`，复用 `StreamingAssets/` 与本地立直后端；只保留 `start-game.bat` / `npm start`；旧 `mjLang` 参数不再选择构建或重置语言；
 - `QuickSDK`、`H5SDK`、`QuickService` 被本地 stub，避免原渠道 SDK 缺失导致初始化崩溃。
 
-当前中文构建产品版本为 `1.1.107241726.0`，国际版为 `1.1.107211826.0`。2026-10-22 静态提取的 45 份协议描述逐份完全相同，涵盖立直动作、结算、重连、匹配与用户数据；另外 2 个反射初始化器未恢复。立直类型未发现缺失，国际版语言配置包含简体中文。此结果支持后端/协议兼容，不表示两个不同版本的所有 UI 与运行行为完全一致；当前已统一国际版入口，原中文 `Build/` 仅保留为历史快照。四川/斗地主等非立直模式仍按离线不可用处理。
+当前中文构建产品版本为 `1.1.107241726.0`，国际版为 `1.1.107211826.0`。2026-10-22 静态提取的 45 份协议描述逐份完全相同，涵盖立直动作、结算、重连、匹配与用户数据；另外 2 个反射初始化器未恢复。立直类型未发现缺失，国际版语言配置包含简体中文。此结果支持后端/协议兼容，不表示两个不同版本的所有 UI 与运行行为完全一致；当前已统一国际版入口，原中文构建已归档到 `archive/zh-client/Build/`。四川/斗地主等非立直模式仍按离线不可用处理。
 
 统一入口在 Unity 启动前初始化同源 IndexedDB `/idbfs` v21 的 `FILE_DATA`：按 Unity 的 URL 目录 MD5 定位 `PlayerPrefs`，仅在缺少 `LanguageID` 时设英文（4），并写入 `user_terms=1` 作为本地默认同意。UnityPrf v1 头 offset 12 是字节容量，不是条目数：新文件设为 1 MiB，旧补丁误写的小容量会被修复，否则 Unity 抛 `PlayerPrefsException` 并停在资源初始化。仅修改当前路径，保留已有语言、音量和无关偏好，事务完成后才启动 Unity；为国际版补齐缺省 `uid/sign`，裸 URL 也能启动。默认固定端口 8765 使正常重启沿用同源偏好，切换端口会形成另一份浏览器偏好；不改 Unity 文件。
 
@@ -187,6 +191,21 @@ start-game.bat --players=3 --length=hanchan
 - 在 `window.__mjmock` 中保留最多 200 条 WS 收发长度诊断，不记录完整牌局 payload。
 
 这层是运行时离线边界。项目不应重新接入生产域名、远端日志或远端 WSS。
+
+`StreamingAssets/` 与 `mock/empty.json` 按 `game.html` 所在目录解析，因此站点可部署在 `/mahjong-dream-snapshot/` 这类子路径。浏览器宿主下游戏 WebSocket 直接换成 `__mj.server.FakeWebSocket`，在页面内派发协议。
+
+### 6.3 宿主与存档修改器
+
+| 文件 | 职责 |
+| --- | --- |
+| `host-mode.js` | 静态文件内容为 `browser`；Node 服务动态返回 `node` |
+| `web-host.js` | 浏览器宿主：按序加载 `mock/proto.js`、`data.js`、`userdata.js`、`riichi.js`、`server.js`，用 `localStorage['mahjong-dream-snapshot/profile']` 存档（批量 300 ms 写入，`pagehide` 时立即写，读不出的存档另存为 `.corrupt-<时间>` 键）；Node 宿主：把请求 POST 到 `/api/profile`。两者都暴露 `window.__mjHost = { mode, ready, request }` |
+| `mockjs/profile_host.mjs` | `createProfileHost(mock, profile, { persist, log })`：装载档案与一次性经济补给、给新会话挂回调、结算记账，以及修改器的 state/export/edit/resetStats/import/reset。修改先整体校验再应用；会话有牌桌、匹配计时或进行中的对局时拒绝写操作 |
+| `modifier.js` | 右侧 ⚙ 浮窗：昵称、段位/PT、钱包道具（60001/60002/60007–60012）、重置战绩、导出/导入、新账号；写操作成功后重载页面让客户端重新拉取大厅数据 |
+
+Unity 在 window 上监听键盘并吞掉输入字符，`modifier.js` 在 Unity 启动前注册 window 捕获阶段监听，对 `#mj-mod` 内的按键 `stopImmediatePropagation`。普通页面输入框在 Unity 页面里打不进字，新增 DOM 输入控件需放进该面板或同样处理。
+
+`mock/riichi.js` 里 npm `assert`/`util` 的 polyfill 会读 `process`；`build_browser.mjs` 注入 `mockjs/process_shim.mjs` 补上，`test/build-smoke.test.mjs` 在无 `process` 的 vm 中加载 bundle 防回归。
 
 ## 7. WebSocket、会话与连接模型
 
@@ -471,7 +490,7 @@ sequenceDiagram
 
 ### 12.1 所有权和位置
 
-依据 `docs/adr/0001-filesystem-owned-local-save.md`，档案默认位于：
+Node 宿主依据 `docs/adr/0001-filesystem-owned-local-save.md`，档案默认位于（浏览器宿主见第 6.3 节与 ADR 0007）：
 
 ```text
 userdata/profile.json
@@ -509,7 +528,7 @@ userdata/profile.json
 
 `lobbyData` 是 `mock/userdata.js` 当前大厅模块的 base64 序列化结果，用于保留原 UI 的装备、内容选择和其他兼容数据。
 
-`local/economy.mjs` 在首次启动时对新/旧档案执行一次补给，新增 `offlineEconomyVersion: 1`。雀币60001以当时背包余额×100；60002/60008/60009/60010/60011/60012各置999999，三四麻均为七段2300 PT。补给、段位和大厅快照一起落盘后才监听端口；以后不再覆盖消费或升降段结果。见 ADR 0003。
+`mockjs/economy.mjs`（由 `profile_host.load()` 调用）在首次启动时对新/旧档案执行一次补给，新增 `offlineEconomyVersion: 1`。雀币60001以当时背包余额×100；60002/60008/60009/60010/60011/60012各置999999，三四麻均为七段2300 PT。补给、段位和大厅快照一起落盘后才监听端口；以后不再覆盖消费或升降段结果。见 ADR 0003。
 
 ### 12.3 读写保证
 
@@ -599,7 +618,7 @@ npm run build
 
 `mock/data.js` 也是自动生成的真实大厅快照/回放数据；其注释标明原生成工具，但当前仓库中没有完整工具链，因此不应为普通修复直接手工重写。
 
-Unity 的 `Build/`、`Build_intl/`、`StreamingAssets/` 是不可维护的原始构建资源，不属于 JS 构建流程。
+Unity 的 `Build_intl/`、`StreamingAssets/` 与归档的 `archive/zh-client/Build/` 是不可维护的原始构建资源，不属于 JS 构建流程。
 
 ## 15. 测试与质量门禁
 
@@ -659,15 +678,17 @@ npm test
 | `index.html` | 原页面+小补丁 | iframe、方向和顶层页面边界 |
 | `game.html` | 原页面+本地补丁 | Unity 加载、渠道 SDK stub、错误提示 |
 | `offline-patch.js` | 手写兼容层 | 网络隔离、WS 改写、资源 URL 和诊断 |
+| `host-mode.js` / `web-host.js` | 手写 | 宿主判定；浏览器内后端与存档，或 Node API 转发 |
+| `modifier.js` | 手写 | 存档修改器浮窗 |
 | `spark-md5.js` | 第三方/原资源 | Unity 资源校验相关辅助脚本 |
-| `.nojekyll` | 静态托管遗留 | 防 Jekyll 处理；本地服务不依赖它 |
+| `.nojekyll` | 静态托管 | GitHub Pages 原样发布文件；本地服务不依赖它 |
 | `.gitignore` | 手写 | 忽略依赖、存档和 `.tmp-*` 调试产物 |
 
 ### 16.2 Unity 与资源
 
 | 路径 | 大小约 | 说明 |
 | --- | ---: | --- |
-| `Build/` | 20 MiB | 原中文 Unity WebGL 历史快照，当前入口不加载 |
+| `archive/zh-client/Build/` | 20 MiB | 原中文 Unity WebGL 历史快照（已归档），当前入口不加载 |
 | `Build_intl/` | 20 MiB | 唯一启动入口加载的国际版 Unity WebGL 构建，支持内置语言切换 |
 | `StreamingAssets/` | 253 MiB / 496 文件 | 运行时 bundle、版本表和美术/音频资源 |
 | `TemplateData/` | 212 KiB | Unity 页面样式、图标和加载条图片 |
@@ -680,7 +701,7 @@ npm test
 | --- | --- |
 | `local/launcher.mjs` | 子进程、IPC、模式参数、浏览器定位与启动诊断 |
 | `local/server.mjs` | 静态 HTTP、Range/HEAD、loopback WS、唯一连接、Session/档案接线、退出保存 |
-| `local/profile.mjs` | profile 默认值、迁移/规范化、段位、统计、损坏恢复和原子写入 |
+| `local/profile.mjs` | `profile.json` 读取、损坏恢复和原子写入；规则转出自 `mockjs/profile.mjs` |
 
 ### 16.4 客户端兼容层
 
@@ -705,7 +726,11 @@ npm test
 | `mockjs/proto_enum.mjs` | 结果码、消息、动作、役种和流局枚举 |
 | `mockjs/riichi_desc.mjs` | 内层 Protobuf 描述 |
 | `mockjs/pb.mjs` | 描述驱动的内层编码/解码 |
-| `mockjs/browser_entry.mjs` | `RiichiSession` 适配器和浏览器全局导出 |
+| `mockjs/browser_entry.mjs` | `RiichiSession` 适配器和浏览器全局导出（含 `__mj.host`） |
+| `mockjs/profile.mjs` | profile 默认值、规范化、段位、统计（两种宿主共用） |
+| `mockjs/economy.mjs` | 一次性经济补给 |
+| `mockjs/profile_host.mjs` | 共享档案宿主与修改器操作 |
+| `mockjs/process_shim.mjs` | bundle 用的最小 `process` 替身 |
 | `mockjs/build_browser.mjs` | esbuild 构建脚本 |
 
 ### 16.6 文档与测试
@@ -714,6 +739,7 @@ npm test
 | --- | --- |
 | `docs/adr/0001-filesystem-owned-local-save.md` | 档案所有权决策 |
 | `docs/adr/0002-use-mahjong-soul-ranked-rules.md` | 唯一规则基线决策 |
+| `docs/adr/0007-browser-and-node-hosts.md` | 浏览器/Node 两种宿主与存档位置 |
 | `docs/repair-backlog.md` | 已完成、未完成与验收清单 |
 | `docs/technical-architecture.md` | 本文，当前技术全景 |
 | `test/*.test.mjs` | 自动回归测试 |

@@ -6,6 +6,14 @@
   var __getOwnPropNames = Object.getOwnPropertyNames;
   var __getProtoOf = Object.getPrototypeOf;
   var __hasOwnProp = Object.prototype.hasOwnProperty;
+  var __esm = (fn, res, err) => function __init() {
+    if (err) throw err[0];
+    try {
+      return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+    } catch (e) {
+      throw err = [e], e;
+    }
+  };
   var __commonJS = (cb, mod) => function __require() {
     try {
       return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
@@ -34,9 +42,21 @@
     mod
   ));
 
+  // mockjs/process_shim.mjs
+  var process;
+  var init_process_shim = __esm({
+    "mockjs/process_shim.mjs"() {
+      process = {
+        env: {},
+        nextTick: (callback, ...args) => queueMicrotask(() => callback(...args))
+      };
+    }
+  });
+
   // node_modules/agari/index.js
   var require_agari = __commonJS({
     "node_modules/agari/index.js"(exports2, module2) {
+      init_process_shim();
       (() => {
         "use strict";
         const sum = (arr) => {
@@ -245,6 +265,7 @@
   // node_modules/syanten/index.js
   var require_syanten = __commonJS({
     "node_modules/syanten/index.js"(exports2, module2) {
+      init_process_shim();
       (() => {
         "use strict";
         const sum = (arr) => {
@@ -480,6 +501,7 @@
   var require_shams = __commonJS({
     "node_modules/has-symbols/shams.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = function hasSymbols() {
         if (typeof Symbol !== "function" || typeof Object.getOwnPropertySymbols !== "function") {
           return false;
@@ -535,6 +557,7 @@
   var require_shams2 = __commonJS({
     "node_modules/has-tostringtag/shams.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var hasSymbols = require_shams();
       module2.exports = function hasToStringTagShams() {
         return hasSymbols() && !!Symbol.toStringTag;
@@ -546,6 +569,7 @@
   var require_es_object_atoms = __commonJS({
     "node_modules/es-object-atoms/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = Object;
     }
   });
@@ -554,6 +578,7 @@
   var require_es_errors = __commonJS({
     "node_modules/es-errors/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = Error;
     }
   });
@@ -562,6 +587,7 @@
   var require_eval = __commonJS({
     "node_modules/es-errors/eval.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = EvalError;
     }
   });
@@ -570,6 +596,7 @@
   var require_range = __commonJS({
     "node_modules/es-errors/range.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = RangeError;
     }
   });
@@ -578,6 +605,7 @@
   var require_ref = __commonJS({
     "node_modules/es-errors/ref.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = ReferenceError;
     }
   });
@@ -586,6 +614,7 @@
   var require_syntax = __commonJS({
     "node_modules/es-errors/syntax.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = SyntaxError;
     }
   });
@@ -594,6 +623,7 @@
   var require_type = __commonJS({
     "node_modules/es-errors/type.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = TypeError;
     }
   });
@@ -602,6 +632,7 @@
   var require_uri = __commonJS({
     "node_modules/es-errors/uri.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = URIError;
     }
   });
@@ -610,6 +641,7 @@
   var require_abs = __commonJS({
     "node_modules/math-intrinsics/abs.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = Math.abs;
     }
   });
@@ -618,6 +650,7 @@
   var require_floor = __commonJS({
     "node_modules/math-intrinsics/floor.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = Math.floor;
     }
   });
@@ -626,6 +659,7 @@
   var require_max = __commonJS({
     "node_modules/math-intrinsics/max.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = Math.max;
     }
   });
@@ -634,6 +668,7 @@
   var require_min = __commonJS({
     "node_modules/math-intrinsics/min.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = Math.min;
     }
   });
@@ -642,6 +677,7 @@
   var require_pow = __commonJS({
     "node_modules/math-intrinsics/pow.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = Math.pow;
     }
   });
@@ -650,6 +686,7 @@
   var require_round = __commonJS({
     "node_modules/math-intrinsics/round.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = Math.round;
     }
   });
@@ -658,6 +695,7 @@
   var require_isNaN = __commonJS({
     "node_modules/math-intrinsics/isNaN.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = Number.isNaN || function isNaN2(a) {
         return a !== a;
       };
@@ -668,6 +706,7 @@
   var require_sign = __commonJS({
     "node_modules/math-intrinsics/sign.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var $isNaN = require_isNaN();
       module2.exports = function sign(number) {
         if ($isNaN(number) || number === 0) {
@@ -682,6 +721,7 @@
   var require_gOPD = __commonJS({
     "node_modules/gopd/gOPD.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = Object.getOwnPropertyDescriptor;
     }
   });
@@ -690,6 +730,7 @@
   var require_gopd = __commonJS({
     "node_modules/gopd/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var $gOPD = require_gOPD();
       if ($gOPD) {
         try {
@@ -706,6 +747,7 @@
   var require_es_define_property = __commonJS({
     "node_modules/es-define-property/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var $defineProperty = Object.defineProperty || false;
       if ($defineProperty) {
         try {
@@ -722,6 +764,7 @@
   var require_has_symbols = __commonJS({
     "node_modules/has-symbols/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var origSymbol = typeof Symbol !== "undefined" && Symbol;
       var hasSymbolSham = require_shams();
       module2.exports = function hasNativeSymbols() {
@@ -746,6 +789,7 @@
   var require_Reflect_getPrototypeOf = __commonJS({
     "node_modules/get-proto/Reflect.getPrototypeOf.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = typeof Reflect !== "undefined" && Reflect.getPrototypeOf || null;
     }
   });
@@ -754,6 +798,7 @@
   var require_Object_getPrototypeOf = __commonJS({
     "node_modules/get-proto/Object.getPrototypeOf.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var $Object = require_es_object_atoms();
       module2.exports = $Object.getPrototypeOf || null;
     }
@@ -763,6 +808,7 @@
   var require_implementation = __commonJS({
     "node_modules/function-bind/implementation.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var ERROR_MESSAGE = "Function.prototype.bind called on incompatible ";
       var toStr = Object.prototype.toString;
       var max = Math.max;
@@ -839,6 +885,7 @@
   var require_function_bind = __commonJS({
     "node_modules/function-bind/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var implementation = require_implementation();
       module2.exports = Function.prototype.bind || implementation;
     }
@@ -848,6 +895,7 @@
   var require_functionCall = __commonJS({
     "node_modules/call-bind-apply-helpers/functionCall.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = Function.prototype.call;
     }
   });
@@ -856,6 +904,7 @@
   var require_functionApply = __commonJS({
     "node_modules/call-bind-apply-helpers/functionApply.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = Function.prototype.apply;
     }
   });
@@ -864,6 +913,7 @@
   var require_reflectApply = __commonJS({
     "node_modules/call-bind-apply-helpers/reflectApply.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = typeof Reflect !== "undefined" && Reflect && Reflect.apply;
     }
   });
@@ -872,6 +922,7 @@
   var require_actualApply = __commonJS({
     "node_modules/call-bind-apply-helpers/actualApply.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var bind = require_function_bind();
       var $apply = require_functionApply();
       var $call = require_functionCall();
@@ -884,6 +935,7 @@
   var require_call_bind_apply_helpers = __commonJS({
     "node_modules/call-bind-apply-helpers/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var bind = require_function_bind();
       var $TypeError = require_type();
       var $call = require_functionCall();
@@ -901,6 +953,7 @@
   var require_get = __commonJS({
     "node_modules/dunder-proto/get.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var callBind = require_call_bind_apply_helpers();
       var gOPD = require_gopd();
       var hasProtoAccessor;
@@ -932,6 +985,7 @@
   var require_get_proto = __commonJS({
     "node_modules/get-proto/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var reflectGetProto = require_Reflect_getPrototypeOf();
       var originalGetProto = require_Object_getPrototypeOf();
       var getDunderProto = require_get();
@@ -952,6 +1006,7 @@
   var require_hasown = __commonJS({
     "node_modules/hasown/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var call = Function.prototype.call;
       var $hasOwn = Object.prototype.hasOwnProperty;
       var bind = require_function_bind();
@@ -963,6 +1018,7 @@
   var require_get_intrinsic = __commonJS({
     "node_modules/get-intrinsic/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var undefined2;
       var $Object = require_es_object_atoms();
       var $Error = require_es_errors();
@@ -1294,6 +1350,7 @@
   var require_call_bound = __commonJS({
     "node_modules/call-bound/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var GetIntrinsic = require_get_intrinsic();
       var callBindBasic = require_call_bind_apply_helpers();
       var $indexOf = callBindBasic([GetIntrinsic("%String.prototype.indexOf%")]);
@@ -1317,6 +1374,7 @@
   var require_is_arguments = __commonJS({
     "node_modules/is-arguments/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var hasToStringTag = require_shams2()();
       var callBound = require_call_bound();
       var $toString = callBound("Object.prototype.toString");
@@ -1344,6 +1402,7 @@
   var require_is_regex = __commonJS({
     "node_modules/is-regex/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var callBound = require_call_bound();
       var hasToStringTag = require_shams2()();
       var hasOwn = require_hasown();
@@ -1413,6 +1472,7 @@
   var require_safe_regex_test = __commonJS({
     "node_modules/safe-regex-test/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var callBound = require_call_bound();
       var isRegex = require_is_regex();
       var $exec = callBound("RegExp.prototype.exec");
@@ -1432,6 +1492,7 @@
   var require_generator_function = __commonJS({
     "node_modules/generator-function/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var cached = (
         /** @type {GeneratorFunctionConstructor} */
         function* () {
@@ -1445,6 +1506,7 @@
   var require_is_generator_function = __commonJS({
     "node_modules/is-generator-function/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var callBound = require_call_bound();
       var safeRegexTest = require_safe_regex_test();
       var isFnRegex = safeRegexTest(/^\s*(?:function)?\*/);
@@ -1477,6 +1539,7 @@
   var require_is_callable = __commonJS({
     "node_modules/is-callable/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var fnToStr = Function.prototype.toString;
       var reflectApply = typeof Reflect === "object" && Reflect !== null && Reflect.apply;
       var badArrayLike;
@@ -1595,6 +1658,7 @@
   var require_for_each = __commonJS({
     "node_modules/for-each/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var isCallable = require_is_callable();
       var toStr = Object.prototype.toString;
       var hasOwnProperty = Object.prototype.hasOwnProperty;
@@ -1655,6 +1719,7 @@
   var require_possible_typed_array_names = __commonJS({
     "node_modules/possible-typed-array-names/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = [
         "Float16Array",
         "Float32Array",
@@ -1676,6 +1741,7 @@
   var require_available_typed_arrays = __commonJS({
     "node_modules/available-typed-arrays/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var possibleNames = require_possible_typed_array_names();
       var g = typeof globalThis === "undefined" ? global : globalThis;
       module2.exports = function availableTypedArrays() {
@@ -1694,6 +1760,7 @@
   var require_define_data_property = __commonJS({
     "node_modules/define-data-property/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var $defineProperty = require_es_define_property();
       var $SyntaxError = require_syntax();
       var $TypeError = require_type();
@@ -1742,6 +1809,7 @@
   var require_has_property_descriptors = __commonJS({
     "node_modules/has-property-descriptors/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var $defineProperty = require_es_define_property();
       var hasPropertyDescriptors = function hasPropertyDescriptors2() {
         return !!$defineProperty;
@@ -1764,6 +1832,7 @@
   var require_set_function_length = __commonJS({
     "node_modules/set-function-length/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var GetIntrinsic = require_get_intrinsic();
       var define2 = require_define_data_property();
       var hasDescriptors = require_has_property_descriptors()();
@@ -1817,6 +1886,7 @@
   var require_applyBind = __commonJS({
     "node_modules/call-bind-apply-helpers/applyBind.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var bind = require_function_bind();
       var $apply = require_functionApply();
       var actualApply = require_actualApply();
@@ -1830,6 +1900,7 @@
   var require_call_bind = __commonJS({
     "node_modules/call-bind/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var setFunctionLength = require_set_function_length();
       var $defineProperty = require_es_define_property();
       var callBindBasic = require_call_bind_apply_helpers();
@@ -1855,6 +1926,7 @@
   var require_which_typed_array = __commonJS({
     "node_modules/which-typed-array/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var forEach = require_for_each();
       var availableTypedArrays = require_available_typed_arrays();
       var callBind = require_call_bind();
@@ -1979,6 +2051,7 @@
   var require_is_typed_array = __commonJS({
     "node_modules/is-typed-array/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var whichTypedArray = require_which_typed_array();
       module2.exports = function isTypedArray(value) {
         return !!whichTypedArray(value);
@@ -1990,6 +2063,7 @@
   var require_types = __commonJS({
     "node_modules/util/support/types.js"(exports2) {
       "use strict";
+      init_process_shim();
       var isArgumentsObject = require_is_arguments();
       var isGeneratorFunction = require_is_generator_function();
       var whichTypedArray = require_which_typed_array();
@@ -2219,6 +2293,7 @@
   // node_modules/util/support/isBufferBrowser.js
   var require_isBufferBrowser = __commonJS({
     "node_modules/util/support/isBufferBrowser.js"(exports2, module2) {
+      init_process_shim();
       module2.exports = function isBuffer(arg) {
         return arg && typeof arg === "object" && typeof arg.copy === "function" && typeof arg.fill === "function" && typeof arg.readUInt8 === "function";
       };
@@ -2228,6 +2303,7 @@
   // node_modules/inherits/inherits_browser.js
   var require_inherits_browser = __commonJS({
     "node_modules/inherits/inherits_browser.js"(exports2, module2) {
+      init_process_shim();
       if (typeof Object.create === "function") {
         module2.exports = function inherits(ctor, superCtor) {
           if (superCtor) {
@@ -2260,6 +2336,7 @@
   // node_modules/util/util.js
   var require_util = __commonJS({
     "node_modules/util/util.js"(exports2) {
+      init_process_shim();
       var getOwnPropertyDescriptors = Object.getOwnPropertyDescriptors || function getOwnPropertyDescriptors2(obj) {
         var keys = Object.keys(obj);
         var descriptors = {};
@@ -2820,6 +2897,7 @@
   var require_errors = __commonJS({
     "node_modules/assert/build/internal/errors.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       function _typeof(o) {
         "@babel/helpers - typeof";
         return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(o2) {
@@ -3058,6 +3136,7 @@
   var require_assertion_error = __commonJS({
     "node_modules/assert/build/internal/assert/assertion_error.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       function ownKeys(e, r) {
         var t = Object.keys(e);
         if (Object.getOwnPropertySymbols) {
@@ -3560,6 +3639,7 @@
   var require_isArguments = __commonJS({
     "node_modules/object-keys/isArguments.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var toStr = Object.prototype.toString;
       module2.exports = function isArguments(value) {
         var str = toStr.call(value);
@@ -3576,6 +3656,7 @@
   var require_implementation2 = __commonJS({
     "node_modules/object-keys/implementation.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var keysShim;
       if (!Object.keys) {
         has = Object.prototype.hasOwnProperty;
@@ -3708,6 +3789,7 @@
   var require_object_keys = __commonJS({
     "node_modules/object-keys/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var slice = Array.prototype.slice;
       var isArgs = require_isArguments();
       var origKeys = Object.keys;
@@ -3742,6 +3824,7 @@
   var require_implementation3 = __commonJS({
     "node_modules/object.assign/implementation.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var objectKeys = require_object_keys();
       var hasSymbols = require_shams()();
       var callBound = require_call_bound();
@@ -3787,6 +3870,7 @@
   var require_polyfill = __commonJS({
     "node_modules/object.assign/polyfill.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var implementation = require_implementation3();
       var lacksProperEnumerationOrder = function() {
         if (!Object.assign) {
@@ -3836,6 +3920,7 @@
   var require_implementation4 = __commonJS({
     "node_modules/object-is/implementation.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var numberIsNaN = function(value) {
         return value !== value;
       };
@@ -3858,6 +3943,7 @@
   var require_polyfill2 = __commonJS({
     "node_modules/object-is/polyfill.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var implementation = require_implementation4();
       module2.exports = function getPolyfill() {
         return typeof Object.is === "function" ? Object.is : implementation;
@@ -3869,6 +3955,7 @@
   var require_callBound = __commonJS({
     "node_modules/call-bind/callBound.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var GetIntrinsic = require_get_intrinsic();
       var callBind = require_call_bind();
       var $indexOf = callBind(GetIntrinsic("String.prototype.indexOf"));
@@ -3886,6 +3973,7 @@
   var require_define_properties = __commonJS({
     "node_modules/define-properties/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var keys = require_object_keys();
       var hasSymbols = typeof Symbol === "function" && typeof /* @__PURE__ */ Symbol("foo") === "symbol";
       var toStr = Object.prototype.toString;
@@ -3930,6 +4018,7 @@
   var require_shim = __commonJS({
     "node_modules/object-is/shim.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var getPolyfill = require_polyfill2();
       var define2 = require_define_properties();
       module2.exports = function shimObjectIs() {
@@ -3948,6 +4037,7 @@
   var require_object_is = __commonJS({
     "node_modules/object-is/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var define2 = require_define_properties();
       var callBind = require_call_bind();
       var implementation = require_implementation4();
@@ -3967,6 +4057,7 @@
   var require_implementation5 = __commonJS({
     "node_modules/is-nan/implementation.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = function isNaN2(value) {
         return value !== value;
       };
@@ -3977,6 +4068,7 @@
   var require_polyfill3 = __commonJS({
     "node_modules/is-nan/polyfill.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var implementation = require_implementation5();
       module2.exports = function getPolyfill() {
         if (Number.isNaN && Number.isNaN(NaN) && !Number.isNaN("a")) {
@@ -3991,6 +4083,7 @@
   var require_shim2 = __commonJS({
     "node_modules/is-nan/shim.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var define2 = require_define_properties();
       var getPolyfill = require_polyfill3();
       module2.exports = function shimNumberIsNaN() {
@@ -4009,6 +4102,7 @@
   var require_is_nan = __commonJS({
     "node_modules/is-nan/index.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var callBind = require_call_bind();
       var define2 = require_define_properties();
       var implementation = require_implementation5();
@@ -4028,6 +4122,7 @@
   var require_comparisons = __commonJS({
     "node_modules/assert/build/internal/util/comparisons.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       function _slicedToArray(arr, i) {
         return _arrayWithHoles(arr) || _iterableToArrayLimit(arr, i) || _unsupportedIterableToArray(arr, i) || _nonIterableRest();
       }
@@ -4555,6 +4650,7 @@
   var require_assert = __commonJS({
     "node_modules/assert/build/assert.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       function _typeof(o) {
         "@babel/helpers - typeof";
         return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(o2) {
@@ -5087,6 +5183,7 @@
   var require_yaku = __commonJS({
     "node_modules/riichi/yaku.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var assert = require_assert();
       var agari2 = require_agari();
       var MPSZ2 = ["m", "p", "s", "z"];
@@ -5466,6 +5563,7 @@
   var require_riichi = __commonJS({
     "node_modules/riichi/index.js"(exports, module) {
       "use strict";
+      init_process_shim();
       var agari = require_agari();
       var syanten = require_syanten();
       var YAKU = require_yaku();
@@ -5896,6 +5994,7 @@
   var require_aspromise = __commonJS({
     "node_modules/protobufjs/src/util/aspromise.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = asPromise;
       function asPromise(fn, ctx) {
         var params = new Array(arguments.length - 1), offset = 0, index = 2, pending = true;
@@ -5932,6 +6031,7 @@
   var require_base64 = __commonJS({
     "node_modules/protobufjs/src/util/base64.js"(exports2) {
       "use strict";
+      init_process_shim();
       var base64 = exports2;
       base64.length = function length(string) {
         var p = string.length;
@@ -6036,6 +6136,7 @@
   var require_eventemitter = __commonJS({
     "node_modules/protobufjs/src/util/eventemitter.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = EventEmitter;
       function EventEmitter() {
         this._listeners = /* @__PURE__ */ Object.create(null);
@@ -6084,6 +6185,7 @@
   var require_float = __commonJS({
     "node_modules/protobufjs/src/util/float.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = factory(factory);
       function factory(exports3) {
         if (typeof Float32Array !== "undefined") (function() {
@@ -6278,6 +6380,7 @@
   var require_utf8 = __commonJS({
     "node_modules/protobufjs/src/util/utf8.js"(exports2) {
       "use strict";
+      init_process_shim();
       var utf8 = exports2;
       var looseDecoder = new TextDecoder("utf-8", { ignoreBOM: true });
       var strictDecoder;
@@ -6392,6 +6495,7 @@
   var require_pool = __commonJS({
     "node_modules/protobufjs/src/util/pool.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = pool;
       function pool(alloc, slice, size) {
         var SIZE = size || 8192;
@@ -6418,6 +6522,7 @@
   var require_longbits = __commonJS({
     "node_modules/protobufjs/src/util/longbits.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = LongBits;
       var Long;
       function LongBits(lo, hi) {
@@ -6522,6 +6627,7 @@
   // node_modules/long/umd/index.js
   var require_umd = __commonJS({
     "node_modules/long/umd/index.js"(exports2, module2) {
+      init_process_shim();
       (function(global2, factory) {
         function preferDefault(exports3) {
           return exports3.default || exports3;
@@ -7520,6 +7626,7 @@
   var require_minimal = __commonJS({
     "node_modules/protobufjs/src/util/minimal.js"(exports2) {
       "use strict";
+      init_process_shim();
       var util = exports2;
       util.asPromise = require_aspromise();
       util.base64 = require_base64();
@@ -7725,6 +7832,7 @@
   var require_writer = __commonJS({
     "node_modules/protobufjs/src/writer.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = Writer;
       var util = require_minimal();
       var BufferWriter;
@@ -8147,6 +8255,7 @@
   var require_writer_buffer = __commonJS({
     "node_modules/protobufjs/src/writer_buffer.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = BufferWriter;
       var Writer = require_writer();
       BufferWriter.prototype = Object.create(Writer.prototype, {
@@ -8212,6 +8321,7 @@
   var require_reader = __commonJS({
     "node_modules/protobufjs/src/reader.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = Reader;
       var util = require_minimal();
       var BufferReader;
@@ -8742,6 +8852,7 @@
   var require_reader_buffer = __commonJS({
     "node_modules/protobufjs/src/reader_buffer.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = BufferReader;
       var Reader = require_reader();
       BufferReader.prototype = Object.create(Reader.prototype, {
@@ -8778,6 +8889,7 @@
   var require_service = __commonJS({
     "node_modules/protobufjs/src/rpc/service.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = Service;
       var util = require_minimal();
       Service.prototype = Object.create(util.EventEmitter.prototype, {
@@ -8860,6 +8972,7 @@
   var require_rpc = __commonJS({
     "node_modules/protobufjs/src/rpc.js"(exports2) {
       "use strict";
+      init_process_shim();
       var rpc = exports2;
       rpc.Service = require_service();
     }
@@ -8869,6 +8982,7 @@
   var require_roots = __commonJS({
     "node_modules/protobufjs/src/roots.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = /* @__PURE__ */ Object.create(null);
     }
   });
@@ -8877,6 +8991,7 @@
   var require_index_minimal = __commonJS({
     "node_modules/protobufjs/src/index-minimal.js"(exports2) {
       "use strict";
+      init_process_shim();
       exports2.build = "minimal";
       exports2.Writer = require_writer();
       exports2.BufferWriter = require_writer_buffer();
@@ -8899,6 +9014,7 @@
   var require_patterns = __commonJS({
     "node_modules/protobufjs/src/util/patterns.js"(exports2) {
       "use strict";
+      init_process_shim();
       var patterns = exports2;
       patterns.numberRe = /^(?![eE])[0-9]*(?:\.[0-9]*)?(?:[eE][+-]?[0-9]+)?$/;
       patterns.typeRefRe = /^(?:\.?[a-zA-Z_][a-zA-Z_0-9]*)(?:\.[a-zA-Z_][a-zA-Z_0-9]*)*$/;
@@ -8910,6 +9026,7 @@
   var require_codegen = __commonJS({
     "node_modules/protobufjs/src/util/codegen.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = codegen;
       var patterns = require_patterns();
       var reservedRe = patterns.reservedRe;
@@ -8989,6 +9106,7 @@
   // (disabled):fs
   var require_fs = __commonJS({
     "(disabled):fs"() {
+      init_process_shim();
     }
   });
 
@@ -8996,6 +9114,7 @@
   var require_fs2 = __commonJS({
     "node_modules/protobufjs/src/util/fs.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var fs = null;
       try {
         fs = require_fs();
@@ -9011,6 +9130,7 @@
   var require_fetch = __commonJS({
     "node_modules/protobufjs/src/util/fetch.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = fetch;
       var asPromise = require_aspromise();
       var fs = require_fs2();
@@ -9061,6 +9181,7 @@
   var require_path = __commonJS({
     "node_modules/protobufjs/src/util/path.js"(exports2) {
       "use strict";
+      init_process_shim();
       var path = exports2;
       var urlRe = /^[a-zA-Z][a-zA-Z0-9+.-]+:\/\//;
       function normalizeUrl(path2) {
@@ -9146,6 +9267,7 @@
   var require_namespace = __commonJS({
     "node_modules/protobufjs/src/namespace.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = Namespace;
       var ReflectionObject = require_object();
       Namespace.prototype = Object.create(ReflectionObject.prototype, {
@@ -9441,6 +9563,7 @@
   var require_mapfield = __commonJS({
     "node_modules/protobufjs/src/mapfield.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = MapField;
       var Field = require_field();
       MapField.prototype = Object.create(Field.prototype, {
@@ -9516,6 +9639,7 @@
   var require_method = __commonJS({
     "node_modules/protobufjs/src/method.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = Method;
       var ReflectionObject = require_object();
       Method.prototype = Object.create(ReflectionObject.prototype, {
@@ -9600,6 +9724,7 @@
   var require_service2 = __commonJS({
     "node_modules/protobufjs/src/service.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = Service;
       var Namespace = require_namespace();
       Service.prototype = Object.create(Namespace.prototype, {
@@ -9724,6 +9849,7 @@
   var require_message = __commonJS({
     "node_modules/protobufjs/src/message.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = Message;
       var util = require_minimal();
       function Message(properties) {
@@ -9767,6 +9893,7 @@
   var require_decoder = __commonJS({
     "node_modules/protobufjs/src/decoder.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = decoder;
       var Enum = require_enum();
       var types = require_types2();
@@ -9884,6 +10011,7 @@
   var require_verifier = __commonJS({
     "node_modules/protobufjs/src/verifier.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = verifier;
       var Enum = require_enum();
       var util = require_util2();
@@ -9992,6 +10120,7 @@
   var require_converter = __commonJS({
     "node_modules/protobufjs/src/converter.js"(exports2) {
       "use strict";
+      init_process_shim();
       var converter = exports2;
       var Enum = require_enum();
       var types = require_types2();
@@ -10219,6 +10348,7 @@
   var require_wrappers = __commonJS({
     "node_modules/protobufjs/src/wrappers.js"(exports2) {
       "use strict";
+      init_process_shim();
       var wrappers = exports2;
       var Message = require_message();
       var util = require_minimal();
@@ -10279,6 +10409,7 @@
   var require_type2 = __commonJS({
     "node_modules/protobufjs/src/type.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = Type;
       var Namespace = require_namespace();
       Type.prototype = Object.create(Namespace.prototype, {
@@ -10670,6 +10801,7 @@
   var require_root = __commonJS({
     "node_modules/protobufjs/src/root.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = Root;
       var Namespace = require_namespace();
       Root.prototype = Object.create(Namespace.prototype, {
@@ -10938,6 +11070,7 @@
   var require_util2 = __commonJS({
     "node_modules/protobufjs/src/util.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       var util = module2.exports = require_minimal();
       var roots = require_roots();
       var Type;
@@ -11081,6 +11214,7 @@
   var require_types2 = __commonJS({
     "node_modules/protobufjs/src/types.js"(exports2) {
       "use strict";
+      init_process_shim();
       var types = exports2;
       var util = require_util2();
       var s = [
@@ -11260,6 +11394,7 @@
   var require_field = __commonJS({
     "node_modules/protobufjs/src/field.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = Field;
       var ReflectionObject = require_object();
       Field.prototype = Object.create(ReflectionObject.prototype, {
@@ -11481,6 +11616,7 @@
   var require_oneof = __commonJS({
     "node_modules/protobufjs/src/oneof.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = OneOf;
       var ReflectionObject = require_object();
       OneOf.prototype = Object.create(ReflectionObject.prototype, {
@@ -11597,6 +11733,7 @@
   var require_object = __commonJS({
     "node_modules/protobufjs/src/object.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = ReflectionObject;
       ReflectionObject.className = "ReflectionObject";
       var OneOf = require_oneof();
@@ -11814,6 +11951,7 @@
   var require_enum = __commonJS({
     "node_modules/protobufjs/src/enum.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = Enum;
       var ReflectionObject = require_object();
       Enum.prototype = Object.create(ReflectionObject.prototype, {
@@ -11941,6 +12079,7 @@
   var require_encoder = __commonJS({
     "node_modules/protobufjs/src/encoder.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = encoder;
       var Enum = require_enum();
       var types = require_types2();
@@ -12001,6 +12140,7 @@
   var require_index_light = __commonJS({
     "node_modules/protobufjs/src/index-light.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       exports2 = module2.exports = require_index_minimal();
       exports2.build = "light";
       function load(filename, root2, callback) {
@@ -12047,11 +12187,19 @@
   var require_light = __commonJS({
     "node_modules/protobufjs/light.js"(exports2, module2) {
       "use strict";
+      init_process_shim();
       module2.exports = require_index_light();
     }
   });
 
+  // mockjs/browser_entry.mjs
+  init_process_shim();
+
+  // mockjs/engine.mjs
+  init_process_shim();
+
   // mockjs/tiles.mjs
+  init_process_shim();
   var SUIT_CHAR = { 1: "m", 2: "p", 3: "s", 4: "z" };
   function tileId(suit, rank, copy) {
     return suit * 100 + rank * 10 + copy;
@@ -12121,6 +12269,7 @@
   }
 
   // mockjs/shanten.mjs
+  init_process_shim();
   function tileIndex(id) {
     const { suit, rank } = decodeId(id);
     if (suit >= 1 && suit <= 3) return (suit - 1) * 9 + (rank - 1);
@@ -12330,7 +12479,11 @@
     return { shanten: bestSh, options };
   }
 
+  // mockjs/riichi_ai_policy.mjs
+  init_process_shim();
+
   // mockjs/ai.mjs
+  init_process_shim();
   var import_riichi = __toESM(require_riichi(), 1);
   var SUIT_CHAR2 = { 1: "m", 2: "p", 3: "s", 4: "z" };
   var kindOf = (id) => {
@@ -12564,6 +12717,7 @@
   }
 
   // mockjs/riichi_ai_read.mjs
+  init_process_shim();
   var KO_POINTS = [0, 1e3, 2e3, 3900, 7700, 8e3, 12e3, 12e3, 16e3, 16e3, 16e3, 24e3, 24e3, 32e3];
   function pointsForHan(han, dealer) {
     const h = Math.max(0, Math.min(13, han));
@@ -13619,6 +13773,7 @@
   }
 
   // mockjs/proto_enum.mjs
+  init_process_shim();
   var Result = {
     Succ: 0,
     Fail_InternalError: 1,
@@ -13740,6 +13895,7 @@
   };
 
   // mockjs/yaku_map.mjs
+  init_process_shim();
   var DIRECT = {
     "\u7ACB\u76F4": YiType.LiZhi,
     "\u30C0\u30D6\u30EB\u7ACB\u76F4": YiType.ShuangLiZi,
@@ -15687,9 +15843,11 @@
   }
 
   // mockjs/pb.mjs
+  init_process_shim();
   var import_light = __toESM(require_light(), 1);
 
   // mockjs/riichi_desc.mjs
+  init_process_shim();
   var riichiDesc = { "nested": { "riichi": { "options": { "optimize_for": "SPEED", "go_package": "gitlab.gg.com/riichi_mahjong/proto/go/client/game_logic/riichi", "csharp_namespace": "Com.Framework.Protocol" }, "nested": { "CardType": { "values": { "None": 0, "Wan": 1, "Tong": 2, "Tiao": 3, "Zi": 4, "Hua": 5 } }, "Result": { "values": { "Succ": 0, "Fail_InternalError": 1, "Fail_InvalidParam": 2, "Fail_InvalidSequence": 3, "Fail_ActionNotInCanPlayActions": 101, "Fail_CardInCantPlays": 102, "Fail_RiichiPlayCardWrong": 103, "Fail_CardNotInHand": 104, "Fail_CardNotMatchAction": 105, "Fail_ActionNotInCanQiangActions": 201, "Fail_InvalidOtherCards": 202 } }, "Wind": { "values": { "East": 0, "South": 1, "West": 2, "North": 3 } }, "RiichiMsg": { "values": { "ENone": 0, "EReqPrepare": 1, "ERspPrepare": 2, "EReqPlayCard": 3, "ERspPlayCard": 4, "EReqQiangCard": 5, "ERspQiangCard": 6, "EReqSetInternalState": 7, "ERspSetInternalState": 8, "EReqCloseOfflineTip": 9, "ERspCloseOfflineTip": 10, "EReqClickUI": 11, "ERspClickUI": 12, "ENtfToPrepare": 1001, "ENtfPrepare": 1002, "ENtfGameStart": 1003, "ENtfSendCard": 1004, "ENtfPlayCard": 1005, "ENtfQiangCard": 1006, "ENtfQiangCardEnd": 1007, "ENtfGameStop": 1008, "ENtfOfflineTip": 1009, "EGmBegin": 5e4, "EGmReqStopGame": 50001, "EGmRspStopGame": 50002, "EGmReqInitCard": 50003, "EGmRspInitCard": 50004, "EGmReqSetRobotConfig": 50005, "EGmRspSetRobotConfig": 50006, "EGmEnd": 6e4 } }, "PlayAction": { "values": { "Normal": 0, "Guo": 1, "Chi": 2, "Peng": 3, "MingGang": 4, "PengGang": 5, "AnGang": 6, "Riichi": 7, "Hu": 8, "JiuZhongJiuLiuJu": 9, "BaBei": 10 } }, "FanFuType": { "values": { "NoFanFu": 0, "FanFuNormal": 1 } }, "YiType": { "values": { "NoYi": 0, "RedBao": 101, "Bao": 102, "LiBao": 103, "BaBeiBao": 104, "LiZhi": 1101, "YiFa": 1102, "MengQianQingZiMoHu": 1103, "PingHu": 1104, "YiBeiKou": 1105, "DuanYaoJiu": 1301, "YiPaiZiFeng": 1302, "YiPaiChangFeng": 1303, "YiPaiSanYuanBai": 1304, "YiPaiSanYuanFa": 1305, "YiPaiSanYuanZhong": 1306, "LingShangKaiHua": 1307, "HaiDiLaoYue": 1308, "HeDiMoYu": 1309, "QiangGang": 1310, "YiPaiBeiFeng": 1311, "ShuangLiZi": 2101, "QiDuiZi": 2102, "HunQuanDaiYaoJiu": 2201, "YiQiTongGuan": 2202, "SanSeTongShun": 2203, "SanSeTongKe": 2301, "SanAnKe": 2302, "SanGangZi": 2303, "DuiDuiHu": 2304, "HunLaoTou": 2305, "XiaoSanYuan": 2306, "ErBeiKou": 3101, "ChunQuanDaiYaoJiu": 3201, "HunYiSe": 3202, "LiuJuManGuan": 5301, "QingYiSe": 6201, "TianHu": 91101, "DiHu": 91102, "GuoShiWuShuang": 91103, "JiuLianBaoDeng": 91104, "SiAnKe": 91105, "SiGangZi": 91301, "QingLaoTou": 91302, "ZiYiSe": 91303, "XiaoSiXi": 91304, "DaSanYuan": 91305, "LvYiSe": 91306, "GuoShiWuShuangShiSanMian": 92101, "ChunZhengJiuLianBaoDeng": 92102, "SiAnKeDanQi": 92103, "DaSiXi": 92301 } }, "LiuJuType": { "values": { "HuangPai": 0, "SiFengLianDa": 1, "SiGang": 2, "JiuZhongJiuPai": 3, "SiJiaLiZhi": 4 } }, "ManType": { "values": { "NoMan": 0, "ManGuan": 1, "TiaoMan": 2, "BeiMan": 3, "SanBeiMan": 4, "YiMan": 5 } }, "InternalStateType": { "values": { "LiPai": 0, "HuPai": 1, "PengGangChi": 2, "MoQie": 3, "LiZhiGang": 4, "LiZhiBoBei": 5 } }, "ZhenTingType": { "values": { "ZhenTingType_RiichiFuriten": 0, "ZhenTingType_TemporaryFuriten": 1, "ZhenTingType_SelfFuriten": 2 } }, "ClickUIType": { "values": { "ClickUITypeUnknown": 0, "ClickUITypeNoYiTip": 1 } }, "EnumItemRewardLevel": { "values": { "enumItemRewardLevelNo": 0, "enumItemRewardLevelOneHan": 1, "enumItemRewardLevelTwoHan": 2, "enumItemRewardLevelThreeHan": 3, "enumItemRewardLevelFourHan": 4, "enumItemRewardLevelMangan": 5, "enumItemRewardLevelJumpFullHan": 6, "enumItemRewardLevelDoubleFullHan": 7, "enumItemRewardLevelTripleFullHan": 8, "enumItemRewardLevelYakuman": 9, "enumItemRewardLevelDoubleYakuman": 10 } }, "TingInfo": { "fields": { "play": { "type": "int32", "id": 1 }, "ting": { "type": "int32", "id": 2 }, "hasYiWhenMo": { "type": "bool", "id": 3 }, "yiManChance": { "type": "int32", "id": 4 }, "fanFuTypeWhenMo": { "type": "int32", "id": 5 }, "hasYiWhenRong": { "type": "bool", "id": 6 }, "manType": { "type": "ManType", "id": 7 } } }, "YiFan": { "fields": { "yiType": { "type": "int32", "id": 1 }, "fan": { "type": "int32", "id": 2 }, "isYiMan": { "type": "bool", "id": 3 }, "isFuLuMinus": { "type": "bool", "id": 4 } } }, "ToPrepareUserInfo": { "fields": { "seat": { "type": "int32", "id": 1 }, "userID": { "type": "uint64", "id": 2 } } }, "NtfToPrepare": { "fields": { "userInfos": { "rule": "repeated", "type": "ToPrepareUserInfo", "id": 1 } } }, "PrepareUserInfo": { "fields": { "seat": { "type": "int32", "id": 1 } } }, "NtfPrepare": { "fields": { "seat": { "type": "int32", "id": 1 }, "userInfos": { "rule": "repeated", "type": "PrepareUserInfo", "id": 2 } } }, "GameStartUserInfo": { "fields": { "seat": { "type": "int32", "id": 1 }, "score": { "type": "int64", "id": 2 }, "initScore": { "type": "int64", "id": 3 }, "handCards": { "rule": "repeated", "type": "int32", "id": 4 }, "tingInfos": { "rule": "repeated", "type": "TingInfo", "id": 5 }, "canPlayActions": { "rule": "repeated", "type": "int32", "id": 6 }, "xunNum": { "type": "int32", "id": 7 } } }, "NtfGameStart": { "fields": { "changWind": { "type": "int32", "id": 1 }, "juNum": { "type": "int32", "id": 2 }, "benChangNum": { "type": "int32", "id": 3 }, "zhuangSeat": { "type": "int32", "id": 4 }, "baoPreCard": { "type": "int32", "id": 6 }, "remainDuiCardNum": { "type": "int32", "id": 7 }, "userInfos": { "rule": "repeated", "type": "GameStartUserInfo", "id": 9 }, "leftTimer": { "type": "int32", "id": 11 }, "defaultMinTimeout": { "type": "int32", "id": 12 }, "riichiBangNum": { "type": "int32", "id": 13 }, "isAllLast": { "type": "bool", "id": 14 }, "gameID": { "type": "string", "id": 15 }, "duiCardsStrEncode": { "type": "string", "id": 16 }, "duiCardsStrSaltEncode": { "type": "string", "id": 17 }, "ServerRedundantTimeOut": { "type": "int32", "id": 23 }, "FirstGameStartRedundantTimeOut": { "type": "int32", "id": 24 } } }, "SendCardUserInfo": { "fields": { "seat": { "type": "int32", "id": 1 }, "card": { "type": "int32", "id": 2 }, "tingInfos": { "rule": "repeated", "type": "TingInfo", "id": 3 }, "canPlayActions": { "rule": "repeated", "type": "int32", "id": 4 }, "leftTimer": { "type": "int32", "id": 5 }, "isZhenTing": { "type": "bool", "id": 6 }, "xunNum": { "type": "int32", "id": 7 }, "zhenTingTypes": { "rule": "repeated", "type": "int32", "id": 8 } } }, "NtfSendCard": { "fields": { "seat": { "type": "int32", "id": 1 }, "baoPreCard": { "type": "int32", "id": 3 }, "userInfos": { "rule": "repeated", "type": "SendCardUserInfo", "id": 4 } } }, "PlayCardUserInfo": { "fields": { "seat": { "type": "int32", "id": 1 }, "canQiangActions": { "rule": "repeated", "type": "int32", "id": 2 }, "isZhenTing": { "type": "bool", "id": 6 }, "leftTimer": { "type": "int32", "id": 7 }, "canAnGangNoNumCardsAfterRiichi": { "rule": "repeated", "type": "int32", "id": 8 }, "zhenTingTypes": { "rule": "repeated", "type": "int32", "id": 9 } } }, "NtfPlayCard": { "fields": { "seat": { "type": "int32", "id": 1 }, "card": { "type": "int32", "id": 2 }, "action": { "type": "int32", "id": 3 }, "isMoQie": { "type": "bool", "id": 5 }, "userInfos": { "rule": "repeated", "type": "PlayCardUserInfo", "id": 6 } } }, "QiangCardUserInfo": { "fields": { "seat": { "type": "int32", "id": 1 } } }, "NtfQiangCard": { "fields": { "seat": { "type": "int32", "id": 1 }, "action": { "type": "int32", "id": 2 }, "otherCards": { "rule": "repeated", "type": "int32", "id": 3 }, "userInfos": { "rule": "repeated", "type": "QiangCardUserInfo", "id": 4 } } }, "QiangCardEndUserInfo": { "fields": { "seat": { "type": "int32", "id": 1 }, "tingInfos": { "rule": "repeated", "type": "TingInfo", "id": 2 }, "canPlayActions": { "rule": "repeated", "type": "int32", "id": 3 }, "isZhenTing": { "type": "bool", "id": 4 }, "cantPlays": { "rule": "repeated", "type": "int32", "id": 5 }, "leftTimer": { "type": "int32", "id": 6 }, "xunNum": { "type": "int32", "id": 7 }, "zhenTingTypes": { "rule": "repeated", "type": "int32", "id": 8 } } }, "NtfQiangCardEnd": { "fields": { "seats": { "rule": "repeated", "type": "int32", "id": 1 }, "action": { "type": "int32", "id": 2 }, "otherCards": { "rule": "repeated", "type": "int32", "id": 3 }, "userInfos": { "rule": "repeated", "type": "QiangCardEndUserInfo", "id": 4 } } }, "GameStopUserInfo": { "fields": { "seat": { "type": "int32", "id": 1 }, "score": { "type": "int64", "id": 2 }, "handCards": { "rule": "repeated", "type": "int32", "id": 3 }, "changeScore": { "type": "int64", "id": 4 }, "yiFans": { "rule": "repeated", "type": "YiFan", "id": 5 }, "baoFan": { "type": "int32", "id": 6 }, "liBaoFan": { "type": "int32", "id": 7 }, "redBaoFan": { "type": "int32", "id": 8 }, "fu": { "type": "int32", "id": 9 }, "totalFan": { "type": "int32", "id": 10 }, "isYiMan": { "type": "bool", "id": 11 }, "jingSuanScore": { "type": "float", "id": 12 }, "changePT": { "type": "int64", "id": 13 }, "rank": { "type": "int32", "id": 14 }, "doorCardsInfos": { "rule": "repeated", "type": "DoorCardsInfo", "id": 15 }, "tings": { "rule": "repeated", "type": "int32", "id": 16 }, "manType": { "type": "int32", "id": 17 }, "alreadyRiichi": { "type": "bool", "id": 18 }, "baBeiCards": { "rule": "repeated", "type": "int32", "id": 19 }, "baBeiFan": { "type": "int32", "id": 20 }, "yiFanChangeDian": { "type": "int64", "id": 21 }, "isBaoPai": { "type": "bool", "id": 22 }, "jieBi": { "type": "int64", "id": 23 }, "matchingScore": { "type": "int32", "id": 24 }, "isMatchingAward": { "type": "bool", "id": 25 }, "lianZhuang": { "type": "int32", "id": 26 }, "maxFan": { "type": "int32", "id": 27 }, "realJieBi": { "type": "int64", "id": 28 }, "finalBi": { "type": "int64", "id": 29 }, "level": { "type": "int64", "id": 103 }, "loveValue": { "type": "int64", "id": 104 }, "oldLevel": { "type": "int64", "id": 105 }, "oldLoveValue": { "type": "int64", "id": 106 }, "ptLevel": { "type": "int32", "id": 107 }, "ptPoint": { "type": "int32", "id": 108 }, "oldPTLevel": { "type": "int32", "id": 109 }, "oldPTPoint": { "type": "int32", "id": 110 }, "itemRewardLevel": { "type": "int32", "id": 111 }, "itemRewards": { "rule": "repeated", "type": "ItemReward", "id": 112 } } }, "ItemReward": { "fields": { "itemId": { "type": "int64", "id": 1 }, "itemCount": { "type": "int64", "id": 2 } } }, "NtfGameStop": { "fields": { "huSeats": { "rule": "repeated", "type": "int32", "id": 1 }, "huCardSeat": { "type": "int32", "id": 2 }, "huCard": { "type": "int32", "id": 3 }, "liBaoPreCards": { "rule": "repeated", "type": "int32", "id": 4 }, "isFinal": { "type": "bool", "id": 5 }, "userInfos": { "rule": "repeated", "type": "GameStopUserInfo", "id": 6 }, "baoPreCards": { "rule": "repeated", "type": "int32", "id": 7 }, "liuJuManGuanSeats": { "rule": "repeated", "type": "int32", "id": 8 }, "liuJuType": { "type": "int32", "id": 9 }, "liuJuSeat": { "type": "int32", "id": 10 }, "duiCards": { "rule": "repeated", "type": "int32", "id": 11 }, "duiCardsStr": { "type": "string", "id": 12 }, "duiCardsStrSalt": { "type": "string", "id": 13 }, "stopType": { "type": "int32", "id": 14 }, "winningStreak": { "type": "int32", "id": 15 } } }, "ReqPrepare": { "fields": {} }, "RspPrepare": { "fields": { "result": { "type": "int32", "id": 1 } } }, "ReqPlayCard": { "fields": { "card": { "type": "int32", "id": 1 }, "action": { "type": "int32", "id": 2 }, "isTimeout": { "type": "bool", "id": 3 } } }, "RspPlayCard": { "fields": { "result": { "type": "int32", "id": 1 } } }, "ReqQiangCard": { "fields": { "action": { "type": "int32", "id": 1 }, "otherCards": { "rule": "repeated", "type": "int32", "id": 2 }, "isTimeout": { "type": "bool", "id": 3 } } }, "RspQiangCard": { "fields": { "result": { "type": "int32", "id": 1 } } }, "DoorCardsInfo": { "fields": { "cards": { "rule": "repeated", "type": "int32", "id": 1 }, "action": { "type": "int32", "id": 2 }, "qiangSeat": { "type": "int32", "id": 3 } } }, "Offline2OnlineUserInfo": { "fields": { "seat": { "type": "int32", "id": 1 }, "handCardsNum": { "type": "int32", "id": 2 }, "doorCardsInfos": { "rule": "repeated", "type": "DoorCardsInfo", "id": 3 }, "handCards": { "rule": "repeated", "type": "int32", "id": 4 }, "playedCards": { "rule": "repeated", "type": "int32", "id": 5 }, "PlayedCardsOtherTake": { "rule": "repeated", "type": "int32", "id": 6 }, "riichiTagCard": { "type": "int32", "id": 7 }, "alreadyRiichi": { "type": "bool", "id": 8 }, "tingInfos": { "rule": "repeated", "type": "TingInfo", "id": 9 }, "score": { "type": "int64", "id": 10 }, "canPlayActions": { "rule": "repeated", "type": "int32", "id": 11 }, "isZhenTing": { "type": "bool", "id": 12 }, "moQieMap": { "keyType": "int32", "type": "bool", "id": 14 }, "leftTimer": { "type": "int32", "id": 15 }, "cantPlays": { "rule": "repeated", "type": "int32", "id": 16 }, "changeScore": { "type": "int64", "id": 17 }, "baBeiCards": { "rule": "repeated", "type": "int32", "id": 18 }, "internalState": { "keyType": "int32", "type": "int32", "id": 19 }, "initScore": { "type": "int64", "id": 20 }, "canAnGangNoNumCardsAfterRiichi": { "rule": "repeated", "type": "int32", "id": 21 }, "DefaultMinTimeout": { "type": "int32", "id": 22 }, "ServerRedundantTimeOut": { "type": "int32", "id": 23 }, "zhenTingTypes": { "rule": "repeated", "type": "int32", "id": 24 }, "zhenTingTypesGuo": { "rule": "repeated", "type": "int32", "id": 25 } } }, "QiangInfo": { "fields": { "seat": { "type": "int32", "id": 1 }, "action": { "type": "int32", "id": 2 }, "otherCards": { "rule": "repeated", "type": "int32", "id": 3 } } }, "Offline2OnlineGameScene": { "fields": { "seat": { "type": "int32", "id": 1 }, "changWind": { "type": "int32", "id": 2 }, "juNum": { "type": "int32", "id": 3 }, "benChangNum": { "type": "int32", "id": 4 }, "zhuangSeat": { "type": "int32", "id": 5 }, "openBaoPreCards": { "rule": "repeated", "type": "int32", "id": 6 }, "remainDuiCardNum": { "type": "int32", "id": 7 }, "currentSeat": { "type": "int32", "id": 8 }, "currentPlayCard": { "type": "int32", "id": 9 }, "currentAction": { "type": "int32", "id": 10 }, "canQiangActions": { "rule": "repeated", "type": "int32", "id": 11 }, "qiangInfos": { "rule": "repeated", "type": "QiangInfo", "id": 12 }, "offline2OnlineUserInfos": { "rule": "repeated", "type": "Offline2OnlineUserInfo", "id": 13 }, "currentPlayEndTime": { "type": "int64", "id": 14 }, "currentQiangEndTime": { "type": "int64", "id": 15 }, "defaultMinTimeout": { "type": "int32", "id": 16 }, "ServerRedundantTimeOut": { "type": "int32", "id": 25 }, "riichiBangNum": { "type": "int32", "id": 17 }, "gameID": { "type": "string", "id": 18 }, "preSeat": { "type": "int32", "id": 19 }, "prePlayCard": { "type": "int32", "id": 20 }, "preAction": { "type": "int32", "id": 21 }, "preQiangInfos": { "rule": "repeated", "type": "QiangInfo", "id": 22 }, "duiCardsStrEncode": { "type": "string", "id": 23 }, "duiCardsStrSaltEncode": { "type": "string", "id": 24 }, "MapFriendPoll": { "keyType": "int32", "type": "bool", "id": 26 }, "FriendOutTime": { "type": "int64", "id": 27 } } }, "NtfOfflineToolTip": { "fields": { "isTempBlock": { "type": "bool", "id": 1 } } }, "SendBackOnlineReq": { "fields": {} }, "SendBackOnlineRsp": { "fields": { "result": { "type": "int32", "id": 1 } } }, "ReqSetInternalState": { "fields": { "InternalState": { "keyType": "int32", "type": "int32", "id": 1 } } }, "RspSetInternalState": { "fields": { "result": { "type": "int32", "id": 1 } } }, "ReqCloseOfflineTip": { "fields": {} }, "RspCloseOfflineTip": { "fields": { "result": { "type": "int32", "id": 1 } } }, "ReqClickUI": { "fields": { "tp": { "type": "int32", "id": 1 } } }, "RspClickUI": { "fields": { "result": { "type": "int32", "id": 1 } } }, "GmReqStopGame": { "fields": {} }, "GmRspStopGame": { "fields": {} }, "GmReqInitCard": { "fields": { "cardId": { "type": "int32", "id": 1 }, "isZimo": { "type": "bool", "id": 2 }, "isForbidRobotHu": { "type": "bool", "id": 3 } } }, "GmRspInitCard": { "fields": {} }, "GmReqSetRobotConfig": { "fields": { "robotSpeedLevel": { "type": "int32", "id": 1 } }, "nested": { "RobotSpeed": { "values": { "Normal": 0, "HalfTime": 1, "Fast": 2 } } } }, "GmRspSetRobotConfig": { "fields": {} }, "KRiichiMsg": { "fields": { "msgType": { "type": "RiichiMsg", "id": 1 }, "time": { "type": "int64", "id": 3 }, "payload": { "type": "bytes", "id": 100 } } } } } } };
   var riichi_desc_default = riichiDesc;
 
@@ -15719,8 +15877,10 @@
     refreshShop: () => refreshShop,
     synchronizeShop: () => synchronizeShop
   });
+  init_process_shim();
 
   // mockjs/economy_catalog.mjs
+  init_process_shim();
   var ECONOMY_CATALOG = {
     "source": "StreamingAssets/Bundles/WebGL/commonconfigs_d005e1531b1cf360239da815293e48c6.bundle",
     "sha256": "ed720b8300fcf05a69e59a524562f6d67220697239bcebfe86a2e35a70b0e581",
@@ -15730,8 +15890,8 @@
       "RECRUIT": 1,
       "HONOR": 7
     },
-    "protocolSource": "Build/mj-h5.data.unityweb",
-    "protocolSha256": "2384b9ca86cda9a3a4594dcf3eecba377041b1dffc46949b273ad01c1af4c7fd",
+    "protocolSource": "Build_intl/mj-h5.data.unityweb",
+    "protocolSha256": "5312991848abba0ed981fe2fa94c98719ccf6e6ac2ac18e0ce188a7fa4c7550a",
     "defaults": {
       "coinId": 60001,
       "currencyIds": [
@@ -18695,6 +18855,7 @@
     oneRoundRoom: () => oneRoundRoom,
     settleOneRound: () => settleOneRound
   });
+  init_process_shim();
   var ONE_ROUND_ROOM_TYPE = 6;
   function oneRoundRoom(roomId, roomLevel) {
     return ECONOMY_CATALOG.oneRound.find((row) => row.id === roomId * 1e4 + roomLevel) || null;
@@ -18720,6 +18881,7 @@
   }
 
   // mockjs/riichi_reload.mjs
+  init_process_shim();
   var NAMES = {
     [RiichiMsg.ENtfGameStart]: "NtfGameStart",
     [RiichiMsg.ENtfSendCard]: "NtfSendCard",
@@ -18910,6 +19072,380 @@
       MapFriendPoll: {},
       FriendOutTime: 0
     };
+  }
+
+  // mockjs/profile_host.mjs
+  init_process_shim();
+
+  // mockjs/economy.mjs
+  init_process_shim();
+  var OFFLINE_ECONOMY_VERSION = 1;
+  var INITIAL_LOCAL_COINS = 999999;
+  function initializeOfflineEconomy(profile, userData, config) {
+    if (Number(profile.offlineEconomyVersion) >= OFFLINE_ECONOMY_VERSION) return false;
+    const deltas = config.currencyIds.map((id) => {
+      const before = userData.inventoryCount(6, id);
+      const after = id === config.coinId ? before * 100 : INITIAL_LOCAL_COINS;
+      return { dtype: 6, id, count: after - before };
+    });
+    userData.changeInventory(deltas);
+    profile.coins = INITIAL_LOCAL_COINS;
+    profile.ranks = {
+      yonma: { ...config.rank },
+      sanma: { ...config.rank }
+    };
+    profile.offlineEconomyVersion = OFFLINE_ECONOMY_VERSION;
+    return true;
+  }
+
+  // mockjs/profile.mjs
+  init_process_shim();
+  var PROFILE_VERSION = 1;
+  var RANK_NAMES = ["\u65B0\u4EBA", "D3", "D2", "D1", "C2", "C1", "B2", "B1", "A2", "A1", "\u521D\u6BB5", "\u4E8C\u6BB5", "\u4E09\u6BB5", "\u56DB\u6BB5", "\u4E94\u6BB5", "\u516D\u6BB5", "\u4E03\u6BB5", "\u516B\u6BB5", "\u4E5D\u6BB5", "\u5341\u6BB5", "\u96C0\u68A6\u4E4B\u5DC5", "\u96C0\u68A6\u4E4B\u5DC5"];
+  function applyRankResult(profile, { players, matchLength, placement, roomId = null }) {
+    const key = players === 3 ? "sanma" : "yonma";
+    const table = ECONOMY_CATALOG[`${key}Ranks`];
+    const rank = profile.ranks[key];
+    const oldLevel = Math.min(table.length, Math.max(1, Math.trunc(Number(rank.level)) || 1));
+    const oldPoint = Math.max(0, Number(rank.point) || 0);
+    const rule = table[oldLevel - 1];
+    const pointRule = ECONOMY_CATALOG.rankPoints.find((row) => row.rank === oldLevel && row.room === roomId) || ECONOMY_CATALOG.rankPoints.find((row) => row.rank === oldLevel && row.room === rule.room);
+    const prefix = matchLength === "hanchan" ? "half" : "east";
+    const change = pointRule?.[`${prefix}${placement}_${players}`] || 0;
+    let level = oldLevel;
+    let point = oldPoint + change;
+    if (level < table.length && point >= rule.up) {
+      level += 1;
+      point = table[level - 1].inherit ? point : table[level - 1].initial;
+    } else if (level > 1 && rule.canDecrease && point < 0) {
+      level -= 1;
+      point = table[level - 1].down || table[level - 1].initial;
+    } else {
+      point = Math.max(0, point);
+    }
+    rank.level = level;
+    rank.point = point;
+    return { oldLevel, oldPoint, level, point, change, name: RANK_NAMES[level - 1] };
+  }
+  function emptyStatDetail(players) {
+    return {
+      hands: 0,
+      games: 0,
+      placements: Array.from({ length: players }, () => 0),
+      wins: 0,
+      dealIns: 0,
+      riichi: 0,
+      calls: 0,
+      tsumo: 0,
+      ron: 0,
+      winPoints: 0,
+      winTurns: 0,
+      busts: 0,
+      maxRenchan: 0
+    };
+  }
+  function emptyStats(players) {
+    return {
+      players,
+      ...emptyStatDetail(players),
+      eastGames: 0,
+      hanchanGames: 0,
+      byLength: {
+        east: emptyStatDetail(players),
+        hanchan: emptyStatDetail(players)
+      }
+    };
+  }
+  function createDefaultProfile() {
+    return {
+      version: PROFILE_VERSION,
+      nickname: "player",
+      coins: 999999,
+      ranks: {
+        yonma: { ...ECONOMY_CATALOG.defaults.rank },
+        sanma: { ...ECONOMY_CATALOG.defaults.rank }
+      },
+      stats: {
+        yonma: emptyStats(4),
+        sanma: emptyStats(3)
+      },
+      settings: {
+        internalState: { 0: true, 1: false, 2: false, 3: false, 4: false, 5: false }
+      },
+      lobbyData: null
+    };
+  }
+  function normalizeStats(value, players) {
+    const defaults = emptyStats(players);
+    const stats = value && typeof value === "object" ? value : {};
+    const normalized = { ...defaults, ...stats };
+    normalized.placements = defaults.placements.map((_, index) => Number(stats.placements?.[index]) || 0);
+    normalized.byLength = {};
+    for (const length of ["east", "hanchan"]) {
+      const detail = stats.byLength?.[length];
+      normalized.byLength[length] = {
+        ...defaults.byLength[length],
+        ...detail,
+        games: Number(detail?.games ?? stats[`${length}Games`]) || 0,
+        placements: defaults.byLength[length].placements.map((_, index) => Number(detail?.placements?.[index]) || 0)
+      };
+    }
+    return normalized;
+  }
+  function normalizeProfile(value) {
+    const defaults = createDefaultProfile();
+    const profile = value && typeof value === "object" ? value : {};
+    return {
+      ...defaults,
+      ...profile,
+      // Migrate the old default nickname to the new default nickname; nicknames the player changed are left untouched.
+      nickname: profile.nickname === "\u79BB\u7EBF\u73A9\u5BB6" ? defaults.nickname : profile.nickname ?? defaults.nickname,
+      version: PROFILE_VERSION,
+      ranks: {
+        yonma: { ...defaults.ranks.yonma, ...profile.ranks?.yonma },
+        sanma: { ...defaults.ranks.sanma, ...profile.ranks?.sanma }
+      },
+      stats: {
+        yonma: normalizeStats(profile.stats?.yonma, 4),
+        sanma: normalizeStats(profile.stats?.sanma, 3)
+      },
+      settings: {
+        ...defaults.settings,
+        ...profile.settings,
+        internalState: { ...defaults.settings.internalState, ...profile.settings?.internalState }
+      }
+    };
+  }
+  function sanitizeNickname(value) {
+    const nickname = String(value ?? "").trim();
+    if (!nickname || /[\u0000-\u001f\u007f]/u.test(nickname)) return null;
+    return nickname;
+  }
+  function addMatchStats(stats, placement, score, matchStats) {
+    stats.games += 1;
+    stats.placements[placement - 1] += 1;
+    if (score < 0) stats.busts += 1;
+    if (!matchStats) return;
+    for (const field of ["hands", "wins", "dealIns", "riichi", "calls", "tsumo", "ron", "winPoints", "winTurns"]) {
+      stats[field] += Number(matchStats[field]) || 0;
+    }
+    stats.maxRenchan = Math.max(stats.maxRenchan, Number(matchStats.maxRenchan) || 0);
+  }
+  function recordMatch(profile, { players, matchLength, scores, matchStats = null, roomId = null }) {
+    const key = players === 3 ? "sanma" : "yonma";
+    const stats = profile.stats[key];
+    const order = scores.map((score, seat) => ({ score, seat })).sort((left, right) => right.score - left.score || left.seat - right.seat);
+    const placement = order.findIndex((entry) => entry.seat === 0) + 1;
+    const length = matchLength === "hanchan" ? "hanchan" : "east";
+    stats[`${length}Games`] += 1;
+    addMatchStats(stats, placement, scores[0], matchStats);
+    addMatchStats(stats.byLength[length], placement, scores[0], matchStats);
+    const rank = applyRankResult(profile, { players, matchLength, placement, roomId });
+    profile.coins += 100;
+    return { placement, coins: 100, rank };
+  }
+
+  // mockjs/profile_host.mjs
+  var EDITABLE_ITEMS = [
+    { id: 60001, name: "Coins" },
+    { id: 60002, name: "Crystals" },
+    { id: 60008, name: "Gacha Coupon" },
+    { id: 60009, name: "Gacha Badge" },
+    { id: 60010, name: "Gift Fragment" },
+    { id: 60011, name: "Costume Tickets" },
+    { id: 60012, name: "Honor Points" },
+    { id: 60007, name: "Rename Card" }
+  ];
+  var RANK_NAMES2 = [
+    "Novice",
+    "D3",
+    "D2",
+    "D1",
+    "C2",
+    "C1",
+    "B2",
+    "B1",
+    "A2",
+    "A1",
+    "1st Dan",
+    "2nd Dan",
+    "3rd Dan",
+    "4th Dan",
+    "5th Dan",
+    "6th Dan",
+    "7th Dan",
+    "8th Dan",
+    "9th Dan",
+    "10th Dan",
+    "Legend",
+    "Legend+"
+  ];
+  var MAX_ITEM_COUNT = 2147483647;
+  var MAX_RANK_POINT = 999999;
+  var RANK_MODES = { yonma: "yonmaRanks", sanma: "sanmaRanks" };
+  function bytesToBase64(bytes) {
+    let text = "";
+    for (let i = 0; i < bytes.length; i += 32768) text += String.fromCharCode.apply(null, bytes.subarray(i, i + 32768));
+    return btoa(text);
+  }
+  function base64ToBytes(text) {
+    const raw = atob(text);
+    const bytes = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+    return bytes;
+  }
+  function integerIn(value, min, max, label) {
+    const number = Number(value);
+    if (!Number.isInteger(number) || number < min || number > max) throw new RangeError(`${label} must be an integer from ${min} to ${max}`);
+    return number;
+  }
+  function createProfileHost(mock, profile, { persist, log = () => {
+  } }) {
+    let session = null;
+    function load() {
+      if (profile.lobbyData) mock.setUserdata(base64ToBytes(profile.lobbyData));
+      else mock.reset();
+      const upgraded = initializeOfflineEconomy(profile, mock.userdata, ECONOMY_CATALOG.defaults);
+      const normalized = mock.userdata.normalizeOfflineContent() !== null;
+      mock.updateNickname(profile.nickname);
+      mock.updateRanks(profile.ranks);
+      mock.updateProfileStats(profile.stats);
+      if (upgraded || normalized) profile.lobbyData = bytesToBase64(mock.userdata.serialize());
+      return upgraded || normalized;
+    }
+    function snapshot() {
+      profile.lobbyData = bytesToBase64(mock.userdata.serialize());
+      return normalizeProfile(profile);
+    }
+    function attach(sess) {
+      session = sess;
+      sess.localProfile = profile;
+      sess.internalState = { ...profile.settings.internalState };
+      sess.onNicknameChange = (nickname) => {
+        profile.nickname = nickname;
+        persist();
+      };
+      sess.onSettingsChange = (state2) => {
+        profile.settings.internalState = { ...state2 };
+        persist();
+      };
+      sess.onFinalResult = (scores, engine) => {
+        const result = recordMatch(profile, {
+          players: engine.playersN,
+          matchLength: engine.matchLength,
+          scores,
+          matchStats: engine.matchStats,
+          roomId: sess.rankRoomId
+        });
+        result.changes = [
+          mock.userdata.changeInventory([{ dtype: 6, id: ECONOMY_CATALOG.defaults.coinId, count: result.coins }]),
+          ...mock.updateRanks(profile.ranks),
+          mock.updateProfileStats(profile.stats)
+        ];
+        log(`[local] \u5BF9\u5C40\u7ED3\u675F\uFF1A${engine.playersN}\u9EBB ${engine.matchLength}\uFF0C\u7B2C${result.placement}\u540D\uFF0C\u6BB5\u4F4D PT ${result.rank.change >= 0 ? "+" : ""}${result.rank.change}\uFF0C\u91D1\u5E01 +${result.coins}`);
+        persist();
+        return result;
+      };
+      sess.onMatchFinish = () => persist();
+      return sess;
+    }
+    function inMatch() {
+      return !!(session && (session.tableId || session.matchTimer || session.liveMatch()));
+    }
+    function state() {
+      return {
+        nickname: profile.nickname,
+        ranks: {
+          yonma: { level: profile.ranks.yonma.level, point: profile.ranks.yonma.point },
+          sanma: { level: profile.ranks.sanma.level, point: profile.ranks.sanma.point }
+        },
+        rankNames: RANK_NAMES2.slice(0, ECONOMY_CATALOG.yonmaRanks.length),
+        items: EDITABLE_ITEMS.map((item) => ({ ...item, count: mock.userdata.inventoryCount(6, item.id) })),
+        games: { yonma: profile.stats.yonma.games, sanma: profile.stats.sanma.games },
+        inMatch: inMatch()
+      };
+    }
+    function edit(changes) {
+      const nickname = changes.nickname == null ? null : sanitizeNickname(changes.nickname);
+      if (changes.nickname != null && !nickname) throw new RangeError("Nickname must not be blank");
+      const ranks = {};
+      for (const [mode, table] of Object.entries(RANK_MODES)) {
+        const rank = changes.ranks?.[mode];
+        if (!rank) continue;
+        ranks[mode] = {
+          level: integerIn(rank.level, 1, ECONOMY_CATALOG[table].length, "Rank level"),
+          point: integerIn(rank.point, 0, MAX_RANK_POINT, "Rank PT")
+        };
+      }
+      const deltas = [];
+      for (const [id, count] of Object.entries(changes.items || {})) {
+        const item = EDITABLE_ITEMS.find((entry) => entry.id === Number(id));
+        if (!item) throw new RangeError(`Item ${id} is not editable`);
+        const target = integerIn(count, 0, MAX_ITEM_COUNT, item.name);
+        deltas.push({ dtype: 6, id: item.id, count: target - mock.userdata.inventoryCount(6, item.id) });
+      }
+      mock.userdata.changeInventory(deltas);
+      if (nickname) {
+        profile.nickname = nickname;
+        mock.updateNickname(nickname);
+      }
+      Object.assign(profile.ranks, ranks);
+      mock.updateRanks(profile.ranks);
+    }
+    function resetStats() {
+      profile.stats = createDefaultProfile().stats;
+      mock.updateProfileStats(profile.stats);
+    }
+    function replace(next) {
+      if (!next || typeof next !== "object" || Array.isArray(next)) throw new TypeError("Save file must be a JSON object");
+      if (next.lobbyData != null && typeof next.lobbyData !== "string") throw new TypeError("lobbyData must be a base64 string");
+      const before = JSON.parse(JSON.stringify(snapshot()));
+      const assign = (value) => {
+        for (const key of Object.keys(profile)) delete profile[key];
+        Object.assign(profile, normalizeProfile(value));
+      };
+      try {
+        assign(next);
+        load();
+      } catch (error) {
+        assign(before);
+        load();
+        throw error;
+      }
+      if (session) session.internalState = { ...profile.settings.internalState };
+    }
+    const ACTIONS = {
+      state: () => state(),
+      export: () => snapshot(),
+      edit: (request) => {
+        edit(request.changes || {});
+        return state();
+      },
+      resetStats: () => {
+        resetStats();
+        return state();
+      },
+      import: (request) => {
+        replace(request.profile);
+        return state();
+      },
+      reset: () => {
+        replace(createDefaultProfile());
+        return state();
+      }
+    };
+    const READ_ONLY = /* @__PURE__ */ new Set(["state", "export"]);
+    async function handle(request) {
+      const action = ACTIONS[request?.action];
+      if (!action) throw new RangeError("Unknown action");
+      if (!READ_ONLY.has(request.action) && inMatch()) throw new Error("Finish or leave the current match first");
+      const result = action(request);
+      if (!READ_ONLY.has(request.action)) await persist(true);
+      return result;
+    }
+    return { load, snapshot, attach, handle, get session() {
+      return session;
+    } };
   }
 
   // mockjs/browser_entry.mjs
@@ -19125,6 +19661,7 @@
   var _MJ = _g.__mj || (_g.__mj = {});
   _MJ.shop = shop_exports;
   _MJ.oneRound = one_round_exports;
+  _MJ.host = { createProfileHost, createDefaultProfile, normalizeProfile };
   _MJ.riichi = {
     RiichiSession,
     GameEngine,

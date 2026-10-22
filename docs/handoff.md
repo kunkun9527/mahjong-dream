@@ -2,7 +2,7 @@
 
 > 面向下一位开发者或 AI agent。本文只记录接手工作所需的当前状态、约束和行动顺序；系统原理详见 [`technical-architecture.md`](technical-architecture.md)，功能完成度详见 [`repair-backlog.md`](repair-backlog.md)。
 >
-> 最后核对日期：2026-10-22（UTC+8）。三档 AI/大厅/注释已提交推送至 `4ac49cd`；条款/红点提交为 `33842af`。当前统一国际版入口、修复偏好容量及 UTC+9 签到回归，全量 414/414 通过；本轮自动 Spec 审查未发现问题（静态审查）。维护者已授权本轮提交并推送，实际状态以 `git status` / `git log` 和远端 `main` 为准。
+> 最后核对日期：2026-10-22（UTC+8）。三档 AI/大厅/注释已提交推送至 `4ac49cd`；条款/红点提交为 `33842af`。当前统一国际版入口、修复偏好容量及 UTC+9 签到回归；新增网页版与存档修改器后全量 422/422 通过；本轮自动 Spec 审查未发现问题（静态审查）。维护者已授权本轮提交并推送，实际状态以 `git status` / `git log` 和远端 `main` 为准。
 >
 > **产品范围（2026-10-18 起）：只做单机立直麻将（四麻/三麻）。** 四川麻将后端已删除（最后完整版本见提交 `a469df1`），四川、斗地主、掼蛋及好友/抽卡/邮件等外围入口一律返回原生“离线模式下此功能不可用”提示。
 
@@ -24,7 +24,9 @@
 - 后续修复历史“不鸣”设置与当前界面不同步造成的立即过牌；新页面不自动激活历史自动操作，明确提交的开关仍生效。新增会话级吃/碰/杠与 5+20 秒回归，浏览器显示仍需人工复测。
 - 新旧档案一次性初始化三四麻七段（17级/2300PT），雀币现有余额×100，其余指定商店货币999999；消费/升降段以后不再补满。用户确认保留原房间上下限，因此七段开放乘风/御龙，不开放低级启航/逐梦。
 - 雀币、招募、杂货、荣耀四商店已接入真实扣款/发货/限购/刷新与存档，26项新增回归含真实WS停服重启；修复Windows文件占用导致的原子替换失败。浏览器仍需人工点选验收。
-- 维护入口：`local/economy.mjs`、`mockjs/shop.mjs`、`mockjs/economy_catalog.mjs`及`tools/extract_economy_config.py`。生成器需UnityPy/Brotli，游戏运行不需要Python；不直接编辑生成目录或Unity文件。架构及边界见第12章和ADR 0003。
+- 维护入口：`mockjs/economy.mjs`、`mockjs/shop.mjs`、`mockjs/economy_catalog.mjs`及`tools/extract_economy_config.py`。生成器需UnityPy/Brotli，游戏运行不需要Python；不直接编辑生成目录或Unity文件。架构及边界见第12章和ADR 0003。
+
+- 2026-10-22（续）：新增网页版（ADR 0007）。静态托管时后端在页面内运行、存档在 `localStorage`，可部署到 GitHub Pages 子路径；Node 版保留，两边共用 `mockjs/profile_host.mjs`（档案、补给、记账、修改器）。右侧 ⚙ 存档修改器可改昵称/段位/钱包、重置战绩、导入导出、新账号，对局中拒绝修改。中文 `Build/` 归档到 `archive/zh-client/`，`tools/extract_economy_config.py` 改读 `Build_intl/`（目录数据不变）。Playwright 真键盘实测：静态子路径与 Node 版的修改器输入、Apply & Reload、持久化均通过。GitHub Pages 尚未启用，线上未验证。
 
 剩余工作见第 5 节；下一步方向由维护者另行确定。
 
@@ -239,7 +241,7 @@ Unity 客户端和浏览器消息都不是牌局真相。所有动作必须由�
 
 - `node_modules/`；
 - `userdata/` 中的真实运行时档案；
-- `Build/`、`Build_intl/`、`StreamingAssets/` 中的 Unity 二进制或压缩资源；
+- `archive/zh-client/Build/`、`Build_intl/`、`StreamingAssets/` 中的 Unity 二进制或压缩资源；
 - 自动生成的 `mock/riichi.js`（应修改 `mockjs/` 后重新构建）；
 - `package-lock.json`，除非确实通过 npm 增删或升级依赖。
 

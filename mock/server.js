@@ -1395,6 +1395,8 @@
     } else {
       if (_lastSession) { _lastSession.destroy(); _lastSession = null; }
       this._session = new Session();
+      // The in-browser host (web-host.js) attaches the local profile and save callbacks to each new session.
+      if (typeof MJ.server.onSessionCreated === 'function') MJ.server.onSessionCreated(this._session);
     }
     this._session.socket = this;
 

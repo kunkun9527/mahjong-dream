@@ -171,6 +171,7 @@ test('完整启动链无查询串也加载国际版，先提交偏好再启动 U
       URL, URLSearchParams, Uint8Array, performance: { now: () => 1 },
       navigator: { userAgent: 'Desktop' }, console: { log() {}, time() {}, timeLog() {} },
       setInterval: () => 1, clearInterval() {},
+      __mjHost: { ready: Promise.resolve() },
       history: { replaceState(_state, _title, url) { ctx.location = new URL(url, ctx.location); } },
       document: {
         querySelector: () => ({ style: {} }), createElement: () => ({}),

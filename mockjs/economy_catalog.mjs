@@ -8,8 +8,8 @@ export const ECONOMY_CATALOG = {
     "RECRUIT": 1,
     "HONOR": 7
   },
-  "protocolSource": "Build/mj-h5.data.unityweb",
-  "protocolSha256": "2384b9ca86cda9a3a4594dcf3eecba377041b1dffc46949b273ad01c1af4c7fd",
+  "protocolSource": "Build_intl/mj-h5.data.unityweb",
+  "protocolSha256": "5312991848abba0ed981fe2fa94c98719ccf6e6ac2ac18e0ce188a7fa4c7550a",
   "defaults": {
     "coinId": 60001,
     "currencyIds": [

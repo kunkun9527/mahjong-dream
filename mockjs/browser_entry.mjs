@@ -5,6 +5,8 @@ import { tileName, decodeId, tileId } from './tiles.mjs';
 import * as shop from './shop.mjs';
 import * as oneRound from './one_round.mjs';
 import { buildRiichiReloadScene } from './riichi_reload.mjs';
+import { createProfileHost } from './profile_host.mjs';
+import { createDefaultProfile, normalizeProfile } from './profile.mjs';
 
 var MSG_NAME = {
   1: "ReqPrepare",
@@ -220,6 +222,8 @@ var _g = typeof window !== "undefined" ? window : globalThis;
 var _MJ = _g.__mj || (_g.__mj = {});
 _MJ.shop = shop;
 _MJ.oneRound = oneRound;
+// Used by web-host.js when the page runs without the Node service.
+_MJ.host = { createProfileHost, createDefaultProfile, normalizeProfile };
 _MJ.riichi = {
   RiichiSession,
   GameEngine,
