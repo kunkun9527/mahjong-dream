@@ -199,6 +199,25 @@ test('大厅奖励推广归一：不弹签到、新手、礼包或活动，不�
   assert.ok(tomorrow.modules[34].version > ud.modules[34].version, '旧快照跨日重新加载也必须使昨日客户端缓存失效');
 });
 
+test('国际版大厅按 UTC+9 换日：北京时间 23 点刷新弹窗标记，零点不重复刷新', () => {
+  const ud = new U.UserData(P.b64decode(data.userdataB64), 10_000_001);
+  const beforeMidnight = Date.UTC(2026, 9, 22, 14, 55) / 1000;
+  const afterMidnight = Date.UTC(2026, 9, 22, 15, 5) / 1000;
+  ud.normalizeOfflineLobby(beforeMidnight);
+  const previousVersion = ud.modules[34].version;
+  const stable = Object.fromEntries([6, 29, 39].map((dt) => [dt, ud.modules[dt].serialize()]));
+  ud.setRow(44, '0', P.W().v(6, beforeMidnight).bytes());
+  const changes = ud.normalizeOfflineLobby(afterMidnight);
+  const clientDay = (timestamp) => Math.floor((timestamp + 9 * 3600) / 86400);
+  assert.equal(clientDay(P.get(ud.row(34, '0'), 1)), clientDay(afterMidnight), '与国际版 CanSignIn 的 UTC+9 日期相同，不再排入签到弹窗');
+  assert.equal(P.get(ud.row(44, '0'), 6), afterMidnight, '新手签到使用同一客户端换日边界');
+  assert.ok(changes[34] && changes[44]);
+  assert.ok(ud.modules[34].version > previousVersion, '换日后旧缓存失效');
+  for (const [dt, bytes] of Object.entries(stable)) assert.deepEqual(ud.modules[dt].serialize(), bytes, '不通过发奖励或修改月卡压制弹窗');
+  const afterBeijingMidnight = Date.UTC(2026, 9, 22, 16, 5) / 1000;
+  assert.equal(ud.normalizeOfflineLobby(afterBeijingMidnight), null, '北京时间零点并不是国际版的新一天');
+});
+
 test('活动和公告红点归一：移除对应红点、标记内置及服务器公告已读，保留其他模块与未知字段', () => {
   const ud = new U.UserData(P.b64decode(data.userdataB64), 10_000_001);
   const entry = (id, type) => P.W().v(1, id).s(2, P.W().v(1, type).v(2, id).v(3, 1).s(99, 'dot').bytes()).bytes();

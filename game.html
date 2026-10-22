@@ -103,9 +103,8 @@
         updateBannerVisibility();
       }
       
-      // The Chinese build always uses Simplified Chinese; with mjLang=en, switch to the international build bundled in the snapshot, which picks the built-in English table by browser language.
-      var intl = new URLSearchParams(location.search).get("mjLang") === "en";
-      var buildUrl = intl ? "Build_intl" : "Build";
+      // All entry URLs use the international client; its in-game language choice is persisted.
+      var buildUrl = "Build_intl";
       var loaderUrl = buildUrl + "/mj-h5.loader.js";
       var config = {
         dataUrl: buildUrl + "/mj-h5.data.unityweb",
@@ -114,8 +113,8 @@
         symbolsUrl: buildUrl + "/mj-h5.symbols.json.unityweb",
         streamingAssetsUrl: "StreamingAssets",
         companyName: "DefaultCompany",
-        productName: intl ? "Mahjong Dream" : "激情麻将",
-        productVersion: intl ? "1.1.107211826.0" : "1.1.107241726.0",
+        productName: "Mahjong Dream",
+        productVersion: "1.1.107211826.0",
         showBanner: unityShowBanner,
       };
 
@@ -197,19 +196,16 @@
           progressBarFull.style.width = currentProgress + "%";
         }
       }, 50);
-      if (intl) {
-        if (!new URLSearchParams(location.search).has("uid")) {
-          // The international H5SDK stalls at resource init without uid/sign; keep the offline placeholder values from the original international entry.
-          history.replaceState(null, "", location.pathname + location.search + "&uid=1&sign=19a5aaae0d826f5ac640a4dbfafb1612");
-        }
-        useEnglishPlayerPrefs().then(function () { document.body.appendChild(script); });
-      } else {
-        document.body.appendChild(script);
-      }
+      // The international H5SDK needs both offline placeholder parameters, even on a bare game.html URL.
+      var launchUrl = new URL(location.href);
+      if (!launchUrl.searchParams.has("uid")) launchUrl.searchParams.set("uid", "1");
+      if (!launchUrl.searchParams.has("sign")) launchUrl.searchParams.set("sign", "19a5aaae0d826f5ac640a4dbfafb1612");
+      history.replaceState(null, "", launchUrl.pathname + launchUrl.search + launchUrl.hash);
+      preparePlayerPrefs().then(function () { document.body.appendChild(script); });
 
-      // Keep the existing English-entry language choice and accept the offline terms before Unity starts.
-      // IDBFS v21 and UnityPrf v1 are the formats used by both bundled Unity clients.
-      function useEnglishPlayerPrefs() {
+      // Seed English only when no language is saved, and accept the offline terms before Unity starts.
+      // IDBFS v21 and UnityPrf v1 are the formats used by the bundled Unity client.
+      function preparePlayerPrefs() {
         return new Promise(function (done) {
           var url = location.href.split(/[?#]/)[0];
           var directory = "/idbfs/" + SparkMD5.hash(url.substring(0, url.lastIndexOf("/")));
@@ -229,8 +225,8 @@
             var request = store.get(prefsPath);
             request.onsuccess = function () {
               var file = request.result;
-              var before = file ? file.contents : new Uint8Array([85, 110, 105, 116, 121, 80, 114, 102, 0, 0, 1, 0, 0, 0, 0, 0]);
-              var contents = setPrefsInt(setPrefsInt(before, "LanguageID", 4), "user_terms", 1);
+              var before = file ? file.contents : new Uint8Array([85, 110, 105, 116, 121, 80, 114, 102, 0, 0, 1, 0, 0, 0, 16, 0]);
+              var contents = setPrefsInt(setPrefsInt(before, "LanguageID", 4, true), "user_terms", 1);
               if (contents === before) return;
               if (!file) {
                 var parent = store.get(directory);
@@ -249,16 +245,21 @@
       }
 
       // Extend the existing integer patch without reserializing unrelated preferences.
-      function setPrefsInt(bytes, key, value) {
+      function setPrefsInt(bytes, key, value, onlyIfMissing) {
         if (!bytes || bytes.length < 16 || String.fromCharCode.apply(null, bytes.subarray(0, 8)) !== "UnityPrf") return bytes;
         if (new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(8, true) !== 65536) return bytes;
+        // Offset 12 is the byte capacity, not an entry count. Repair files created by the old patch.
+        if (new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(12, true) < bytes.length) {
+          bytes = bytes.slice();
+          new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).setUint32(12, 1048576, true);
+        }
         outer: for (var i = 17; i + key.length + 5 <= bytes.length; i++) {
           if (bytes[i - 1] !== key.length) continue;
           for (var j = 0; j < key.length; j++) if (bytes[i + j] !== key.charCodeAt(j)) continue outer;
           var at = i + key.length;
           if (bytes[at] !== 0xfe) return bytes;
           var old = bytes[at + 1] | (bytes[at + 2] << 8) | (bytes[at + 3] << 16) | (bytes[at + 4] << 24);
-          if (old === value) return bytes;
+          if (onlyIfMissing || old === value) return bytes;
           var changed = bytes.slice();
           for (var k = 0; k < 4; k++) changed[at + 1 + k] = (value >>> (8 * k)) & 0xff;
           return changed;
@@ -270,8 +271,6 @@
         for (var j = 0; j < key.length; j++) changed[at++] = key.charCodeAt(j);
         changed[at++] = 0xfe;
         for (var k = 0; k < 4; k++) changed[at++] = (value >>> (8 * k)) & 0xff;
-        var view = new DataView(changed.buffer);
-        view.setUint32(12, view.getUint32(12, true) + 1, true);
         return changed;
       }
 

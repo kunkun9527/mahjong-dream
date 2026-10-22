@@ -5,8 +5,8 @@
 **Mahjong Dream Snapshot** is an offline, standalone single-player Riichi Mahjong game adapted from the game snapshot of *Mahjong Dream* (*激情麻将*). It combines a local Node.js microservice backend with the original Unity WebGL client.
 
 - **100% Offline**: Runs strictly on localhost (`127.0.0.1`). No internet connection is required, and no private data or telemetry is transmitted.
-- **Bilingual Support**: Includes both the international English client (*Mahjong Dream*) and the original Chinese client (*激情麻将*).
-- **Dedicated Riichi Experience**: Focused exclusively on Riichi Mahjong (4-Player, 3-Player, and One-Round Quick Match). The lobby still shows the original non-Riichi entries (Sichuan Mahjong, Fight the Landlord, Guandan); starting them shows an "unavailable offline" prompt instead of a match. The Unity client files are kept unmodified.
+- **Multilingual Client**: One international client with English on first launch; switch to Simplified Chinese or another built-in language in Settings. Your choice is remembered on this local origin.
+- **Dedicated Riichi Experience**: Focused exclusively on Riichi Mahjong (4-Player, 3-Player, and One-Round Quick Match). Only Riichi modes are supported; any non-Riichi requests receive an "unavailable offline" response instead of starting a match. The Unity client files are kept unmodified.
 - **Full Unlock by Default**: All 10 characters, 23 costumes, max affection levels, avatars, and cosmetics are unlocked and ready to use immediately.
 
 ---
@@ -83,36 +83,31 @@
 
 #### How to Play
 
-- **English Version**: Double-click [`start-game-en.bat`](start-game-en.bat).
-- **Chinese Version**: Double-click [`start-game.bat`](start-game.bat).
+Double-click [`start-game.bat`](start-game.bat), or run `npm start`. There is no separate English launcher.
 
-The English entry defaults to accepting the local client terms. Event and Notifications badges are suppressed in both entries; normal match results and shop feedback are retained.
+The international client defaults to English only on first launch; Settings → Language lets you select Simplified Chinese or another built-in language without being reset next time. Local client terms are accepted automatically. Event and Notifications badges and automatic reward promotions are suppressed; normal match results and shop feedback are retained.
 
-The launcher starts the local server on loopback (`127.0.0.1`) and automatically launches Microsoft Edge or Google Chrome. **Close the command prompt window to stop the game server.**
+The launcher starts the local server at `http://127.0.0.1:8765/` (override with `MJ_PORT`) and automatically launches Microsoft Edge or Google Chrome. **Close the command prompt window to stop the game server.**
 
 #### Command-Line Arguments (Optional)
 
 You can launch directly into a specific mode from the command line:
 
 ```bat
-:: 4-Player South Match (English)
-start-game-en.bat --players=4 --length=hanchan
-
-:: 4-Player East Match (English)
-start-game-en.bat --players=4 --length=east
-
-:: 3-Player South Match (English)
-start-game-en.bat --players=3 --length=hanchan
-
-:: 3-Player East Match (English)
-start-game-en.bat --players=3 --length=east
-
-:: 4-Player South Match (Chinese)
+:: 4-Player South Match
 start-game.bat --players=4 --length=hanchan
+
+:: 4-Player East Match
+start-game.bat --players=4 --length=east
+
+:: 3-Player South Match
+start-game.bat --players=3 --length=hanchan
+
+:: 3-Player East Match
+start-game.bat --players=3 --length=east
 ```
 
-You can also pass query parameters in your browser:
-- Switch to English client: `http://127.0.0.1:8790/game.html?mjLang=en`
+The client always uses `Build_intl/`; old `mjLang` links no longer select a different build or override a saved language. Keep the same local port to retain browser preferences. Player progress remains in `userdata/profile.json`.
 
 ---
 

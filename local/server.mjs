@@ -10,7 +10,8 @@ import { initializeOfflineEconomy } from './economy.mjs';
 import { ECONOMY_CATALOG } from '../mockjs/economy_catalog.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const requiredResources = ['index.html', 'game.html', 'Build/mj-h5.loader.js'];
+const requiredResources = ['index.html', 'game.html', 'Build_intl/mj-h5.loader.js',
+  'Build_intl/mj-h5.data.unityweb', 'Build_intl/mj-h5.framework.js.unityweb', 'Build_intl/mj-h5.wasm.unityweb'];
 for (const resource of requiredResources) {
   try { await fsp.access(path.join(root, resource)); }
   catch { throw new Error(`[local] 缺少游戏资源：${resource}。请重新解压完整游戏目录。`); }

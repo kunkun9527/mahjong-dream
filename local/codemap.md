@@ -4,7 +4,7 @@
 Node 进程层：启动器、静态文件 + 回环 WebSocket 服务、本地档案读写和一次性经济初始化。所有对局与协议逻辑都委托给 `mock/server.js`。
 
 ## Key files
-- `launcher.mjs` — `npm start` / `start-game.bat` 入口；fork `server.mjs`，等端口就绪后打开 Edge/Chrome，转发 `--players/--length/--lang` 为 URL 参数。
+- `launcher.mjs` — `npm start` / `start-game.bat` 入口；fork `server.mjs`，等端口就绪后打开 Edge/Chrome，默认端口 8765（保持浏览器偏好来源），仅转发 `--players/--length` 为 URL 参数；语言由国际版设置记忆。
 - `server.mjs` — HTTP（MIME、Brotli、Range、路径穿越防护）+ `/ws` 单活动连接租约；启动时依次 import `mock/proto.js`、`mock/data.js`、`mock/userdata.js`、`mockjs/browser_entry.mjs`、`mock/server.js`，再用 `globalThis.__mj.server` 处理消息。
 - `profile.mjs` — `userdata/profile.json` 的默认值、规范化、段位 PT（读 `economy_catalog` 的 22 档表）、战绩和原子写入。
 - `economy.mjs` — `offlineEconomyVersion` 标记的一次性补给：雀币 ×100，其余货币 999999，七段起步。

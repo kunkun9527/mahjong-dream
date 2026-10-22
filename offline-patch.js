@@ -27,9 +27,8 @@
     if (stats.frames.length > 200) stats.frames.shift();
   }
   // ---------------- Interface language ----------------
-  // The original client picks its built-in language table from navigator.language (English → English table); with mjLang=en only this one input is changed.
-  var LANGUAGES = { en: 'en-US', zh: 'zh-CN' };
-  var requestedLanguage = LANGUAGES[new URLSearchParams(location.search).get('mjLang')];
+  // English is the first-run default; Unity's saved LanguageID takes precedence afterward.
+  var requestedLanguage = 'en-US';
   if (requestedLanguage) {
     ['language', 'userLanguage'].forEach(function (key) {
       try { Object.defineProperty(navigator, key, { configurable: true, get: function () { return requestedLanguage; } }); }

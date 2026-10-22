@@ -263,12 +263,12 @@
 
   // ---------------------------------------------------------- Cross-day check-in
   // Suppress unsupported lobby reward promotions without granting or spending items.
-  // SignIn.f1 and NewSignIn.f6 are UTC+8 daily popup guards; gift data is nested in f3.
+  // The international client uses UTC+9 for SignIn.f1 / NewSignIn.f6 popup dates; gift data is nested in f3.
   UserData.prototype.normalizeOfflineLobby = function (now) {
     now = now == null ? Math.floor(Date.now() / 1000) : now;
-    var day = Math.floor((now + 8 * 3600) / 86400);
+    var day = Math.floor((now + 9 * 3600) / 86400);
     var self = this, changes = {};
-    function today(value) { return Math.floor((Number(value || 0) + 8 * 3600) / 86400) === day; }
+    function today(value) { return Math.floor((Number(value || 0) + 9 * 3600) / 86400) === day; }
     function update(dtype, key, bytes) {
       var old = self.row(dtype, key);
       if (old && old.length === bytes.length && old.every(function (b, i) { return b === bytes[i]; })) return;

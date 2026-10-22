@@ -7,14 +7,14 @@
 ## Entry points
 - `start-game.bat` / `local/launcher.mjs` — 启动服务并打开浏览器。
 - `local/server.mjs` — HTTP + WebSocket 服务，装载 `mock/` 兼容层。
-- `game.html` + `offline-patch.js` — Unity 入口与离线补丁（WebSocket 指向本机、拦截外网请求）；`?mjLang=en` 改载 `Build_intl/` 英文国际版，启动前写入本地条款默认同意及英文偏好。
+- `game.html` + `offline-patch.js` — Unity 入口与离线补丁（WebSocket 指向本机、拦截外网请求）；始终加载 `Build_intl/`，启动前修复旧 PlayerPrefs 错误配额、默认同意条款，仅在未选语言时设为英文。
 - `mock/server.js` — 全部消息处理器。
 - `mockjs/engine.mjs` — 立直权威引擎。
 
 ## Commands
 | 目的 | 命令 |
 | --- | --- |
-| 启动 | `npm start`（参数同 `start-game.bat --players=3 --length=hanchan --lang=en`） |
+| 启动 | `npm start` / `start-game.bat --players=3 --length=hanchan`（唯一 BAT，默认端口 8765） |
 | 构建 bundle | `npm run build`（`mockjs/` → `mock/riichi.js`） |
 | 语法检查 | `npm run check`（新增源码要加进 `package.json` 的 check 列表） |
 | 测试 | `npm test`；单个：`node --test test/engine-smoke.test.mjs` |

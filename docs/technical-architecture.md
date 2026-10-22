@@ -132,7 +132,7 @@ start-game.bat --players=3 --length=hanchan
 `local/server.mjs` 同时是静态文件服务器。它只监听：
 
 ```text
-127.0.0.1:<MJ_PORT，默认 8765；启动器默认使用随机空闲端口>
+127.0.0.1:<MJ_PORT，默认 8765；启动器和服务使用同一固定默认端口>
 ```
 
 主要行为：
@@ -141,7 +141,7 @@ start-game.bat --players=3 --length=hanchan
 - 仅接受 `GET` 和 `HEAD`；
 - 对 URL 解码后执行 `path.resolve`，拒绝逃逸项目根目录的路径；
 - 为 HTML、JS、CSS、JSON、WASM、图片、音频、bundle 和 `.unityweb` 设置 MIME；
-- `Build/*.unityweb` 带 `Content-Encoding: br`；
+- `*.unityweb` 带 `Content-Encoding: br`；
 - 支持普通、前缀和后缀 byte Range；非法或越界 Range 返回 416；
 - `HEAD` 返回与 GET 一致的头但不发送 body；
 - HTML/JS 使用 `no-cache`，其余资源使用一小时缓存；
@@ -151,7 +151,10 @@ start-game.bat --players=3 --length=hanchan
 
 - `index.html`
 - `game.html`
-- `Build/mj-h5.loader.js`
+- `Build_intl/mj-h5.loader.js`
+- `Build_intl/mj-h5.data.unityweb`
+- `Build_intl/mj-h5.framework.js.unityweb`
+- `Build_intl/mj-h5.wasm.unityweb`
 
 缺失时服务会停止并提示重新解压完整游戏目录。
 
@@ -161,14 +164,14 @@ start-game.bat --players=3 --length=hanchan
 
 - `index.html` 是外层页面，以 iframe 加载 `game.html`，转发查询串并处理横竖屏；
 - `game.html` 创建 Unity canvas，先加载离线补丁，再加载 Unity loader；
-- `game.html` 默认加载 `Build/`，`?mjLang=en` 改载 `Build_intl/`；两者共享 `StreamingAssets/` 与同一套本地立直后端；
+- `game.html` 始终加载 `Build_intl/`，复用 `StreamingAssets/` 与本地立直后端；只保留 `start-game.bat` / `npm start`；旧 `mjLang` 参数不再选择构建或重置语言；
 - `QuickSDK`、`H5SDK`、`QuickService` 被本地 stub，避免原渠道 SDK 缺失导致初始化崩溃。
 
-当前中文构建产品版本为 `1.1.107241726.0`，国际版为 `1.1.107211826.0`。2026-10-22 静态提取的 45 份协议描述逐份完全相同，涵盖立直动作、结算、重连、匹配与用户数据；另外 2 个反射初始化器未恢复。立直类型未发现缺失，国际版语言配置包含简体中文。此结果支持后端/协议兼容，不表示两个不同版本的所有 UI 与运行行为完全一致；本轮未合并入口。四川/斗地主等非立直模式仍按离线不可用处理。
+当前中文构建产品版本为 `1.1.107241726.0`，国际版为 `1.1.107211826.0`。2026-10-22 静态提取的 45 份协议描述逐份完全相同，涵盖立直动作、结算、重连、匹配与用户数据；另外 2 个反射初始化器未恢复。立直类型未发现缺失，国际版语言配置包含简体中文。此结果支持后端/协议兼容，不表示两个不同版本的所有 UI 与运行行为完全一致；当前已统一国际版入口，原中文 `Build/` 仅保留为历史快照。四川/斗地主等非立直模式仍按离线不可用处理。
 
-英文入口在 Unity 启动前初始化同源 IndexedDB `/idbfs` v21 的 `FILE_DATA`：按 Unity 的 URL 目录 MD5 定位 `PlayerPrefs`，保留现有 `LanguageID=4` 行为，并写入 `user_terms=1` 作为本地默认同意。首次启动会建立有效的 UnityPrf v1 头、目录和整数记录，已有音量等偏好保持不变；不改 Unity 文件。仅修改当前路径，不扫描或覆盖其他目录的偏好。语言记忆行为没有在本轮调整。
+统一入口在 Unity 启动前初始化同源 IndexedDB `/idbfs` v21 的 `FILE_DATA`：按 Unity 的 URL 目录 MD5 定位 `PlayerPrefs`，仅在缺少 `LanguageID` 时设英文（4），并写入 `user_terms=1` 作为本地默认同意。UnityPrf v1 头 offset 12 是字节容量，不是条目数：新文件设为 1 MiB，旧补丁误写的小容量会被修复，否则 Unity 抛 `PlayerPrefsException` 并停在资源初始化。仅修改当前路径，保留已有语言、音量和无关偏好，事务完成后才启动 Unity；为国际版补齐缺省 `uid/sign`，裸 URL 也能启动。默认固定端口 8765 使正常重启沿用同源偏好，切换端口会形成另一份浏览器偏好；不改 Unity 文件。
 
-大厅 `normalizeOfflineLobby()` 另移除 DT27 中活动/公告类型（3/4）的红点，补齐 DT33 中内置活动、系统公告与服务器公告的已读 ID。其他红点、公告内容、未知字段、余额和对局数据保留；登录/资料查询前应用，借模块版本失效旧缓存。针对性测试见 `test/intl-preferences.test.mjs` 与 `test/offline-content.test.mjs`；本轮按维护者要求不继续逐项浏览器验收。
+大厅 `normalizeOfflineLobby()` 另移除 DT27 中活动/公告类型（3/4）的红点，补齐 DT33 中内置活动、系统公告与服务器公告的已读 ID。其他红点、公告内容、未知字段、余额和对局数据保留；登录/资料查询前应用，借模块版本失效旧缓存。针对性测试见 `test/intl-preferences.test.mjs` 与 `test/offline-content.test.mjs`；仅针对启动和签到回归运行隔离无头 Edge：资源加载、连接与大厅通过，不把它当作完整客户端等价验收。
 
 ### 6.2 `offline-patch.js`
 
@@ -268,7 +271,7 @@ flowchart LR
 - 100141：查询用户数据；
 - 100903：任务客户端事件；
 - 100003、100007、100011、100151、100204：设置、昵称和装备等大厅写操作；
-- 100620：显式签到请求；登录与查询前通过 `normalizeOfflineLobby()` 归一化大厅推广状态：UTC+8 当日签到时间、新手领取日期、礼物弹出标记与活动强弹字段；模块版本下限为 `day * 1024`，旧客户端缓存也会更新。不增加奖励、余额或月卡权益，不禁用正常结算、一局战奖励或有效商店回包。
+- 100620：显式签到请求；登录与查询前通过 `normalizeOfflineLobby()` 归一化大厅推广状态：与国际版一致的 UTC+9 当日签到时间、新手领取日期、礼物弹出标记与活动强弹字段；模块版本下限为 `day * 1024`，旧客户端缓存也会更新。北京时间 23 点已进入国际版次日，必须刷新标记；北京时间零点不应重复刷新。不增加奖励、余额或月卡权益，不禁用正常结算、一局战奖励或有效商店回包。
 - 20007、20009、20012：牌桌列表、入桌和入座；
 - 20403、20405：段位匹配和取消匹配；
 - 20162：离线转在线恢复；
@@ -664,8 +667,8 @@ npm test
 
 | 路径 | 大小约 | 说明 |
 | --- | ---: | --- |
-| `Build/` | 20 MiB | 中文 Unity WebGL loader、data、framework、WASM、symbols |
-| `Build_intl/` | 20 MiB | 国际版 Unity WebGL 构建，不是当前主要目标 |
+| `Build/` | 20 MiB | 原中文 Unity WebGL 历史快照，当前入口不加载 |
+| `Build_intl/` | 20 MiB | 唯一启动入口加载的国际版 Unity WebGL 构建，支持内置语言切换 |
 | `StreamingAssets/` | 253 MiB / 496 文件 | 运行时 bundle、版本表和美术/音频资源 |
 | `TemplateData/` | 212 KiB | Unity 页面样式、图标和加载条图片 |
 

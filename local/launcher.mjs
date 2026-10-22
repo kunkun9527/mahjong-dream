@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const child = fork(path.join(directory, 'server.mjs'), {
   stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
-  env: { ...process.env, MJ_PORT: process.env.MJ_PORT || '0' },
+  // A stable origin keeps Unity's IndexedDB language/preferences across normal launches.
+  env: { ...process.env, MJ_PORT: process.env.MJ_PORT || '8765' },
 });
 let opened = false;
 
@@ -17,13 +18,11 @@ const startupTimer = setTimeout(() => {
 }, 15_000);
 const requestedPlayers = process.argv.find((arg) => arg === '--players=3' || arg === '--players=4')?.slice(-1);
 const requestedLength = process.argv.find((arg) => arg === '--length=hanchan' || arg === '--length=east')?.split('=')[1];
-const requestedEnglish = process.argv.includes('--lang=en');
 
 function gameUrl(baseUrl) {
   const url = new URL(baseUrl);
   if (requestedPlayers) url.searchParams.set('mjPlayers', requestedPlayers);
   if (requestedLength) url.searchParams.set('mjLength', requestedLength);
-  if (requestedEnglish) url.searchParams.set('mjLang', 'en');
   return url.toString();
 }
 async function firstExisting(paths) {
