@@ -12,7 +12,7 @@ The original 3D anime-style client, characters, voices and table animations are 
 
 ## ▶ Play Now
 
-**Open <https://kunkun9527.github.io/mahjong-dream-snapshot/> in Chrome or Edge.** You don't need to install anything or create an account.
+**Open <https://kunkun9527.github.io/mahjong-dream/> in Chrome or Edge.** You don't need to install anything or create an account.
 
 - The first load downloads about 30 MB, and table assets load as you play. Later visits are faster because the browser caches these files.
 - English is the default. You can switch to Simplified Chinese or another language under ⚙ Settings → Language.
@@ -75,7 +75,7 @@ start-game.bat --players=3 --length=east
 
 ## Host Your Own Copy
 
-Fork the repository, then go to **Settings → Pages → Deploy from a branch → `main` / root**. Any static file server works too, including on a sub-path such as `/mahjong-dream-snapshot/`.
+Fork the repository, then go to **Settings → Pages → Deploy from a branch → `main` / root**. Any static file server works too, including on a sub-path such as `/mahjong-dream/`.
 
 ## For Developers
 

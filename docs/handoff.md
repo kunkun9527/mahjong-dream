@@ -28,7 +28,7 @@
 
 - 2026-10-22（续）：新增网页版（ADR 0007）。静态托管时后端在页面内运行、存档在 `localStorage`，可部署到 GitHub Pages 子路径；Node 版保留，两边共用 `mockjs/profile_host.mjs`（档案、补给、记账、修改器）。右侧 ⚙ 存档修改器可改昵称/段位/钱包、重置战绩、导入导出、新账号，对局中拒绝修改。中文 `Build/` 归档到 `archive/zh-client/`，`tools/extract_economy_config.py` 改读 `Build_intl/`（目录数据不变）。Playwright 真键盘实测：静态子路径与 Node 版的修改器输入、Apply & Reload、持久化均通过。GitHub Pages 尚未启用，线上未验证。
 - 2026-10-22（再续）：19 位个性 NPC 与对局恢复（ADR 0008）。`mockjs/npc_roster.mjs` 定义名单（固定角色/皮肤，风格五轴 + 情景特性，比赛种子抽人）；原配置只有 19 套皮肤，README 的 23 套已更正。引擎记录真人决策，`activeMatch` 随档案保存；刷新或服务重启后重演到原局面并冻结真人计时，离开超过 5 分钟由中性 AI 代打结算并给英文提示。`npm test` 433/433；Playwright 实测：网页版中途刷新续局、超时代打提示与关闭、Node 版中途刷新与服务重启续局均通过。
-- 2026-10-22（部署）：GitHub Pages 已启用（`main` 分支根目录），地址 <https://kunkun9527.github.io/mahjong-dream-snapshot/>。推送 `main` 即自动重新发布。线上实测：入口、`game.html`、脚本与 `Build_intl/` 全部 200，Unity 进入大厅，存档写入 `localStorage`。Pages 不发送 `Content-Encoding: br`，`.unityweb` 由 Unity 加载器在浏览器端解压；`Cache-Control: max-age=600`。
+- 2026-10-22（部署）：GitHub Pages 已启用（`main` 分支根目录），地址 <https://kunkun9527.github.io/mahjong-dream/>。推送 `main` 即自动重新发布。线上实测：入口、`game.html`、脚本与 `Build_intl/` 全部 200，Unity 进入大厅，存档写入 `localStorage`。Pages 不发送 `Content-Encoding: br`，`.unityweb` 由 Unity 加载器在浏览器端解压；`Cache-Control: max-age=600`。
 
 剩余工作见第 5 节；下一步方向由维护者另行确定。
 

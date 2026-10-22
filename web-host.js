@@ -6,7 +6,8 @@
 
   var BACKEND = ['mock/proto.js', 'mock/data.js', 'mock/userdata.js', 'mock/riichi.js', 'mock/server.js'];
   // One github.io origin is shared by all of a user's project pages, so the key carries the project name.
-  var STORAGE_KEY = 'mahjong-dream-snapshot/profile';
+  var STORAGE_KEY = 'mahjong-dream/profile';
+  var LEGACY_KEY = 'mahjong-dream-snapshot/profile'; // before the project was renamed
   var mode = window.__mjHostMode === 'node' ? 'node' : 'browser';
 
   function loadScript(src) {
@@ -28,6 +29,10 @@
 
   function readSaved() {
     var raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw && (raw = localStorage.getItem(LEGACY_KEY))) {
+      localStorage.setItem(STORAGE_KEY, raw);
+      localStorage.removeItem(LEGACY_KEY);
+    }
     if (!raw) return null;
     try { return JSON.parse(raw); }
     catch (e) {

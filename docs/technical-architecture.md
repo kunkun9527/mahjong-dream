@@ -192,14 +192,14 @@ start-game.bat --players=3 --length=hanchan
 
 这层是运行时离线边界。项目不应重新接入生产域名、远端日志或远端 WSS。
 
-`StreamingAssets/` 与 `mock/empty.json` 按 `game.html` 所在目录解析，因此站点可部署在 `/mahjong-dream-snapshot/` 这类子路径。浏览器宿主下游戏 WebSocket 直接换成 `__mj.server.FakeWebSocket`，在页面内派发协议。
+`StreamingAssets/` 与 `mock/empty.json` 按 `game.html` 所在目录解析，因此站点可部署在 `/mahjong-dream/` 这类子路径。浏览器宿主下游戏 WebSocket 直接换成 `__mj.server.FakeWebSocket`，在页面内派发协议。
 
 ### 6.3 宿主与存档修改器
 
 | 文件 | 职责 |
 | --- | --- |
 | `host-mode.js` | 静态文件内容为 `browser`；Node 服务动态返回 `node` |
-| `web-host.js` | 浏览器宿主：按序加载 `mock/proto.js`、`data.js`、`userdata.js`、`riichi.js`、`server.js`，用 `localStorage['mahjong-dream-snapshot/profile']` 存档（批量 300 ms 写入，`pagehide` 时立即写，读不出的存档另存为 `.corrupt-<时间>` 键）；Node 宿主：把请求 POST 到 `/api/profile`。两者都暴露 `window.__mjHost = { mode, ready, request }` |
+| `web-host.js` | 浏览器宿主：按序加载 `mock/proto.js`、`data.js`、`userdata.js`、`riichi.js`、`server.js`，用 `localStorage['mahjong-dream/profile']（改名前的旧键 `mahjong-dream-snapshot/profile` 首次读取时自动迁移）` 存档（批量 300 ms 写入，`pagehide` 时立即写，读不出的存档另存为 `.corrupt-<时间>` 键）；Node 宿主：把请求 POST 到 `/api/profile`。两者都暴露 `window.__mjHost = { mode, ready, request }` |
 | `mockjs/profile_host.mjs` | `createProfileHost(mock, profile, { persist, log })`：装载档案与一次性经济补给、给新会话挂回调、结算记账，以及修改器的 state/export/edit/resetStats/import/reset。修改先整体校验再应用；会话有牌桌、匹配计时或进行中的对局时拒绝写操作 |
 | `modifier.js` | 右侧 ⚙ 浮窗：昵称、段位/PT、钱包道具（60001/60002/60007–60012）、重置战绩、导出/导入、新账号；写操作成功后重载页面让客户端重新拉取大厅数据 |
 

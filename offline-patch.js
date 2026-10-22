@@ -3,7 +3,7 @@
 (function () {
   'use strict';
 
-  // Directory of game.html; static hosting may serve the game under a sub-path such as /mahjong-dream-snapshot/.
+  // Directory of game.html; static hosting may serve the game under a sub-path such as /mahjong-dream/.
   var BASE = location.href.split(/[?#]/)[0].replace(/[^/]*$/, '');
   var LOCAL_WS = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws' + location.search;
   function localUrl(value) {
