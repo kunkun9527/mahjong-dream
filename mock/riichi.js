@@ -14111,6 +14111,7 @@
       this._nextCantPlays = null;
       this._bufferedDraw = null;
       this._bufferedClaim = null;
+      this._timedOut = null;
       this._prepareWaiter = null;
       this._prepared = false;
       this.matchOver = false;
@@ -14237,6 +14238,7 @@
       this.handEnded = false;
       this._expectedDraw = null;
       this._expectedClaim = null;
+      this._timedOut = null;
       this._nextCantPlays = null;
       this.xunNum = 0;
       this.kanCount = 0;
@@ -14409,6 +14411,7 @@
         return;
       }
       this._processing = false;
+      if (this._timedOut?.kind === "draw") this._timedOut = null;
       this._expectedDraw = { seat, drew, actions: actions.slice(), cantPlays: cantPlays.slice() };
     }
     validateTurnPayload(payload, expected = this._expectedDraw) {
@@ -14449,6 +14452,7 @@
         return;
       }
       this._processing = false;
+      if (this._timedOut?.kind === "claim") this._timedOut = null;
       this._expectedClaim = { seat, discarderSeat, card, actions: actions.slice() };
     }
     validateClaimPayload(payload, expected = this._expectedClaim) {
@@ -15888,6 +15892,7 @@
       pending.timer = setTimeout(() => {
         const payload = this.timeoutHumanAction(pending.kind);
         this.resolveHumanPending(pending, payload);
+        this._timedOut = { kind: pending.kind, payload };
       }, timeoutMs);
     }
     waitHuman(kind) {
@@ -15929,7 +15934,21 @@
         if (automatic) this.resolveHumanPending(pending, automatic);
       });
     }
+    /**
+     * The client's countdown can still be running when the server times the window out (the two clocks start at
+     * different moments). Its late request is then rejected and the client keeps the buttons up. A late request that
+     * matches what the server already did (Pass, or the same auto discard) is acknowledged as a no-op: no state change,
+     * no time charge, no humanLog entry. Anything else (a late Pon, Ron or a different discard) still fails.
+     * The receipt lives until the next window of the same kind opens.
+     */
+    ackTimedOut(kind, payload) {
+      const done = this._timedOut;
+      if (!done || done.kind !== kind || (kind === "draw" ? this._expectedDraw : this._expectedClaim)) return false;
+      if (Number(payload?.action ?? PlayAction.Normal) !== done.payload.action) return false;
+      return kind === "claim" ? done.payload.action === PlayAction.Guo : Number(payload?.card) === done.payload.card;
+    }
     submitDraw(payload) {
+      if (this.ackTimedOut("draw", payload)) return Result.Succ;
       const result = this.validateTurnPayload(payload);
       if (result !== Result.Succ) return result;
       this._expectedDraw = null;
@@ -15942,6 +15961,7 @@
       return Result.Succ;
     }
     submitClaim(payload) {
+      if (this.ackTimedOut("claim", payload)) return Result.Succ;
       const result = this.validateClaimPayload(payload);
       if (result !== Result.Succ) return result;
       this._expectedClaim = null;
@@ -15956,6 +15976,7 @@
     cancelPending() {
       this._expectedDraw = null;
       this._expectedClaim = null;
+      this._timedOut = null;
       this._bufferedDraw = null;
       this._bufferedClaim = null;
       if (!this._pending) return;

@@ -72,3 +72,51 @@ test('鸣牌使用延长时间只扣本次超出基础 5 秒的部分', async (t
   await done;
   assert.equal(engine.players[0].timeBank, 17);
 });
+
+test('服务端超时跳过后，迟到的 Pass 只回成功：不再推进、不扣时、不记录；迟到的碰仍失败', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
+  const { engine, done, nextDraws } = claimWindow(0);
+  t.mock.timers.tick(5_000);
+  await done;
+  assert.equal(nextDraws(), 1);
+  const logged = engine.humanLog.length;
+  // The client's countdown is still running: its Pass (clicked or its own timeout) arrives after the server moved on.
+  assert.equal(engine.submitClaim({ action: PlayAction.Guo, otherCards: [], isTimeout: true }), Result.Succ);
+  assert.equal(engine.submitClaim({ action: PlayAction.Guo, otherCards: [] }), Result.Succ);
+  assert.equal(engine.submitClaim({ action: PlayAction.Peng, otherCards: [451, 452] }), Result.Fail_InvalidSequence);
+  assert.equal(nextDraws(), 1);
+  assert.equal(engine.humanLog.length, logged);
+  assert.equal(engine.players[0].timeBank, 0);
+  assert.equal(engine._bufferedClaim, null);
+  // The receipt ends when the next claim window opens; a Pass then belongs to that window.
+  engine.expectClaim(0, 2, 454, [PlayAction.Peng, PlayAction.Guo]);
+  assert.equal(engine._timedOut, null);
+});
+
+test('玩家自己提交的 Pass 不产生回执，重复包仍被拒', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
+  const { engine, done } = claimWindow(0);
+  t.mock.timers.tick(1_000);
+  assert.equal(engine.submitClaim({ action: PlayAction.Guo }), Result.Succ);
+  await done;
+  assert.equal(engine.submitClaim({ action: PlayAction.Guo }), Result.Fail_InvalidSequence);
+});
+
+test('服务端超时摸切后，迟到的同一张摸切只回成功，打别的牌仍失败', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
+  const drawn = 191;
+  const engine = new GameEngine({ players: 3, speed: 0 });
+  engine.players = [0, 1, 2].map((seat) => ({
+    seat, isHuman: seat === 0, timeBank: 0, hand: seat === 0 ? [451, 452, 411, drawn] : [],
+    drawnTile: seat === 0 ? drawn : null, melds: [], riichi: false,
+  }));
+  engine.expectDraw(0, true, [PlayAction.Normal]);
+  const turn = engine.waitHuman('draw');
+  t.mock.timers.tick(5_000);
+  assert.deepEqual(await turn, { action: PlayAction.Normal, card: drawn });
+  const logged = engine.humanLog.length;
+  assert.equal(engine.submitDraw({ action: PlayAction.Normal, card: drawn, isTimeout: true }), Result.Succ);
+  assert.equal(engine.submitDraw({ action: PlayAction.Normal, card: 451 }), Result.Fail_InvalidSequence);
+  assert.equal(engine.humanLog.length, logged);
+  assert.equal(engine._bufferedDraw, null);
+});
