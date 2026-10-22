@@ -768,7 +768,12 @@
       onFinalResult: function (scores, engine, humanWin) {
         var oneRound = sess.table && sess.table.oneRound;
         if (oneRound) return settleOneRound(sess, oneRound, humanWin);
-        if (typeof sess.onFinalResult === 'function') return sess.onFinalResult(scores, engine);
+        if (typeof sess.onFinalResult === 'function') {
+          var result = sess.onFinalResult(scores, engine);
+          // 本地段位/战绩/金币的数据变更随离桌或再来一局应答的 f24 下发。
+          if (result && result.changes) sess.walletChanges = mergeChanges(sess.walletChanges, result.changes);
+          return result;
+        }
         return null;
       },
       onFinish: function (scores, engine) {
@@ -1186,6 +1191,28 @@
   };
 
   // ------------------------------------------- 一局战结算
+  /** 合并若干 { dtype: [[key, data, ct], ...] } 增量；同一行只保留最后一次。 */
+  function mergeChanges(base, list) {
+    var out = base || null;
+    var items = Array.isArray(list) ? list : [list];
+    for (var i = 0; i < items.length; i++) {
+      var ch = items[i];
+      if (!ch) continue;
+      for (var dt in ch) {
+        if (!Object.prototype.hasOwnProperty.call(ch, dt)) continue;
+        if (!out) out = {};
+        var rows = out[dt] || [];
+        for (var j = 0; j < ch[dt].length; j++) {
+          var row = ch[dt][j];
+          rows = rows.filter(function (r) { return r[0] !== row[0]; });
+          rows.push(row);
+        }
+        out[dt] = rows;
+      }
+    }
+    return out;
+  }
+
   function takeWalletChanges(sess) {
     var changes = sess.walletChanges;
     sess.walletChanges = null;

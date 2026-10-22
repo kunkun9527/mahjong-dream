@@ -70,8 +70,13 @@ session.onFinalResult = (scores, engine) => {
     matchStats: engine.matchStats,
     roomId: session.rankRoomId,
   });
-  mock.updateRanks(profile.ranks);
-  mock.updateProfileStats(profile.stats);
+  // 终局金币记入真实钱包（背包雀币）；段位、战绩与钱包变更随离桌应答 f24 下发，
+  // 否则客户端选房页段位条与余额停在旧值。
+  result.changes = [
+    mock.userdata.changeInventory([{ dtype: 6, id: ECONOMY_CATALOG.defaults.coinId, count: result.coins }]),
+    ...mock.updateRanks(profile.ranks),
+    mock.updateProfileStats(profile.stats),
+  ];
   console.log(`[local] 对局结束：${engine.playersN}麻 ${engine.matchLength}，第${result.placement}名，段位 PT ${result.rank.change >= 0 ? '+' : ''}${result.rank.change}，金币 +${result.coins}`);
   persistSoon();
   return result;
