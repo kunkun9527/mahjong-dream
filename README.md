@@ -60,6 +60,7 @@
   - Chii, Pon, and Open Kan choices are evaluated directly against the EV of skipping to prevent opening hands without a clear yaku.
 - **Advanced AI**: Powers the Throne (御龙) room.
   - Enhances intermediate evaluation with a bounded-budget 1-shanten and tenpai search, projecting exact yaku and scoring values.
+  - Reads opponents from public information only: discard order, tsumogiri, riichi and melds feed per-player tenpai probability, wait-shape danger and hand-value estimates (furiten-safe tiles, flush/toitoi signals). All Last uses placement utility; 2-shanten hands use second-order tile efficiency. In self-play benchmarks it scores +452 points per game against intermediate in 4P (see [ADR 0006](docs/adr/0006-riichi-ai-levels.md)).
 - **100% Fair Play**: The AI only examines its own hand and public discard/meld information. It never peeks at the wall, hidden tiles, or ura-dora. Matches with fixed seeds are completely deterministic and reproducible.
 
 ---

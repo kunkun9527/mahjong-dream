@@ -441,7 +441,7 @@ sequenceDiagram
 
 固定 seed 下，牌山、机器人外观、牌桌标识和 AI 决策链可复现。现有测试要求单次 AI 决策远低于 2 秒。
 
-立直 AI 分级见 [ADR 0006](adr/0006-riichi-ai-levels.md)：`mockjs/riichi_ai_policy.mjs` 实现中级（统一期望值评估：和牌概率 × 预计打点 − 放铳风险，含押引和 All Last 顺位缩放）与高级（中级 + 一向听以内的固定预算摸牌期望搜索，按 `calcWin` 真实役种/点数估值）。服务端在段位战御龙间（roomID=4）用高级，其余房间用中级；旧启发式保留为 `basic`，只供 `tools/ai_benchmark.mjs` 对照。吃/碰/大明杠与跳过也用同一期望值比较，暗杠/加杠受押引约束，拔北有北即拔。
+立直 AI 分级见 [ADR 0006](adr/0006-riichi-ai-levels.md)：`mockjs/riichi_ai_policy.mjs` 实现中级（统一期望值评估：和牌概率 × 预计打点 − 放铳风险，含押引和 All Last 顺位缩放）与高级（中级 + 一向听以内的固定预算摸牌期望搜索，按 `calcWin` 真实役种/点数估值；另用 `mockjs/riichi_ai_read.mjs` 只读公开信息的读牌模型估计各家听牌概率、待牌放铳率与打点，并加入顺位效用、弃和路线估值、二阶牌效、振听与荣和质量感知）。引擎在 `discardLog` 记录公开牌河顺序、摸切与立直宣言供读牌使用。服务端在段位战御龙间（roomID=4）用高级，其余房间用中级；旧启发式保留为 `basic`，只供 `tools/ai_benchmark.mjs` 对照。吃/碰/大明杠与跳过也用同一期望值比较，暗杠/加杠受押引约束，拔北有北即拔。
 
 ### 11.3 计分
 
