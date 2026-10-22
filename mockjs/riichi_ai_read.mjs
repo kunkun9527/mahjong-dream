@@ -1,13 +1,13 @@
-// 高级 AI 的读牌模型：只用公开信息（牌河及其顺序/摸切、副露、立直、宝牌、分数、余牌）
-// 估计每位对手的听牌概率、和牌打点，以及自己打出每种牌的放铳概率。
+// High-level AI's tile-reading model: uses only public information (discard rivers and their order / tsumogiri, melds, riichi, dora, scores, tiles left)
+// to estimate each opponent's tenpai probability, expected win value, and the deal-in probability of each discard of ours.
 //
-// 放铳概率按「待牌形组合数」计算：对手听牌时的待牌形（两面、嵌张、边张、双碰、单骑）
-// 各自需要对手手里持有的牌，组合数由自己视角下未见的枚数决定；形的先验权重按常见待牌
-// 比例设定。对手的现物、立直后他家打出而未荣和的牌、同巡内他家打出而未荣和的牌都令
-// 含该牌的待牌形不能荣和（振听），因此筋、壁、单骑见张等经验规则都是本模型的特例。
+// Deal-in probability is computed from the count of waiting-shape combinations: when an opponent is tenpai, each waiting shape (ryanmen, kanchan, penchan, shanpon, tanki)
+// requires specific tiles in the opponent's hand; combination counts follow the number of unseen copies from our viewpoint, and the shape prior weights follow typical wait ratios.
+// An opponent's genbutsu, tiles they discarded after their riichi without winning on them, and tiles they discarded in the same turn without winning on them all make
+// waits containing that tile unable to ron (furiten), so empirical rules such as suji, wall and tanki are special cases of this model.
 import { decodeId } from './tiles.mjs';
 
-// 子家荣和点数（按番数近似，30~40 符）；庄家 ×1.5。
+// Ron value for a non-dealer (approximated by han, 30-40 fu); dealer ×1.5.
 const KO_POINTS = [0, 1000, 2000, 3900, 7700, 8000, 12000, 12000, 16000, 16000, 16000, 24000, 24000, 32000];
 function pointsForHan(han, dealer) {
   const h = Math.max(0, Math.min(13, han));
@@ -17,9 +17,9 @@ function pointsForHan(han, dealer) {
   return base * (dealer ? 1.5 : 1);
 }
 
-// 待牌形先验（每个组合）：按立直待牌约 两面 55%、嵌张 12%、边张 5%、双碰 15%、单骑 13% 校准。
+// Wait-shape priors (per combination): calibrated to riichi wait frequencies of roughly ryanmen 55%, kanchan 12%, penchan 5%, shanpon 15%, tanki 13%.
 const SHAPE_WEIGHT = { ryanmen: 1, kanchan: 0.19, penchan: 0.27, shanpon: 0.43, tanki: 0.37 };
-// 多面待（三面、两面+双碰复合等）使一张牌命中的概率高于单一形状的和，整体放大。
+// Multi-sided waits (three-sided, ryanmen + shanpon combos, etc.) make a single tile more likely to hit, so the total is scaled up.
 const WAIT_MULTIPLICITY = 1.2;
 const HIT_CAP = 0.6;
 
@@ -33,7 +33,7 @@ function indexToKind(idx) {
 }
 const isYaochuIndex = (idx) => idx >= 27 || idx % 9 === 0 || idx % 9 === 8;
 
-// 所有待牌形：{ type, held: [idx…], waits: [idx…], suit (0-2，字牌为 3) }
+// All wait shapes: { type, held: [idx…], waits: [idx…], suit (0-2; honors = 3) }
 const SHAPES = (() => {
   const out = [];
   for (let s = 0; s < 3; s++) {
@@ -59,7 +59,7 @@ const SHAPES = (() => {
 
 const OPEN_TYPES = new Set(['chi', 'pon', 'kan']);
 
-// 公开牌河日志；测试中手工搭建的牌局可能没有日志，则按各家牌河退化（没有顺序信息）。
+// Public discard log; hand-built test positions may have no log, in which case it falls back to each river (no order info).
 function logOf(engine) {
   if (Array.isArray(engine.discardLog)) return engine.discardLog;
   const out = [];
@@ -72,7 +72,7 @@ function logOf(engine) {
   return out;
 }
 
-// 对手 q 当前不能荣和的牌（牌种下标）：自家现物 + 立直后他家通过牌 + 同巡通过牌。
+// Tiles opponent q currently cannot ron on (tile-kind indices): our own genbutsu + tiles they passed after our riichi + tiles they passed in the same turn.
 function furitenSet(engine, q, log) {
   const safe = new Set();
   for (const kind of q.discardKinds || []) safe.add(kindToIndex(kind));
@@ -94,7 +94,7 @@ function openMeldsOf(q) {
   return (q.melds || []).filter((m) => OPEN_TYPES.has(m.type));
 }
 
-// 对手听牌概率：立直为 1；副露按副露数、巡目和末尾连续摸切估计；门清未立直按巡目给默听概率。
+// Opponent tenpai probability: 1 when in riichi; for open hands estimated from the number of melds, turn count and trailing tsumogiri; closed non-riichi hands get a dama probability by turn count.
 function tenpaiProbability(q, log) {
   if (q.riichi) return 1;
   const own = log.filter((e) => e.seat === q.seat);
@@ -114,7 +114,7 @@ function tenpaiProbability(q, log) {
   return p;
 }
 
-// 副露手读牌：染手花色、断幺、对对和；返回待牌形的倍率函数和额外番数。
+// Open-hand reading: honitsu, tanyao, toitoi; returns a multiplier function for wait shapes and the extra han.
 function openHandShape(engine, q) {
   const melds = openMeldsOf(q);
   const tiles = melds.flatMap((m) => m.tiles);
@@ -155,7 +155,35 @@ function yakuhaiHan(engine, q, idx) {
   return han;
 }
 
-// 对手若和牌（荣和自己）的估计点数。
+// Kokushi Musou: ordinary five-type wait shapes do not cover it, so terminals must not be judged zero-risk because of that.
+// Public information only: it cannot have melds (pulling North does not break closed status); discarding a terminal only lowers the prior and cannot exclude it being drawn later.
+// A single-tile wait can ron the last copy in our own hand; a thirteen-sided wait makes the whole hand furiten as soon as one terminal genbutsu exists.
+// The prior that a tenpai hand is Kokushi is very small (riichi 0.5%, dama 0.15%), but once it is Kokushi, every unseen terminal deals in when the wait is thirteen-sided.
+const YAOCHU = (() => {
+  const out = [];
+  for (let i = 0; i < 34; i++) if (isYaochuIndex(i)) out.push(i);
+  return out;
+})();
+const KOKUSHI_PRIOR = { riichi: 0.005, dama: 0.0015 };
+const KOKUSHI_THIRTEEN_SIDED = 0.5; // Share of Kokushi tenpai that is thirteen-sided (holding all 13 kinds); the rest are single-tile waits.
+function kokushiModel(q, furiten, avail) {
+  if ((q.melds || []).some((m) => m.type !== 'babei')) return null;
+  const discarded = YAOCHU.filter((i) => q.discardKinds?.has(indexToKind(i)));
+  const prior = (q.riichi ? KOKUSHI_PRIOR.riichi : KOKUSHI_PRIOR.dama) * 0.3 ** discarded.length;
+  const thirteen = YAOCHU.every((i) => avail[i] > 0 && !furiten.has(i));
+  const single = YAOCHU.filter((i) => !furiten.has(i)
+    && YAOCHU.every((j) => j === i || avail[j] > 0)
+    && YAOCHU.some((j) => j !== i && avail[j] >= 2));
+  if (!thirteen && !single.length) return null;
+  const hit = new Float64Array(34);
+  for (const i of YAOCHU) {
+    if (thirteen) hit[i] += KOKUSHI_THIRTEEN_SIDED;
+    if (single.includes(i)) hit[i] += (1 - KOKUSHI_THIRTEEN_SIDED) / single.length;
+  }
+  return { prior, hit };
+}
+
+// Estimated points if an opponent wins by ron on us.
 function threatValue(engine, q, shapeInfo) {
   const dealer = q.seat === engine.dealerSeat;
   const honba = (engine.honba || 0) * 300;
@@ -185,7 +213,7 @@ function threatValue(engine, q, shapeInfo) {
   return pointsForHan(yaku + dora + 0.6, dealer) + honba;
 }
 
-// remainOf(idx)：自己视角下未见枚数。lossUtil(seat, points)：把放铳点数换算成效用（顺位修正）。
+// remainOf(idx): unseen count from our viewpoint. lossUtil(seat, points): converts deal-in points into utility (seat adjustment).
 function readThreats(engine, seat, remainOf, { lossUtil = null } = {}) {
   const log = logOf(engine);
   const avail = new Array(34);
@@ -218,7 +246,23 @@ function readThreats(engine, seat, remainOf, { lossUtil = null } = {}) {
     const hit = new Float64Array(34);
     if (den > 0) for (let i = 0; i < 34; i++) if (!furiten.has(i)) hit[i] = Math.min(HIT_CAP, (WAIT_MULTIPLICITY * num[i]) / den);
     const value = threatValue(engine, q, shapeInfo);
+    // Kokushi mix: hit probability and loss weighted by the prior, with the loss counted as yakuman.
+    const kokushi = tenpai >= 0.005 ? kokushiModel(q, furiten, avail) : null;
+    let lossHit = null;
+    if (kokushi) {
+      const dealer = q.seat === engine.dealerSeat;
+      const yakuman = (dealer ? 48000 : 32000) + (engine.honba || 0) * 300;
+      const kLoss = lossUtil ? lossUtil(q.seat, yakuman) : yakuman;
+      lossHit = new Float64Array(34);
+      const lossBase = lossUtil ? lossUtil(q.seat, value) : value;
+      for (let i = 0; i < 34; i++) {
+        const normal = hit[i] * lossBase;
+        hit[i] = (1 - kokushi.prior) * hit[i] + kokushi.prior * kokushi.hit[i];
+        lossHit[i] = (1 - kokushi.prior) * normal + kokushi.prior * kokushi.hit[i] * kLoss;
+      }
+    }
     threats.push({
+      lossHit,
       seat: q.seat,
       riichi: !!q.riichi,
       dealer: q.seat === engine.dealerSeat,
@@ -238,7 +282,7 @@ function readThreats(engine, seat, remainOf, { lossUtil = null } = {}) {
     threatValueSum += t.tenpai * t.loss;
     for (let i = 0; i < 34; i++) {
       dealOf[i] += t.tenpai * t.hit[i];
-      lossOf[i] += t.tenpai * t.hit[i] * t.loss;
+      lossOf[i] += t.tenpai * (t.lossHit ? t.lossHit[i] : t.hit[i] * t.loss);
     }
   }
   let unseen = 0;
@@ -253,9 +297,9 @@ function readThreats(engine, seat, remainOf, { lossUtil = null } = {}) {
     lossOf,
     tenpaiMass,
     threatValue: threatValueSum,
-    // 随机摸到的一张牌直接打出的期望放铳损失（推进/立直后摸切用）。
+    // Expected deal-in loss from discarding the tile drawn at random (for advancing / discarding after riichi).
     avgDrawLoss: unseen ? drawLoss / unseen : 0,
   };
 }
 
-export { readThreats, pointsForHan, kindToIndex, indexToKind, tenpaiProbability, furitenSet, logOf, SHAPES };
+export { readThreats, kokushiModel, pointsForHan, kindToIndex, indexToKind, tenpaiProbability, furitenSet, logOf, SHAPES };

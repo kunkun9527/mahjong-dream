@@ -70,7 +70,7 @@ def shop_types():
             if field not in defaults:
                 continue
             name = text(struct.unpack_from('<I', data, header[24] + field * 12)[0])
-            # 本枚举全是 0..10；v31 默认整数使用压缩 ZigZag，而非固定四字节。
+            # All values in this enum are 0..10; v31 default integers use compressed ZigZag rather than fixed four bytes.
             value = data[header[18] + defaults[field]]
             assert value < 128 and value % 2 == 0
             values[name] = value // 2
@@ -80,8 +80,8 @@ def shop_types():
 
 
 # CreateOneMatchRewardCfg(ID, Cost, OneHan, TwoHan, ThreeHan, FourHan, Mangan, JumpFullHan,
-# DoubleFullHan, TripleFullHan, Yakuman, DoubleYakuman)；后 10 项依次对应 riichi.EnumItemRewardLevel 1..10。
-# 每项是 [道具 ID, 数量] 子表，两个字段在原表里都是 float。
+# DoubleFullHan, TripleFullHan, Yakuman, DoubleYakuman); the last 10 items correspond to riichi.EnumItemRewardLevel 1..10 in order.
+# Each item is a [item ID, count] sub-table; both fields are floats in the original table.
 def one_round_rewards(assets):
     data = assets['DailyCompetitionOneMatchRewardTb']
 
@@ -123,7 +123,7 @@ def main():
             row = {name: table.integer(i) for i, name in enumerate(names) if name}
             for field, name in vectors:
                 values = table.tables(field)
-                # 本构建全为空；未来配置有档位时必须先补齐语义，不能把 offset 当价格。
+                # This build is all empty; when future configs have tiers, their semantics must be filled in first, and offset must not be treated as a price.
                 if values:
                     raise ValueError(f'{name}: 出现尚未支持的非空档位配置')
                 row[name] = []

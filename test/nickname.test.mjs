@@ -1,5 +1,5 @@
-// 改名：原客户端回调要求 100008 应答 { 1:结果码, 2:原请求 }，否则改名窗口不关、昵称不刷新
-//（浏览器验收发现）；改名消耗 1 张改名卡；问候语不支持离线修改，也不能误改昵称。
+// Rename: the original client's callback requires a 100008 reply { 1:result code, 2:original request }, otherwise the rename window does not close and the nickname does not refresh
+// (found in browser acceptance); a rename consumes 1 rename card; greetings cannot be modified offline, and the nickname must not be changed by mistake.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 

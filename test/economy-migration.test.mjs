@@ -10,7 +10,7 @@ await import('../mock/proto.js');
 await import('../mock/data.js');
 await import('../mock/userdata.js');
 const { proto: P, data, userdata: U } = globalThis.__mj;
-// 此处为迁移机制的 mock 配置；真实段位/货币映射由商店目录回归另外验证。
+// This is the mock configuration for the migration mechanism; the real rank / currency mapping is verified separately by the shop catalog regression.
 const config = { coinId: 60001, currencyIds: [60001, 60002, 60008], rank: { level: 17, point: 2000 } };
 const fresh = () => new U.UserData(P.b64decode(data.userdataB64), 10_000_001);
 

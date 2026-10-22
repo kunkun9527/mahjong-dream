@@ -12693,6 +12693,27 @@
     if (rank === engine.seatWindOf(q.seat)) han++;
     return han;
   }
+  var YAOCHU2 = (() => {
+    const out = [];
+    for (let i = 0; i < 34; i++) if (isYaochuIndex(i)) out.push(i);
+    return out;
+  })();
+  var KOKUSHI_PRIOR = { riichi: 5e-3, dama: 15e-4 };
+  var KOKUSHI_THIRTEEN_SIDED = 0.5;
+  function kokushiModel(q, furiten, avail) {
+    if ((q.melds || []).some((m) => m.type !== "babei")) return null;
+    const discarded = YAOCHU2.filter((i) => q.discardKinds?.has(indexToKind(i)));
+    const prior = (q.riichi ? KOKUSHI_PRIOR.riichi : KOKUSHI_PRIOR.dama) * 0.3 ** discarded.length;
+    const thirteen = YAOCHU2.every((i) => avail[i] > 0 && !furiten.has(i));
+    const single = YAOCHU2.filter((i) => !furiten.has(i) && YAOCHU2.every((j) => j === i || avail[j] > 0) && YAOCHU2.some((j) => j !== i && avail[j] >= 2));
+    if (!thirteen && !single.length) return null;
+    const hit = new Float64Array(34);
+    for (const i of YAOCHU2) {
+      if (thirteen) hit[i] += KOKUSHI_THIRTEEN_SIDED;
+      if (single.includes(i)) hit[i] += (1 - KOKUSHI_THIRTEEN_SIDED) / single.length;
+    }
+    return { prior, hit };
+  }
   function threatValue(engine, q, shapeInfo) {
     const dealer = q.seat === engine.dealerSeat;
     const honba = (engine.honba || 0) * 300;
@@ -12758,7 +12779,22 @@
         for (let i = 0; i < 34; i++) if (!furiten.has(i)) hit[i] = Math.min(HIT_CAP, WAIT_MULTIPLICITY * num[i] / den);
       }
       const value = threatValue(engine, q, shapeInfo);
+      const kokushi = tenpai >= 5e-3 ? kokushiModel(q, furiten, avail) : null;
+      let lossHit = null;
+      if (kokushi) {
+        const dealer = q.seat === engine.dealerSeat;
+        const yakuman = (dealer ? 48e3 : 32e3) + (engine.honba || 0) * 300;
+        const kLoss = lossUtil ? lossUtil(q.seat, yakuman) : yakuman;
+        lossHit = new Float64Array(34);
+        const lossBase = lossUtil ? lossUtil(q.seat, value) : value;
+        for (let i = 0; i < 34; i++) {
+          const normal = hit[i] * lossBase;
+          hit[i] = (1 - kokushi.prior) * hit[i] + kokushi.prior * kokushi.hit[i];
+          lossHit[i] = (1 - kokushi.prior) * normal + kokushi.prior * kokushi.hit[i] * kLoss;
+        }
+      }
       threats.push({
+        lossHit,
         seat: q.seat,
         riichi: !!q.riichi,
         dealer: q.seat === engine.dealerSeat,
@@ -12778,7 +12814,7 @@
       threatValueSum += t.tenpai * t.loss;
       for (let i = 0; i < 34; i++) {
         dealOf[i] += t.tenpai * t.hit[i];
-        lossOf[i] += t.tenpai * t.hit[i] * t.loss;
+        lossOf[i] += t.tenpai * (t.lossHit ? t.lossHit[i] : t.hit[i] * t.loss);
       }
     }
     let unseen = 0;
@@ -12793,7 +12829,7 @@
       lossOf,
       tenpaiMass,
       threatValue: threatValueSum,
-      // 随机摸到的一张牌直接打出的期望放铳损失（推进/立直后摸切用）。
+      // Expected deal-in loss from discarding the tile drawn at random (for advancing / discarding after riichi).
       avgDrawLoss: unseen ? drawLoss / unseen : 0
     };
   }
@@ -12813,7 +12849,52 @@
   }
   var DEFAULT_UKEIRE = [6, 18, 30, 40, 48, 54, 60, 60, 60];
   var RON_CHANCE_PER_OPPONENT = 0.25;
-  function publicContext(engine, seat, hypothetical = null, level = "intermediate") {
+  var DECISION_CALC_BUDGET = 1500;
+  var DECISION_WORK_BUDGET = 12e4;
+  var WAITS_WORK = 35;
+  function createDecisionBudget({ calc = DECISION_CALC_BUDGET, work = DECISION_WORK_BUDGET } = {}) {
+    return { calcLimit: calc, workLimit: work, calcUsed: 0, workUsed: 0, baseWork: 0, exhausted: false };
+  }
+  function spendCalc(budget, n = 1) {
+    if (budget.calcUsed + n > budget.calcLimit) {
+      budget.exhausted = true;
+      return false;
+    }
+    budget.calcUsed += n;
+    return true;
+  }
+  function spendWork(budget, n) {
+    if (budget.workUsed + n > budget.workLimit) {
+      budget.exhausted = true;
+      return false;
+    }
+    budget.workUsed += n;
+    return true;
+  }
+  function sliceBudget(budget, parts) {
+    return createDecisionBudget({
+      calc: Math.floor((budget.calcLimit - budget.calcUsed) / parts),
+      work: Math.floor((budget.workLimit - budget.workUsed) / parts)
+    });
+  }
+  function settleBudget(parent, child) {
+    parent.calcUsed += child.calcUsed;
+    parent.workUsed += child.workUsed;
+    parent.baseWork += child.baseWork;
+    if (child.exhausted) parent.fellBack = true;
+  }
+  function policyWaits(ctx, counts, meldCount, remainOf = ctx.remainOf) {
+    var _a;
+    const memo = (_a = ctx.budget).waitsMemo || (_a.waitsMemo = /* @__PURE__ */ new Map());
+    const key = `${meldCount}:${counts.join("")}`;
+    let shape = memo.get(key);
+    if (!shape) {
+      shape = waitsOfCounts(counts, meldCount);
+      memo.set(key, shape);
+    }
+    return { shanten: shape.shanten, waits: shape.waits, ukeire: shape.waits.reduce((sum, idx) => sum + Math.max(0, remainOf(idx)), 0) };
+  }
+  function publicContext(engine, seat, hypothetical = null, level = "intermediate", budget = null) {
     const p = hypothetical?.player || engine.players[seat];
     const n = engine.playersN;
     const baseRemain = engine.remainOfFor(p);
@@ -12831,7 +12912,7 @@
     const threatLoss = threatLossOf(engine, seat, danger);
     let gainScale = 1;
     let lossScale = 1;
-    if (allLast) {
+    if (allLast && level !== "basic") {
       const lead = p.score - Math.max(...others);
       if (placement === 0 && lead > 0) {
         lossScale = 1 + Math.min(1, lead / 8e3);
@@ -12859,10 +12940,17 @@
       lossScale,
       survival: danger ? 0.9 : n === 3 ? 0.94 : 0.95,
       tableBonus: (engine.riichiSticks || 0) * 1e3 + (engine.honba || 0) * 300,
-      gainUtil: (v) => v,
-      advanced: false
+      gainUtil: (v) => v * gainScale,
+      level,
+      advanced: false,
+      threatActive: !!danger,
+      // Non-hand conditions for declaring riichi (consistent with engine.canRiichi: points ≥ 1000, tiles left ≥ player count).
+      riichiOk: p.score >= 1e3 && engine.remain >= n,
+      budget: budget || createDecisionBudget()
     };
-    if (level === "advanced") attachAdvanced(ctx);
+    if (level === "advanced") {
+      attachAdvanced(ctx);
+    }
     return ctx;
   }
   var PLACEMENT_UMA = { 3: [15e3, 0, -15e3], 4: [15e3, 5e3, -5e3, -15e3] };
@@ -12906,7 +12994,9 @@
     if (ctx.advanced) return ctx.read.lossOf[idx];
     return dealInProbability(ctx, kind) * ctx.threatLoss * ctx.lossScale;
   }
-  function pushExposure(ctx, win, foldable = true) {
+  function pushExposure(ctx, win, foldable = true, shanten = 0) {
+    if (ctx.level === "basic") return 0;
+    if (!ctx.advanced) return foldable ? futureExposure(ctx, shanten) : Math.min(ctx.ownDraws, 6) * 0.06 * ctx.threatLoss * ctx.lossScale;
     const T = ctx.ownDraws;
     if (!T) return 0;
     const growth = (ctx.n - 1) * 2 * (foldable ? 0.45 : 1);
@@ -12920,6 +13010,7 @@
     return total;
   }
   function foldLoss(ctx, counts) {
+    if (!ctx.advanced) return ctx.level === "basic" ? 0 : 0.012 * ctx.threatLoss * ctx.lossScale * Math.min(ctx.ownDraws, 6);
     const losses = [];
     for (let i = 0; i < 34; i++) for (let c = 0; c < counts[i]; c++) losses.push(ctx.read.lossOf[i]);
     losses.sort((a, b) => a - b);
@@ -12933,23 +13024,34 @@
     return total;
   }
   function tenpaiBonus(ctx, win) {
-    if (ctx.ownDraws > 4) return 0;
+    if (ctx.level === "basic" || ctx.ownDraws > 4) return 0;
     return Math.pow(ctx.survival, ctx.ownDraws) * Math.max(0, 1 - win) * (ctx.n === 4 ? 1500 : 1e3);
   }
-  function oneShantenQuality(ctx, counts, meldCount) {
+  function oneShantenQuality(ctx, counts, meldCount, budget = ctx.budget) {
     let weight = 0;
     let total = 0;
     for (let t = 0; t < 34; t++) {
       const r = Math.max(0, ctx.remainOf(t));
       if (!r || counts[t] >= 4) continue;
+      const remain = (i) => ctx.remainOf(i) - (i === t ? 1 : 0);
+      if (!spendWork(budget, 1)) return null;
       counts[t]++;
       if (shantenOfCounts(counts, meldCount) === 1) {
         let best = 0;
         for (let d = 0; d < 34; d++) {
           if (!counts[d] || d === t) continue;
+          if (!spendWork(budget, 1)) {
+            counts[t]--;
+            return null;
+          }
           counts[d]--;
           if (shantenOfCounts(counts, meldCount) === 1) {
-            const u = waitsOfCounts(counts, meldCount, ctx.remainOf).ukeire;
+            if (!spendWork(budget, WAITS_WORK)) {
+              counts[d]++;
+              counts[t]--;
+              return null;
+            }
+            const u = policyWaits(ctx, counts, meldCount, remain).ukeire;
             if (u > best) best = u;
           }
           counts[d]++;
@@ -13006,7 +13108,7 @@
   }
   function isFuritenWait(ctx, waits) {
     const own = ctx.p.discardKinds;
-    return !!own && waits.some((idx) => own.has(indexToKind(idx)));
+    return !!ctx.p.riichiFuriten || !!own && waits.some((idx) => own.has(indexToKind(idx)));
   }
   function winCurve(ctx, shanten, ukeire, draws, tenpaiUkeire = DEFAULT_UKEIRE[0], nextUkeire = null, ronUkeire = null) {
     if (shanten < 0) return 1;
@@ -13049,10 +13151,12 @@
     const all = handIds.concat(meldTiles);
     let dora = 0;
     for (const id of all) {
-      if (ctx.doraKinds.has(kindOf(id))) dora++;
+      dora += ctx.doraTiles.filter((tile) => kindOf(tile) === kindOf(id)).length;
       if (ctx.akaSet && ctx.akaSet.has(id)) dora++;
     }
-    dora += melds.filter((m) => m.type === "babei").length;
+    const norths = melds.filter((m) => m.type === "babei").flatMap((m) => m.tiles);
+    dora += norths.length;
+    dora += norths.reduce((sum, id) => sum + ctx.doraTiles.filter((tile) => kindOf(tile) === kindOf(id)).length, 0);
     const counts = countsOf(handIds);
     let yaku = 0;
     for (const m of realMelds(melds)) {
@@ -13087,20 +13191,32 @@
     if (ctx.p.drawnTile != null && id === ctx.p.drawnTile) s += 1;
     return s;
   }
-  function tenpaiQuality(ctx, counts, meldCount) {
+  function tenpaiQuality(ctx, counts, meldCount, opts = null) {
+    const budget = opts?.budget || null;
     let weight = 0;
     let total = 0;
     for (let t = 0; t < 34; t++) {
       const r = Math.max(0, ctx.remainOf(t));
       if (!r || counts[t] >= 4) continue;
+      const remain = budget ? (i) => ctx.remainOf(i) - (i === t ? 1 : 0) : ctx.remainOf;
+      if (budget && !spendWork(budget, 1)) return null;
       counts[t]++;
       if (shantenOfCounts(counts, meldCount) === 0) {
         let best = 0;
         for (let d = 0; d < 34; d++) {
           if (!counts[d]) continue;
+          if (budget && !spendWork(budget, 1)) {
+            counts[t]--;
+            return null;
+          }
           counts[d]--;
           if (shantenOfCounts(counts, meldCount) === 0) {
-            const u = waitsOfCounts(counts, meldCount, ctx.remainOf).ukeire;
+            if (budget && !spendWork(budget, WAITS_WORK)) {
+              counts[d]++;
+              counts[t]--;
+              return null;
+            }
+            const u = policyWaits(ctx, counts, meldCount, remain).ukeire;
             if (u > best) best = u;
           }
           counts[d]++;
@@ -13117,13 +13233,36 @@
     const turns = shanten <= 0 ? Math.min(ctx.ownDraws, 4) * 0.6 : (shanten + 1) * 1.5;
     return turns * 0.045 * ctx.threatLoss * ctx.lossScale;
   }
-  function makeSearch(ctx, melds, budget) {
+  function advancedPoints(ctx, win, melds) {
+    const norths = melds.filter((m) => m.type === "babei").flatMap((m) => m.tiles);
+    const extra = norths.length + norths.reduce((sum, id) => sum + ctx.doraTiles.filter((d) => kindOf(d) === kindOf(id)).length, 0);
+    return ctx.engine.applyExtraFan(win, extra, ctx.dealer).ten || 0;
+  }
+  function makeSearch(ctx, melds, budgetArg = null) {
+    const budget = typeof budgetArg === "number" ? createDecisionBudget({ calc: budgetArg }) : budgetArg || ctx.budget || (ctx.budget = createDecisionBudget());
     const meldCount = realMelds(melds).length;
     const menzen = realMelds(melds).every((m) => m.type === "ankan");
+    const riichiValue = (draws) => menzen && (ctx.p.riichi || ctx.riichiOk && ctx.engine.remain - draws * ctx.n >= ctx.n);
     const seatWind = ctx.engine.seatWindOf(ctx.seat);
-    const nukiDora = melds.filter((m) => m.type === "babei").length;
     const tenpaiMemo = /* @__PURE__ */ new Map();
-    const state = { calls: 0, budget, exhausted: false };
+    const state = { budget, exhausted: false };
+    const ctxAfterCache = /* @__PURE__ */ new Map();
+    const ctxAfter = (n) => {
+      if (!n) return ctx;
+      let c = ctxAfterCache.get(n);
+      if (!c) {
+        c = Object.create(ctx);
+        c.unseen = Math.max(1, ctx.unseen - n);
+        ctxAfterCache.set(n, c);
+      }
+      return c;
+    };
+    const remainAfter = (drawn) => {
+      if (!drawn.length) return ctx.remainOf;
+      const taken = new Array(34).fill(0);
+      for (const t of drawn) taken[t]++;
+      return (i) => ctx.remainOf(i) - taken[i];
+    };
     const synthId = (idx, used) => {
       for (let copy = 1; copy <= 4; copy++) {
         const id = indexToTileId(idx, copy);
@@ -13135,46 +13274,62 @@
       }
       return indexToTileId(idx, 1);
     };
-    function tenpaiProfile(ids, extra = []) {
+    const adjusted = (win) => advancedPoints(ctx, win, melds);
+    function waitValue(ids, melds0, tile, drawn) {
+      const base2 = { doraTiles: ctx.doraTiles, roundWind: ctx.engine.roundWind, seatWind };
+      if (riichiValue(drawn.length)) {
+        if (!spendCalc(budget)) return null;
+        const win = calcWin(ids, melds0, ctx.akaSet, { ...base2, ronTile: tile, riichi: true });
+        return win.hasYaku ? { ten: adjusted(win) * 1.3, ron: true } : { ten: 0, ron: false, none: true };
+      }
+      if (!spendCalc(budget)) return null;
+      const dama = calcWin(ids, melds0, ctx.akaSet, { ...base2, ronTile: tile });
+      if (dama.hasYaku) return { ten: adjusted(dama) * 1.05, ron: true };
+      if (!menzen) return { ten: 0, ron: false, none: true };
+      if (!spendCalc(budget)) return null;
+      const tsumo = calcWin(ids.concat([tile]), melds0, ctx.akaSet, base2);
+      return tsumo.hasYaku ? { ten: adjusted(tsumo), ron: false } : { ten: 0, ron: false, none: true };
+    }
+    function tenpaiProfile(ids, extra = [], drawn = []) {
       const counts = countsOf(ids);
-      const key = ctx.advanced ? `${counts.join("")}|${extra.slice().sort((a, b) => a - b).join(",")}` : counts.join("");
+      const sorted = (arr) => arr.slice().sort((a, b) => a - b).join(",");
+      const red = sorted(ids.filter((id) => ctx.akaSet.has(id)));
+      const key = `${counts.join("")}|${red}|${ctx.advanced ? sorted(extra) : ""}|${sorted(drawn)}`;
       const cached = tenpaiMemo.get(key);
       if (cached) return cached;
+      if (!spendWork(budget, WAITS_WORK)) {
+        state.exhausted = true;
+        return null;
+      }
       const used = new Set(ids);
-      const w = waitsOfCounts(counts, meldCount, ctx.remainOf);
+      const remain = remainAfter(drawn);
+      const w = policyWaits(ctx, counts, meldCount, remain);
       const furiten = ctx.advanced && (isFuritenWait(ctx, w.waits) || w.waits.some((idx) => extra.includes(idx)));
       let ukeire = 0;
       let ronUkeire = 0;
       let points = 0;
       for (const idx of w.waits) {
-        const r = Math.max(0, ctx.remainOf(idx));
+        const r = Math.max(0, remain(idx));
         if (!r) continue;
-        if (state.calls >= state.budget) {
+        const value = waitValue(ids, melds, synthId(idx, used), drawn);
+        if (!value) {
           state.exhausted = true;
-          break;
+          return null;
         }
-        state.calls++;
-        const win = calcWin(ids, melds, ctx.akaSet, {
-          ronTile: synthId(idx, used),
-          riichi: menzen,
-          doraTiles: ctx.doraTiles,
-          roundWind: ctx.engine.roundWind,
-          seatWind
-        });
-        if (!win.hasYaku) continue;
-        const base2 = nukiDora ? Math.max(win.ten, pointsForHan2(win.han + nukiDora, ctx.dealer)) : win.ten;
-        const ten = ctx.gainUtil(base2 * (menzen ? 1.3 : 1.05) + ctx.tableBonus);
+        if (value.none) continue;
+        const ten = ctx.gainUtil(value.ten + ctx.tableBonus);
         ukeire += r;
-        if (!furiten) ronUkeire += r * ronWeight(ctx, idx);
+        if (value.ron && !furiten) ronUkeire += r * ronWeight(ctx, idx);
         points += r * ten;
       }
       const profile = { ukeire, ronUkeire, points: ukeire ? points / ukeire : 0 };
       tenpaiMemo.set(key, profile);
       return profile;
     }
-    function tenpaiEV(ids, draws, extra = []) {
-      const prof = tenpaiProfile(ids, extra);
-      return tenpaiWin(ctx, prof.ukeire, draws, prof.ronUkeire) * prof.points;
+    function tenpaiEV(ids, draws, extra = [], drawn = []) {
+      const prof = tenpaiProfile(ids, extra, drawn);
+      if (!prof) return null;
+      return tenpaiWin(ctxAfter(drawn.length), prof.ukeire, draws, prof.ronUkeire) * prof.points;
     }
     function oneShantenEV(ids, draws, extra = []) {
       const counts = countsOf(ids);
@@ -13184,6 +13339,10 @@
       for (let t = 0; t < 34; t++) {
         const r = Math.max(0, ctx.remainOf(t));
         if (!r || counts[t] >= 4) continue;
+        if (!spendWork(budget, 1)) {
+          state.exhausted = true;
+          return null;
+        }
         counts[t]++;
         const improves = shantenOfCounts(counts, meldCount) === 0;
         counts[t]--;
@@ -13198,11 +13357,15 @@
           tried.add(idx);
           const rest = hand14.slice();
           rest.splice(rest.indexOf(pickIdFromHand(hand14, idx, ctx.akaSet)), 1);
+          if (!spendWork(budget, 1)) {
+            state.exhausted = true;
+            return null;
+          }
           if (shantenOfCounts(countsOf(rest), meldCount) !== 0) continue;
-          const prof = tenpaiProfile(rest, extra.concat([idx]));
+          const prof = tenpaiProfile(rest, extra.concat([idx]), [t]);
+          if (!prof) return null;
           const score = (prof.ukeire + prof.ronUkeire) * prof.points;
           if (!best || score > best.score) best = { score, prof };
-          if (state.exhausted) return null;
         }
         if (!best) continue;
         outcomes.push({ r, prof: best.prof });
@@ -13210,12 +13373,13 @@
       }
       if (!hitTotal) return 0;
       const h = Math.min(1, hitTotal / ctx.unseen);
+      const after = ctxAfter(1);
       let alive = 1;
       let total = 0;
       for (let j = 1; j <= draws; j++) {
         alive *= ctx.survival;
         let stage = 0;
-        for (const o of outcomes) stage += o.r / hitTotal * tenpaiWin(ctx, o.prof.ukeire, draws - j, o.prof.ronUkeire) * o.prof.points;
+        for (const o of outcomes) stage += o.r / hitTotal * tenpaiWin(after, o.prof.ukeire, draws - j, o.prof.ronUkeire) * o.prof.points;
         total += alive * h * stage;
         alive *= 1 - h;
         if (alive < 1e-4) break;
@@ -13224,86 +13388,14 @@
     }
     return { state, tenpaiEV, oneShantenEV, tenpaiProfile };
   }
-  var SEARCH_BUDGET = 1200;
   var SEARCH_CANDIDATES = 8;
   var QUALITY_CANDIDATES = 5;
-  function chooseDiscardByPolicy(engine, seat, { forbiddenKinds = null, level = "intermediate", hypothetical = null } = {}) {
-    const ctx = publicContext(engine, seat, hypothetical, level);
-    if (ctx.advanced) return chooseDiscardAdvanced(ctx, forbiddenKinds);
-    const { p } = ctx;
-    const meldCount = realMelds(p.melds).length;
-    const counts = countsOf(p.hand);
-    const candidates = [];
-    for (let idx = 0; idx < 34; idx++) {
-      if (!counts[idx]) continue;
-      const id = pickIdFromHand(p.hand, idx, ctx.akaSet);
-      if (id == null || forbiddenKinds?.has(kindOf(id))) continue;
-      counts[idx]--;
-      const w = waitsOfCounts(counts, meldCount, ctx.remainOf);
-      const quality = w.shanten === 1 ? tenpaiQuality(ctx, counts, meldCount) : DEFAULT_UKEIRE[0];
-      counts[idx]++;
-      const rest = p.hand.slice();
-      rest.splice(rest.indexOf(id), 1);
-      const value = estimateValue(ctx, rest, p.melds) * ctx.gainScale;
-      const win = winCurve(ctx, w.shanten, w.ukeire, ctx.ownDraws, quality);
-      const risk = dealInProbability(ctx, kindOf(id)) * ctx.threatLoss * ctx.lossScale;
-      const push = win * value - futureExposure(ctx, w.shanten);
-      const foldBase = ctx.danger ? -0.012 * ctx.threatLoss * ctx.lossScale * Math.min(ctx.ownDraws, 6) : -Infinity;
-      candidates.push({
-        id,
-        idx,
-        rest,
-        shanten: w.shanten,
-        ukeire: w.ukeire,
-        waits: w.waits,
-        win,
-        value,
-        risk,
-        push,
-        foldBase,
-        tie: tieBreak(ctx, id, p.hand)
-      });
-    }
-    if (!candidates.length) throw new Error("\u6CA1\u6709\u5408\u6CD5\u7684\u53EF\u6253\u724C");
-    if (level === "advanced") {
-      const ranked = candidates.slice().sort((a, b) => b.push - a.push || a.id - b.id);
-      const search = makeSearch(ctx, p.melds, SEARCH_BUDGET);
-      for (const c of ranked.slice(0, SEARCH_CANDIDATES)) {
-        if (c.shanten > 1) continue;
-        const ev = c.shanten === 0 ? search.tenpaiEV(c.rest, ctx.ownDraws) : search.oneShantenEV(c.rest, ctx.ownDraws);
-        if (ev == null || search.state.exhausted) break;
-        c.push = ev * ctx.gainScale - futureExposure(ctx, c.shanten);
-        c.searched = true;
-      }
-      const searched = candidates.filter((c) => c.searched);
-      if (searched.length) {
-        const floor = Math.min(...searched.map((c) => c.push));
-        for (const c of candidates) if (!c.searched && c.shanten <= 1) c.push = Math.min(c.push, floor);
-      }
-    }
-    const minShanten = Math.min(...candidates.map((c) => c.shanten));
-    const maxLoss = ctx.danger ? 2 : 0;
-    let best = null;
-    for (const c of candidates) {
-      if (c.shanten > minShanten + maxLoss && !(ctx.danger && c.risk === 0)) continue;
-      const pushEV = c.push - c.risk;
-      const foldEV = c.foldBase - c.risk;
-      c.fold = foldEV > pushEV;
-      c.ev = Math.max(pushEV, foldEV) + c.tie;
-      if (!best || c.ev > best.ev || c.ev === best.ev && c.id < best.id) best = c;
-    }
-    return {
-      discardId: best.id,
-      shanten: best.shanten,
-      ukeire: best.ukeire,
-      waits: best.waits.map((i) => indexToTileId(i)),
-      ev: best.ev,
-      fold: best.fold,
-      score: best.ev
-    };
+  function chooseDiscardByPolicy(engine, seat, { forbiddenKinds = null, level = "intermediate", hypothetical = null, budget = null } = {}) {
+    const ctx = publicContext(engine, seat, hypothetical, level, budget);
+    return chooseDiscardCandidates(ctx, forbiddenKinds);
   }
-  function chooseDiscardAdvanced(ctx, forbiddenKinds) {
-    const { p } = ctx;
+  function chooseDiscardCandidates(ctx, forbiddenKinds) {
+    const { p, budget } = ctx;
     const meldCount = realMelds(p.melds).length;
     const counts = countsOf(p.hand);
     const candidates = [];
@@ -13312,8 +13404,9 @@
       const id = pickIdFromHand(p.hand, idx, ctx.akaSet);
       if (id == null || forbiddenKinds?.has(kindOf(id))) continue;
       counts[idx]--;
-      const w = waitsOfCounts(counts, meldCount, ctx.remainOf);
-      const quality = w.shanten === 1 ? tenpaiQuality(ctx, counts, meldCount) : DEFAULT_UKEIRE[0];
+      budget.baseWork += WAITS_WORK;
+      const w = policyWaits(ctx, counts, meldCount);
+      const quality = (ctx.level !== "basic" && w.shanten === 1 ? tenpaiQuality(ctx, counts, meldCount, { budget }) : null) ?? DEFAULT_UKEIRE[0];
       const fold = ctx.threatActive ? -foldLoss(ctx, counts) : -Infinity;
       counts[idx]++;
       const rest = p.hand.slice();
@@ -13331,30 +13424,32 @@
         waits: w.waits,
         win,
         risk: discardRisk(ctx, idx, kindOf(id)),
-        push: win * value + (w.shanten === 0 ? tenpaiBonus(ctx, win) : 0) - pushExposure(ctx, win),
+        push: win * value + (w.shanten === 0 ? tenpaiBonus(ctx, win) : 0) - pushExposure(ctx, win, true, w.shanten),
         foldBase: fold,
         tie: tieBreak(ctx, id, p.hand)
       });
     }
     if (!candidates.length) throw new Error("\u6CA1\u6709\u5408\u6CD5\u7684\u53EF\u6253\u724C");
     const minShanten = Math.min(...candidates.map((c) => c.shanten));
-    if (minShanten === 2) {
+    if (ctx.advanced && minShanten === 2) {
       const twos = candidates.filter((c) => c.shanten === 2).sort((a, b) => b.push - a.push || a.id - b.id);
       for (const c of twos.slice(0, QUALITY_CANDIDATES)) {
         const cc = countsOf(c.rest);
-        const next = oneShantenQuality(ctx, cc, meldCount);
+        const next = oneShantenQuality(ctx, cc, meldCount, budget);
+        if (next == null) break;
         c.win = winCurve(ctx, 2, c.ukeire, ctx.ownDraws, DEFAULT_UKEIRE[0], next);
         c.push = c.win * c.value - pushExposure(ctx, c.win);
         c.refined = true;
       }
-      for (const c of twos.slice(QUALITY_CANDIDATES)) {
-        const floor = Math.min(...twos.slice(0, QUALITY_CANDIDATES).map((x) => x.push));
-        c.push = Math.min(c.push, floor);
+      const refined = twos.filter((c) => c.refined);
+      if (refined.length) {
+        const floor = Math.min(...refined.map((x) => x.push));
+        for (const c of twos) if (!c.refined) c.push = Math.min(c.push, floor);
       }
     }
     const ranked = candidates.filter((c) => c.shanten <= 1).sort((a, b) => b.push - a.push || a.id - b.id);
-    if (ranked.length) {
-      const search = makeSearch(ctx, p.melds, SEARCH_BUDGET);
+    if (ctx.advanced && ranked.length) {
+      const search = makeSearch(ctx, p.melds, budget);
       for (const c of ranked.slice(0, SEARCH_CANDIDATES)) {
         const ev = c.shanten === 0 ? search.tenpaiEV(c.rest, ctx.ownDraws, [c.idx]) : search.oneShantenEV(c.rest, ctx.ownDraws, [c.idx]);
         if (ev == null || search.state.exhausted) break;
@@ -13383,73 +13478,74 @@
       waits: best.waits.map((i) => indexToTileId(i)),
       ev: best.ev,
       fold: best.fold,
-      score: best.ev
+      score: best.ev,
+      searched: candidates.filter((c) => c.searched).length,
+      budget: { calcUsed: budget.calcUsed, workUsed: budget.workUsed, baseWork: budget.baseWork, exhausted: budget.exhausted }
     };
   }
   function handOutlook(ctx, hand, melds, valueScale = 1) {
     const meldCount = realMelds(melds).length;
-    const w = waitsOfCounts(countsOf(hand), meldCount, ctx.remainOf);
-    if (ctx.advanced) {
-      const counts = countsOf(hand);
-      const value2 = ctx.gainUtil(estimateValue(ctx, hand, melds) * valueScale);
-      const quality = w.shanten === 1 ? tenpaiQuality(ctx, counts, meldCount) : DEFAULT_UKEIRE[0];
-      const win2 = winCurve(ctx, w.shanten, w.ukeire, ctx.ownDraws, quality);
-      let meanLoss = 0;
-      for (const id of hand) meanLoss += ctx.read.lossOf[tileIndex(id)];
-      meanLoss /= Math.max(1, hand.length);
-      const push2 = win2 * value2 + (w.shanten === 0 ? tenpaiBonus(ctx, win2) : 0) - pushExposure(ctx, win2) - meanLoss;
-      const fold2 = ctx.threatActive ? -foldLoss(ctx, counts) : -Infinity;
-      return { push: push2, fold: fold2, ev: Math.max(push2, fold2) };
-    }
-    const value = estimateValue(ctx, hand, melds) * ctx.gainScale * valueScale;
-    const win = winCurve(ctx, w.shanten, w.ukeire, ctx.ownDraws);
-    const nextRisk = ctx.danger ? 0.06 * ctx.threatLoss * ctx.lossScale : 0;
-    const push = win * value - futureExposure(ctx, w.shanten) - nextRisk;
-    const fold = ctx.danger ? -0.012 * ctx.threatLoss * ctx.lossScale * Math.min(ctx.ownDraws, 6) : -Infinity;
+    ctx.budget.baseWork += WAITS_WORK;
+    const counts = countsOf(hand);
+    const w = policyWaits(ctx, counts, meldCount);
+    const value = ctx.gainUtil(estimateValue(ctx, hand, melds) * valueScale);
+    const quality = (ctx.level !== "basic" && w.shanten === 1 ? tenpaiQuality(ctx, counts, meldCount, { budget: ctx.budget }) : null) ?? DEFAULT_UKEIRE[0];
+    const win = winCurve(ctx, w.shanten, w.ukeire, ctx.ownDraws, quality);
+    let meanLoss = 0;
+    for (const id of hand) meanLoss += discardRisk(ctx, tileIndex(id), kindOf(id));
+    meanLoss /= Math.max(1, hand.length);
+    const push = win * value + (w.shanten === 0 ? tenpaiBonus(ctx, win) : 0) - pushExposure(ctx, win, true, w.shanten) - meanLoss;
+    const fold = ctx.threatActive ? -foldLoss(ctx, counts) : -Infinity;
     return { push, fold, ev: Math.max(push, fold) };
   }
-  function shouldFoldHand(engine, seat, level = "intermediate") {
-    const ctx = publicContext(engine, seat, null, level);
-    if (ctx.advanced ? !ctx.threatActive : !ctx.danger) return false;
+  function shouldFoldHand(engine, seat, level = "intermediate", budget = null) {
+    const ctx = publicContext(engine, seat, null, level, budget);
+    if (!ctx.threatActive) return false;
     const outlook = handOutlook(ctx, ctx.p.hand, ctx.p.melds);
     return outlook.fold > outlook.push;
   }
-  function claimPolicy(engine, seat, card, options, level = "intermediate") {
+  function claimPolicy(engine, seat, card, options, level = "intermediate", budget = null) {
     if (!options.length) return null;
     const p = engine.players[seat];
-    const passCtx = publicContext(engine, seat, null, level);
+    const shared = budget || createDecisionBudget();
+    const passCtx = publicContext(engine, seat, null, level, shared);
     const pass = handOutlook(passCtx, p.hand, p.melds).ev;
     let best = null;
-    for (const option of options) {
+    for (let i = 0; i < options.length; i++) {
+      const option = options[i];
       const hand = p.hand.filter((tile) => !option.used.includes(tile));
       const meld = { type: option.type, tiles: [...option.used, card] };
       const player = { ...p, hand, melds: p.melds.concat([meld]), menzen: false, drawnTile: null };
       const hypothetical = { player, extraSeen: option.used };
+      const part = shared ? sliceBudget(shared, options.length - i) : null;
       let ev;
       if (option.type === "kan") {
-        ev = handOutlook(publicContext(engine, seat, hypothetical, level), hand, player.melds, 1.2).ev;
+        ev = handOutlook(publicContext(engine, seat, hypothetical, level, part), hand, player.melds, 1.2).ev;
       } else {
         try {
-          ev = chooseDiscardByPolicy(engine, seat, { forbiddenKinds: option.forbiddenKinds, level, hypothetical }).ev;
+          ev = chooseDiscardByPolicy(engine, seat, { forbiddenKinds: option.forbiddenKinds, level, hypothetical, budget: part }).ev;
         } catch {
+          if (part) settleBudget(shared, part);
           continue;
         }
       }
+      if (part) settleBudget(shared, part);
       if (ev > pass && (!best || ev > best.ev)) best = { ...option, ev };
     }
     return best;
   }
-  function riichiPolicy(engine, seat, discardKinds, level = "intermediate") {
-    const ctx = publicContext(engine, seat, null, level);
+  function riichiPolicy(engine, seat, discardKinds, level = "intermediate", budget = null) {
+    const ctx = publicContext(engine, seat, null, level, budget);
     const { p } = ctx;
     const seatWind = engine.seatWindOf(seat);
     let best = null;
     for (const kind of discardKinds) {
+      if (!spendWork(ctx.budget, WAITS_WORK)) break;
       const card = p.hand.find((t) => kindOf(t) === kind && !ctx.akaSet.has(t)) ?? p.hand.find((t) => kindOf(t) === kind);
       const hand = p.hand.slice();
       hand.splice(hand.indexOf(card), 1);
       const counts = countsOf(hand);
-      const w = waitsOfCounts(counts, realMelds(p.melds).length, ctx.remainOf);
+      const w = policyWaits(ctx, counts, realMelds(p.melds).length);
       const used = new Set(hand);
       let ukeire = 0;
       let ronUkeire = 0;
@@ -13457,10 +13553,15 @@
       let riichiPts = 0;
       let damaPts = 0;
       let damaUkeire = 0;
-      const furiten = ctx.advanced && (isFuritenWait(ctx, w.waits) || w.waits.some((idx) => indexToKind(idx) === kind));
+      const furiten = isFuritenWait(ctx, w.waits) || w.waits.some((idx) => indexToKind(idx) === kind);
+      let complete = true;
       for (const idx of w.waits) {
         const r = Math.max(0, ctx.remainOf(idx));
         if (!r) continue;
+        if (!spendCalc(ctx.budget, 2)) {
+          complete = false;
+          break;
+        }
         const rw = furiten ? 0 : r * ronWeight(ctx, idx);
         let ron = indexToTileId(idx, 1);
         for (let copy = 1; copy <= 4 && used.has(ron); copy++) ron = indexToTileId(idx, copy);
@@ -13469,13 +13570,14 @@
         const r0 = calcWin(hand, p.melds, ctx.akaSet, base2);
         ukeire += r;
         ronUkeire += rw;
-        riichiPts += r * (r1.ten || 0);
+        riichiPts += r * advancedPoints(ctx, r1, p.melds);
         if (r0.hasYaku) {
           damaUkeire += r;
           damaRonUkeire += rw;
-          damaPts += r * r0.ten;
+          damaPts += r * advancedPoints(ctx, r0, p.melds);
         }
       }
+      if (!complete) break;
       const candidate = {
         card,
         ukeire,
@@ -13487,23 +13589,13 @@
         damaUkeire,
         risk: discardRisk(ctx, tileIndex(card), kind)
       };
-      const score = ctx.advanced ? (candidate.ukeire + candidate.ronUkeire) * candidate.riichiPts - candidate.risk * 10 : candidate.ukeire * candidate.riichiPts - candidate.risk * 10;
+      const score = (candidate.ukeire + candidate.ronUkeire) * candidate.riichiPts - candidate.risk * 10;
       if (!best || score > best.score || score === best.score && card < best.card) best = { ...candidate, score };
     }
     if (!best) return null;
-    const draws = ctx.ownDraws;
-    const winR = tenpaiWin(ctx, best.ukeire, draws);
-    if (ctx.advanced) return riichiAdvanced(ctx, best);
-    const riichiEV = winR * (best.riichiPts * 1.25 + 1e3 + ctx.tableBonus) * ctx.gainScale - 1e3 - (ctx.danger ? Math.min(draws, 6) * 0.06 * ctx.threatLoss * ctx.lossScale : 0) - best.risk;
-    const damaEV = best.damaUkeire ? tenpaiWin(ctx, best.damaUkeire, draws) * 0.92 * (best.damaPts + ctx.tableBonus) * ctx.gainScale - futureExposure(ctx, 0) - best.risk : -Infinity;
-    const scores = engine.players.map((pl) => pl.score);
-    const lead = p.score - Math.max(...scores.filter((_, s) => s !== seat));
-    if (best.damaUkeire && engine.isAllLast() && lead >= 8e3) return { action: "dama", card: best.card };
-    if (damaEV >= riichiEV) return { action: "dama", card: best.card };
-    if (riichiEV < -1e3 && ctx.danger) return null;
-    return { action: "riichi", card: best.card };
+    return riichiDecisionByPolicy(ctx, best);
   }
-  function riichiAdvanced(ctx, best) {
+  function riichiDecisionByPolicy(ctx, best) {
     const { engine, p } = ctx;
     const draws = ctx.ownDraws;
     const winR = tenpaiWin(ctx, best.ukeire, draws, best.ronUkeire * 0.85);
@@ -13515,7 +13607,7 @@
     }
     const scores = engine.players.map((pl) => pl.score);
     const lead = p.score - Math.max(...scores.filter((_, s) => s !== ctx.seat));
-    if (best.damaUkeire && engine.isAllLast() && lead >= 8e3) return { action: "dama", card: best.card };
+    if (ctx.level !== "basic" && best.damaUkeire && engine.isAllLast() && lead >= 8e3) return { action: "dama", card: best.card };
     if (ctx.threatActive) {
       const counts = countsOf(p.hand);
       counts[tileIndex(best.card)]--;
@@ -13651,7 +13743,7 @@
   var DIRECT = {
     "\u7ACB\u76F4": YiType.LiZhi,
     "\u30C0\u30D6\u30EB\u7ACB\u76F4": YiType.ShuangLiZi,
-    // 2101 双立直
+    // 2101 Double Riichi
     "\u4E00\u767A": YiType.YiFa,
     "\u9580\u524D\u6E05\u81EA\u6478\u548C": YiType.MengQianQingZiMoHu,
     "\u5E73\u548C": YiType.PingHu,
@@ -13695,9 +13787,9 @@
     "\u5929\u548C": YiType.TianHu,
     "\u5730\u548C": YiType.DiHu,
     "\u30C9\u30E9": YiType.Bao,
-    // 宝（表宝牌）
+    // Dora (regular dora indicator)
     "\u8D64\u30C9\u30E9": YiType.RedBao
-    // 赤宝（赤5 dora）
+    // Red dora (red 5 dora)
   };
   function windYiType(key, roundWind, seatWind) {
     const m = key.match(/^(場風|自風)([東南西北])$/);
@@ -13810,19 +13902,19 @@
     uidOf(seat) {
       return this.uids[seat];
     }
-    /** 客户端上行 ReqPrepare：解开 runHand 里的等待 */
+    /** Client uplink ReqPrepare: resolves the wait inside runHand */
     submitPrepare() {
       this._prepared = true;
       const w = this._prepareWaiter;
       this._prepareWaiter = null;
       if (w) w();
     }
-    /** 等客户端点「准备」。抓包规律（dongfeng1 完整包）：
-     *  局间（含连庄，isFinal=false）服务器先发 NtfToPrepare/NtfPrepare(机器人)，客户端发
-     *  ReqPrepare，服务器再发 NtfPrepare(自己)/NtfGameStart —— 每局等一次 ReqPrepare。
-     *  终局（isFinal=true）后引擎直接停，不存在“续场再等一次 ReqPrepare”的两段式握手；
-     *  新一场是重新匹配出的新房间、新引擎（见 finishHand）。
-     *  autoHuman（自测无客户端）直接跳过；真人模式留一个兜底超时防止卡死。 */
+    /** Wait for the client to press "ready". Capture pattern (dongfeng1 full packets):
+     *  Between hands (including renchan, isFinal=false) the server first sends NtfToPrepare/NtfPrepare (bots); the client sends
+     *  ReqPrepare, then the server sends NtfPrepare (self)/NtfGameStart: one ReqPrepare wait per hand.
+     *  After the final hand (isFinal=true) the engine simply stops; there is no two-step "continue and wait for ReqPrepare again" handshake;
+     *  a new match is a newly matched room with a new engine (see finishHand).
+     *  autoHuman (self-test, no client) skips directly; human mode keeps a fallback timeout to prevent a hang. */
     waitPrepare(timeoutMs = 15e3) {
       if (this.autoHuman) return Promise.resolve();
       if (this._prepared) {
@@ -13848,11 +13940,11 @@
     _d(ms) {
       return this.speed > 0 ? sleep(ms * this.speed) : Promise.resolve();
     }
-    // 各阶段延迟（毫秒，乘以 speed）
+    // Per-phase delays (ms, multiplied by speed)
     get T() {
       return { think: 550, claim: 350, step: 250, hand: 2500 };
     }
-    // ================= 入口 =================
+    // ================= Entry =================
     async start() {
       await this._d(400);
       while (!this.finished) {
@@ -13860,7 +13952,7 @@
       }
       if (this.onFinish) this.onFinish(this.scores);
     }
-    // ================= 一局 =================
+    // ================= One hand =================
     async runHand() {
       this.handEnded = false;
       this._expectedDraw = null;
@@ -13939,7 +14031,7 @@
       this.emit(RiichiMsg.ENtfGameStart, {
         changWind: this.roundWind - 1,
         juNum: this.juNum + 1,
-        // 实机是 1 基（东1=1），内部保持 0 基
+        // The real client is 1-based (East = 1); internally it stays 0-based
         benChangNum: this.honba,
         zhuangSeat: this.dealerSeat,
         baoPreCard: this.doraIndicators[0],
@@ -13980,7 +14072,7 @@
       if (this.maxHands === 1) return true;
       return this.roundWind > this.regularWinds || this.roundWind === this.regularWinds && this.juNum === this.playersN - 1;
     }
-    // ================= 摸牌 =================
+    // ================= Draw =================
     async turnDraw(seat) {
       if (this.handEnded) return;
       if (this.remain <= 0) {
@@ -13997,7 +14089,7 @@
       this.xunNum++;
       await this.awaitTurn(seat, true);
     }
-    // 岭上摸牌（杠后）
+    // Rinshan draw (after a kan)
     async drawReplacement(seat) {
       const p = this.players[seat];
       p.tempFuriten = false;
@@ -14105,7 +14197,7 @@
       }
       return Result.Fail_ActionNotInCanQiangActions;
     }
-    // ================= 轮到某家行动（手上 14 张） =================
+    // ================= Act on a seat's turn (14 tiles in hand) =================
     async awaitTurn(seat, drew, skipNotify) {
       if (this.handEnded) return;
       const p = this.players[seat];
@@ -14154,7 +14246,7 @@
       const result = await this.processTurnAction(seat, action, card, drew, cantPlays);
       if (result !== Result.Succ) throw new Error(`\u975E\u6CD5\u5185\u90E8\u52A8\u4F5C seat=${seat} action=${action} result=${result}`);
     }
-    // 手牌 14 张时的可选动作
+    // Optional actions with 14 tiles in hand
     turnActions(seat, drew) {
       const p = this.players[seat];
       const acts = [PlayAction.Normal];
@@ -14170,7 +14262,7 @@
       }
       return acts;
     }
-    // 手里的北（三麻拔北用），没有则返回 null
+    // North in hand (used for 3-player North pull); returns null if there is none
     northInHand(p) {
       if (p.riichi) {
         const tile = p.drawnTile;
@@ -14192,12 +14284,12 @@
       }
       return s.size;
     }
-    // 该席位是否由 AI 操作（autoHuman 为测试用：把 0 号真人席位也交给 AI 代打）
+    // Whether this seat is operated by the AI (autoHuman is for testing: it also hands the seat-0 human to the AI)
     isAiSeat(p) {
       return !p.isHuman || this.autoHuman;
     }
-    // 九种九牌成立条件：仍在首巡（任何鸣牌——含吃碰杠与拔北——都会把 firstGoAround 置 false）
-    // 且刚摸完牌的手牌里有 ≥9 种幺九。成立时人类可选、AI 自动。
+    // Kyuushu kyuuhai (nine kinds of terminals/honors) conditions: still in the first go-around (any call, including chi/pon/kan and North pull, sets firstGoAround to false)
+    // and the hand just drawn holds ≥9 kinds of terminals/honors. When met, humans may choose it and the AI declares it automatically.
     canJiuZhongJiuPai(p) {
       return this.firstGoAround && this.countYaoJiuKinds(p) >= 9;
     }
@@ -14252,7 +14344,7 @@
       }
       return result;
     }
-    // 加杠：手上有与已碰的刻子同种的牌
+    // Added kan: the hand has a tile of the same kind as an already-ponned triplet
     addedKanTile(p) {
       for (const m of p.melds) {
         if (m.type !== "pon") continue;
@@ -14262,13 +14354,13 @@
       }
       return null;
     }
-    // 表宝牌的「牌种」集合（供 AI 保留宝牌用）
+    // Set of tile kinds of the table dora (for the AI to keep dora)
     doraKinds() {
       const s = /* @__PURE__ */ new Set();
       for (const ind of this.doraIndicators) s.add(kindOf2(doraFromIndicator(ind, this.sanma)));
       return s;
     }
-    // 场上已公开的牌（牌河 + 副露 + 宝牌指示牌）
+    // Tiles already public on the table (discard rivers + melds + dora indicators)
     visibleCounts() {
       const c = new Array(34).fill(0);
       const add = (id) => {
@@ -14282,14 +14374,14 @@
       for (const t of this.doraIndicators) add(t);
       return c;
     }
-    // 某家视角下「某牌种还剩几张」（用于受入枚数）
+    // From one seat's viewpoint, how many copies of a tile kind remain (used for the ukeire count)
     remainOfFor(p) {
       const vis = this.visibleCounts();
       const own = countsOf(p.hand);
       const total = (idx) => this.sanma && idx >= 1 && idx <= 7 ? 0 : 4;
       return (idx) => total(idx) - vis[idx] - own[idx];
     }
-    // 统一的弃牌评估入口
+    // Unified discard-evaluation entry point
     bestDiscard(p, extra = {}) {
       return chooseDiscard(p.hand, p.melds, {
         drawnTile: p.drawnTile,
@@ -14318,7 +14410,7 @@
         seatWind: this.seatWindOf(p.seat)
       };
     }
-    // 13 张形时更新听牌信息（waits 存牌种码）
+    // Update tenpai info at 13 tiles (waits stores tile-kind codes)
     updateWaits(p) {
       if (p.hand.length % 3 !== 1) return;
       const info = handWaits(p.hand, p.melds);
@@ -14380,13 +14472,13 @@
       p.score += 1e3;
       this.riichiSticks = Math.max(0, this.riichiSticks - 1);
     }
-    // 14 张形的听牌提示：打哪张 -> 听哪些
+    // Tenpai hints for a 14-tile hand: discard which tile -> wait on which tiles
     //
-    // 编码陷阱：tingInfos.play / ting 用的是「牌种」编码（copy 位固定为 0），
-    // 实机样本 play=380(3索) ting=210(1筒)、play=110(1万)，全部以 0 结尾。
-    // 其余字段（handCards / NtfPlayCard.card / baoPreCard …）才是带 copy 的完整牌 ID。
-    // 之前这里发的是 copy=1 的完整 ID（381/211），客户端按牌种查表匹配不上，
-    // 结果就是「听了牌但不显示听牌、也没有听牌提示」。
+    // Encoding trap: tingInfos.play / ting use the tile-kind encoding (the copy bit is fixed at 0);
+    // real-machine samples: play=380 (3s), ting=210 (1p), play=110 (1m), all ending in 0.
+    // Other fields (handCards / NtfPlayCard.card / baoPreCard …) are full tile IDs with the copy bit.
+    // Previously this sent full IDs with copy=1 (381/211); the client looks up by tile kind and could not match them,
+    // so the result was "tenpai reached, but no tenpai indicator and no tenpai hint shown".
     buildTingInfos(p) {
       if (p.hand.length % 3 !== 2) return [];
       const { shanten: sh, options } = discardOptionsOfCounts(
@@ -14421,7 +14513,7 @@
       }
       return out.slice(0, 60);
     }
-    // ================= 处理行动 =================
+    // ================= Handle actions =================
     async processTurnAction(seat, action, card, drew, cantPlays = []) {
       const p = this.players[seat];
       const result = this.validateTurnPayload(
@@ -14514,7 +14606,7 @@
         }))
       };
     }
-    // ================= 鸣牌 =================
+    // ================= Calls =================
     claimActions(seat, discarderSeat, card) {
       const p = this.players[seat];
       const acts = [];
@@ -14788,10 +14880,10 @@
       }
       return used;
     }
-    // otherCards 是「自己手里贡献的牌」，**不含**被鸣的那张（实机抓包：
-    // Chi/Peng 均为 2 张、MingGang 为 3 张，被鸣牌只由 NtfPlayCard.card 给出）。
-    // 若把被鸣牌也塞进来，客户端会按 otherCards.length+1 判定副露类型：
-    // 碰(3)→显示成明杠、吃(3)→UI 拼不出顺子而卡死。
+    // otherCards is "the tiles this seat contributes from its own hand", **excluding** the called tile (real-machine capture:
+    // Chi/Pon are 2 tiles each, MingGang is 3; the called tile is only given by NtfPlayCard.card).
+    // If the called tile is also included, the client decides the meld type by otherCards.length+1:
+    // pon (3) is displayed as open kan, and chi (3) cannot be assembled by the UI and freezes it.
     buildQiang(seat, action, otherCards) {
       return {
         seat,
@@ -14800,8 +14892,8 @@
         userInfos: this.players.map((q) => ({ seat: q.seat }))
       };
     }
-    // otherCards = 发给客户端的「自己手里贡献的牌」（不含被鸣的那张）
-    // meldTiles   = 完整面子（含被鸣牌），仅内部用于算食替禁止牌
+    // otherCards = the "tiles this seat contributes from its own hand" sent to the client (excluding the called tile)
+    // meldTiles = the full meld (including the called tile), used internally only for computing swap-call forbidden tiles
     buildQiangEnd(seat, action, otherCards, meldTiles) {
       const p = this.players[seat];
       return {
@@ -14811,8 +14903,8 @@
         userInfos: this.players.map((q) => ({
           seat: q.seat,
           tingInfos: q.seat === seat ? this.buildTingInfos(p) : [],
-          // 实机 NtfQiangCardEnd 的 canPlayActions 只能是 []（他家）或 [0]（鸣牌者，
-          // 即「仅可打牌」），绝不带 6/7/8/9/10。完整可选项由紧随其后的 NtfSendCard 下发。
+          // Real-machine NtfQiangCardEnd canPlayActions can only be [] (others) or [0] (the caller,
+          // i.e. "discard only"), never 6/7/8/9/10. The full set of options is sent by the NtfSendCard that immediately follows.
           canPlayActions: q.seat === seat ? [PlayAction.Normal] : [],
           isZhenTing: this.isFuriten(q),
           cantPlays: q.seat === seat ? this.cantPlays(p, action, meldTiles || otherCards || []) : [],
@@ -14822,7 +14914,7 @@
         }))
       };
     }
-    // 吃碰后的食替禁止牌（同样是牌种编码 copy=0，实机样本 [440,310,280,380,320]）
+    // Post-chi/pon swap-call forbidden tiles (also tile-kind encoded, copy=0; real-machine sample [440,310,280,380,320])
     cantPlays(p, action, meldTiles) {
       if (action !== PlayAction.Chi && action !== PlayAction.Peng) return [];
       const claimed = this.lastDiscard ? this.lastDiscard.card : null;
@@ -14840,7 +14932,7 @@
       if (claimedTile.rank === ranks[2] && ranks[0] > 1) out.add(claimedTile.suit * 10 + ranks[0] - 1);
       return out;
     }
-    // ================= 和牌 / 流局 =================
+    // ================= Win / draw =================
     async winTsumo(seat) {
       const p = this.players[seat];
       const w = calcWin(p.hand, p.melds, this.akaSet, this.winOpts(p, false));
@@ -14890,7 +14982,7 @@
         noPenalty: true
       });
     }
-    // ================= 结算 =================
+    // ================= Settlement =================
     async endHand(res) {
       if (this.handEnded) return;
       this.handEnded = true;
@@ -15054,8 +15146,8 @@
       });
       await this.finishHand(gameOver, dealerContinues, scores);
     }
-    // 给 riichi 库的结果补上库里没有的番数（目前只有拔北），并按标准公式重算点数。
-    // 役满不受宝牌影响，原样返回。
+    // Add the han counts that the riichi library's result lacks (currently only North pull), and recompute points by the standard formula.
+    // Yakuman is not affected by dora and is returned unchanged.
     applyExtraFan(w, extraFan, isDealerWin) {
       if (!extraFan || !w || !w.isAgari || w.yakuman > 0) return w;
       const han = (w.han || 0) + extraFan;
@@ -15073,12 +15165,12 @@
         han,
         ten: c(base2 * (isDealerWin ? 6 : 4)),
         oya: [c(base2 * 2)],
-        // 庄家自摸：每家付 base×2
+        // Dealer tsumo: each opponent pays base×2
         ko: [c(base2 * 2), c(base2)]
-        // 闲家自摸：庄家付 base×2，其他闲家付 base
+        // Non-dealer tsumo: the dealer pays base×2, each other non-dealer pays base
       };
     }
-    // 宝牌拆分统计（表 / 里 / 赤 / 拔北）
+    // Dora breakdown statistics (regular / ura / red / North pull)
     countDora(p, ronTile) {
       const tiles = p.hand.concat(ronTile != null ? [ronTile] : []);
       for (const m of p.melds) if (m.type !== "babei") tiles.push(...m.tiles);
@@ -15101,12 +15193,12 @@
         babeiAsDora
       };
     }
-    // 剔除库合并出来的「ドラ」条目。
+    // Remove the "ドラ" entries that the library merges in.
     //
-    // 实机 15/15 例证明：宝牌**不进** yiFans，只走 baoFan / liBaoFan / redBaoFan / baBeiFan
-    // 四个专用字段，且 totalFan = Σ(yiFans.fan) + 四项宝牌之和。
-    // 之前这里把宝牌又 push 回 yiFans，客户端结算界面按
-    // 「役列表 + 宝牌行」渲染时宝牌被算了两遍。
+    // Real-machine 15/15 cases prove dora does **not** enter yiFans; it only flows through the four dedicated fields baoFan / liBaoFan / redBaoFan / baBeiFan,
+    // and totalFan = Σ(yiFans.fan) + the sum of the four dora fields.
+    // Previously dora was pushed back into yiFans, so when the client settlement screen renders
+    // "yaku list + dora row", dora was counted twice.
     rebuildYiFans(yiFans) {
       return yiFans.filter((y) => y.yiType !== YiType.Bao && y.yiType !== YiType.RedBao && y.yiType !== YiType.LiBao && y.yiType !== YiType.BaBeiBao);
     }
@@ -15126,7 +15218,7 @@
       if (result.type === "ron" && result.loser === 0) stats.dealIns += 1;
       if (dealerContinues && this.dealerSeat === 0) stats.maxRenchan = Math.max(stats.maxRenchan, this.renchanCount);
     }
-    // humanWin：本手真人席的和牌明细（未和为 null），供一局战按番数发奖。
+    // humanWin: the human seat's winning details for this hand (null if not won), used by the one-round match to award rewards by han.
     prepareFinalResult(scores, isFinal, humanWin = null) {
       if (!isFinal || this._finalResult || !this.onFinalResult) return;
       this._finalResult = this.onFinalResult(scores.slice(), this, humanWin) || null;
@@ -15169,12 +15261,12 @@
             action: m.type === "chi" ? PlayAction.Chi : m.type === "pon" ? PlayAction.Peng : m.type === "ankan" ? PlayAction.AnGang : PlayAction.MingGang,
             qiangSeat: m.from != null ? m.from : s
           })),
-          // tings 同样是牌种编码（copy=0）：实机流局样本 [230]/[260,230]/[160,130]
+          // tings are also tile-kind encoded (copy=0): real-machine exhaustive-draw samples [230]/[260,230]/[160,130]
           tings: tenpai ? tenpai[s] ? (p.waits || []).map((k) => k * 10) : [] : [],
           alreadyRiichi: p.riichi,
           baBeiCards: p.melds.filter((m) => m.type === "babei").map((m) => m.tiles[0]),
           rank,
-          // 因和牌役番产生的纯打点（只含番符，不含本场棒/立直棒/听牌罚符）。
+          // Pure payment from the yaku han of a win (only han/fu, excluding honba / riichi sticks / tenpai penalties).
           yiFanChangeDian: change,
           jingSuanScore: jing,
           jieBi: Math.round(jing * 100),
@@ -15186,7 +15278,7 @@
           maxFan: currentDetail?.totalFan || 0,
           realJieBi: 0,
           finalBi: 0,
-          // 好感度不随对局变化，本人席位原样回显当前等级，避免结算面板显示 Lv.0。
+          // Affinity does not change with the match; the human seat echoes its current level, to avoid the settlement panel showing Lv.0.
           level: s === 0 ? this.selfLoveLevel : 0,
           loveValue: 0,
           oldLevel: s === 0 ? this.selfLoveLevel : 0,
@@ -15242,9 +15334,9 @@
       }
       await this._d(this.T.hand);
     }
-    /** 重置为一局全新东风战（分数归位、局号/本场/庄家清零）。
-     *  注意：终局【不】走这里——真实服终局后引擎就停了，新一场是重新匹配出来的新房间、
-     *  由 20403 链路 new 一个 GameEngine（见 finishHand 的注释）。此方法仅留给外部复用。 */
+    /** Reset to a brand-new East-wind match (scores restored, hand/honba/dealer counters cleared).
+     *  Note: the end of the match does NOT go through here: the real server stops the engine after the final hand, and a new match is a newly matched room
+     *  that creates a new GameEngine through the 20403 chain (see the comment in finishHand). This method is kept only for external reuse. */
     resetMatch() {
       this.scores = new Array(this.playersN).fill(this.startScore);
       this.handIndex = 0;
@@ -15260,20 +15352,22 @@
     }
     aiTurn(seat, drew, can, cantPlays = []) {
       const level = this.aiLevelOf(seat);
-      if (level === "basic") return this.aiTurnBasic(seat, drew, can, cantPlays);
       const p = this.players[seat];
       if (can.includes(PlayAction.Hu)) return { action: PlayAction.Hu, card: p.drawnTile };
+      const budget = createDecisionBudget();
       const danger = this.dangerKinds(seat);
       if (can.includes(PlayAction.BaBei)) {
         const north = this.northInHand(p);
-        if (north != null) return { action: PlayAction.BaBei, card: north };
+        if (north != null && (p.riichi || handShanten(p.hand.filter((tile) => tile !== north), p.melds) <= this.currentShanten(p))) {
+          return { action: PlayAction.BaBei, card: north };
+        }
       }
       if (can.includes(PlayAction.Riichi)) {
-        const decision = riichiPolicy(this, seat, this.formalTenpaiDiscards(p), level);
+        const decision = riichiPolicy(this, seat, this.formalTenpaiDiscards(p), level, budget);
         if (decision?.action === "riichi") return { action: PlayAction.Riichi, card: decision.card };
         if (decision?.action === "dama") return { action: PlayAction.Normal, card: decision.card };
       }
-      const kanOk = (can.includes(PlayAction.AnGang) || can.includes(PlayAction.PengGang)) && this.aiWantsKan(p, danger) && !shouldFoldHand(this, seat, level);
+      const kanOk = (can.includes(PlayAction.AnGang) || can.includes(PlayAction.PengGang)) && this.aiWantsKan(p, danger) && !shouldFoldHand(this, seat, level, budget);
       if (kanOk && can.includes(PlayAction.AnGang)) {
         return { action: PlayAction.AnGang, card: this.concealedQuadTile(p) };
       }
@@ -15284,37 +15378,7 @@
       if (p.riichi && p.riichiTurn !== this.xunNum) {
         return { action: PlayAction.Normal, card: this.bestDiscard(p, { forbiddenKinds, forced: p.drawnTile }).discardId };
       }
-      const best = chooseDiscardByPolicy(this, seat, { forbiddenKinds, level });
-      return { action: PlayAction.Normal, card: best.discardId };
-    }
-    aiTurnBasic(seat, drew, can, cantPlays = []) {
-      const p = this.players[seat];
-      if (can.includes(PlayAction.Hu)) return { action: PlayAction.Hu, card: p.drawnTile };
-      const danger = this.dangerKinds(seat);
-      if (can.includes(PlayAction.BaBei)) {
-        const north = this.northInHand(p);
-        if (north != null) return { action: PlayAction.BaBei, card: north };
-      }
-      if (can.includes(PlayAction.Riichi)) {
-        const decision = this.riichiDecision(p, danger);
-        if (decision) return decision;
-      }
-      if (can.includes(PlayAction.AnGang) && this.aiWantsKan(p, danger)) {
-        return { action: PlayAction.AnGang, card: this.concealedQuadTile(p) };
-      }
-      if (can.includes(PlayAction.PengGang) && this.aiWantsKan(p, danger)) {
-        return { action: PlayAction.PengGang, card: this.addedKanTile(p) };
-      }
-      const currentShanten = this.currentShanten(p);
-      const fold = this.aiShouldFold(p, currentShanten, danger);
-      const best = this.bestDiscard(p, {
-        forbiddenKinds: new Set(cantPlays.map((value) => Math.floor(value / 10))),
-        dangerKinds: danger,
-        dangerWeight: fold ? 22 : currentShanten <= 1 ? 4 : 8,
-        maxShantenLoss: fold ? currentShanten >= 3 ? 2 : 1 : 0,
-        shantenLossPenalty: fold ? 90 : 260,
-        forced: p.riichi && p.riichiTurn !== this.xunNum ? p.drawnTile : null
-      });
+      const best = chooseDiscardByPolicy(this, seat, { forbiddenKinds, level, budget });
       return { action: PlayAction.Normal, card: best.discardId };
     }
     dangerKinds(seat) {
@@ -15358,48 +15422,6 @@
       }
       return { threats: threats.length, safe, risky, riskByKind };
     }
-    aiShouldFold(p, shanten, danger) {
-      if (!danger) return false;
-      const ranks = this.players.map((player) => player.score).sort((a, b) => b - a);
-      const leading = p.score === ranks[0];
-      const allLast = this.isAllLast();
-      if (allLast && !leading) return shanten >= 3;
-      if (allLast && leading) return shanten >= 1;
-      const dora = p.hand.filter((tile) => this.doraKinds().has(kindOf2(tile)) || this.akaSet.has(tile)).length;
-      if (shanten >= 3) return true;
-      if (shanten === 2 && dora < 2) return true;
-      return shanten === 1 && danger.threats > 1 && dora === 0;
-    }
-    riichiDecision(p, danger) {
-      const discardKinds = this.formalTenpaiDiscards(p);
-      let best = null;
-      const remainOf = this.remainOfFor(p);
-      for (const kind of discardKinds) {
-        const card = p.hand.find((tile) => kindOf2(tile) === kind && !this.akaSet.has(tile)) ?? p.hand.find((tile) => kindOf2(tile) === kind);
-        const hand = p.hand.slice();
-        hand.splice(hand.indexOf(card), 1);
-        const waits = handWaits(hand, p.melds, remainOf);
-        let damaYaku = false;
-        for (const wait of waits.waits) {
-          if (calcWin(hand, p.melds, this.akaSet, this.winOpts(p, true, wait)).hasYaku) {
-            damaYaku = true;
-            break;
-          }
-        }
-        const candidate = { card, ukeire: waits.ukeire, waitCount: waits.waitKinds.length, damaYaku };
-        if (!best || candidate.ukeire > best.ukeire || candidate.ukeire === best.ukeire && candidate.waitCount > best.waitCount || candidate.ukeire === best.ukeire && candidate.waitCount === best.waitCount && candidate.card < best.card) best = candidate;
-      }
-      if (!best) return null;
-      const scores = this.players.map((player) => player.score);
-      const leading = p.score === Math.max(...scores);
-      const lead = p.score - Math.max(...scores.filter((_, seat) => seat !== p.seat));
-      const badWait = best.ukeire <= 2 || best.waitCount === 1 && best.ukeire <= 3;
-      if (best.damaYaku && (danger && badWait || this.isAllLast() && leading && lead >= 8e3)) {
-        return { action: PlayAction.Normal, card: best.card };
-      }
-      if (best.ukeire <= 0 && best.damaYaku) return { action: PlayAction.Normal, card: best.card };
-      return { action: PlayAction.Riichi, card: best.card };
-    }
     aiWantsKan(p, danger = null) {
       const scores = this.players.map((player) => player.score);
       const leading = p.score === Math.max(...scores);
@@ -15413,36 +15435,9 @@
       const p = this.players[seat];
       if (can.includes(PlayAction.Hu)) return { action: PlayAction.Hu };
       const level = this.aiLevelOf(seat);
-      if (level !== "basic") return this.aiClaimByPolicy(seat, card, can, level);
-      const current = this.currentShanten(p);
-      const danger = this.dangerKinds(seat);
-      if (this.aiShouldFold(p, current, danger)) return null;
-      if (can.includes(PlayAction.MingGang)) {
-        const after = this.shantenAfterClaim(p, card, "pon");
-        if (after <= current && this.worthOpening(p, card, "kan") && this.aiWantsKan(p, danger)) {
-          return { action: PlayAction.MingGang, otherCards: this.previewTiles(p, card, 3) };
-        }
-      }
-      if (can.includes(PlayAction.Peng)) {
-        const after = this.shantenAfterClaim(p, card, "pon");
-        if (after < current && this.worthOpening(p, card, "pon")) {
-          return { action: PlayAction.Peng, otherCards: this.previewTiles(p, card, 2) };
-        }
-      }
-      if (can.includes(PlayAction.Chi)) {
-        let best = null;
-        for (const option of this.chiOptions(p, card)) {
-          const after = this.shantenAfterClaim(p, card, "chi", option);
-          const candidate = { option, after };
-          if (!best || candidate.after < best.after || candidate.after === best.after && candidate.option.join() < best.option.join()) best = candidate;
-        }
-        if (best && best.after < current && this.worthOpening(p, card, "chi", best.option)) {
-          return { action: PlayAction.Chi, otherCards: best.option };
-        }
-      }
-      return null;
+      return this.aiClaimByPolicy(seat, card, can, level);
     }
-    // 中级/高级：吃、碰、大明杠与跳过按同一期望值模型比较；开门仍须有明确成役路线。
+    // All levels compare chii, pon, open kan and skip with the same EV model; opening still requires a clear yaku route.
     aiClaimByPolicy(seat, card, can, level) {
       const p = this.players[seat];
       const danger = this.dangerKinds(seat);
@@ -15460,7 +15455,7 @@
           options.push({ action: PlayAction.Chi, type: "chi", used, forbiddenKinds: this.kuikaeKinds(PlayAction.Chi, [...used, card], card) });
         }
       }
-      const choice = claimPolicy(this, seat, card, options, level);
+      const choice = claimPolicy(this, seat, card, options, level, createDecisionBudget());
       return choice ? { action: choice.action, otherCards: choice.used } : null;
     }
     currentShanten(p) {
@@ -15543,11 +15538,11 @@
       }
       return out;
     }
-    // ================= 人类输入 =================
-    // 注意竞态：awaitTurn 先 emit(NtfSendCard) 再 await waitHuman('draw') 设置 _pending。
-    // 客户端在收到 NtfSendCard 的瞬间就可能调用 submitDraw，此时 _pending 尚未就绪，
-    // 直接调用会成 no-op 导致引擎永久等待。因此 submitDraw/submitClaim 在未就绪时
-    // 缓存请求，waitHuman 进入等待时立即消费缓冲，避免死锁。
+    // ================= Human input =================
+    // Race condition: awaitTurn emits NtfSendCard first, then awaits waitHuman('draw') to set _pending.
+    // The client may call submitDraw the instant it receives NtfSendCard, when _pending is not yet ready,
+    // and a direct call would become a no-op and the engine would wait forever. So submitDraw/submitClaim cache the request when not ready,
+    // and waitHuman consumes the buffer immediately upon entering the wait, to avoid a deadlock.
     setInternalState(values) {
       for (const [key, value] of Object.entries(values || {})) {
         const state = Number(key);
@@ -15663,7 +15658,7 @@
       this._pending = null;
       resolve({});
     }
-    // 调试快照
+    // Debug snapshot
     snapshot() {
       return {
         ju: this.juNum,
@@ -18560,7 +18555,7 @@
     const state = {
       row,
       lastRefresh: Number(d[2] || 0),
-      // 对照 GetRefreshShopCount/FreeRefreshShopCount：f4 为总次数，f6 为免费额度。
+      // Corresponds to GetRefreshShopCount/FreeRefreshShopCount: f4 is the total count, f6 the free allowance.
       refreshCount: Number(d[4] || 0),
       freeAllowance: Number(d[6] || 0),
       items: P().parse(row).filter(([n, w]) => n === 1 && w === 2).map(([, , bytes]) => {
@@ -18949,18 +18944,18 @@
         startScore: opts.startScore != null ? opts.startScore : opts.players === 3 ? 35e3 : 25e3,
         matchLength: opts.matchLength === "hanchan" ? "hanchan" : "east",
         maxHands: opts.maxHands != null ? opts.maxHands : opts.matchLength === "hanchan" ? 64 : 32,
-        // AI 思考延迟倍率。0 = 瞬间（自测用），1 = 正常观感
+        // AI thinking-delay multiplier. 0 = instant (for self-tests), 1 = normal feel
         speed: opts.speed != null ? opts.speed : 1,
         seed: opts.seed,
         baseTime: opts.baseTime != null ? opts.baseTime : 5,
         extraTime: opts.extraTime != null ? opts.extraTime : 20,
         internalState: { ...opts.internalState || {} },
         autoHuman: opts.autoHuman != null ? opts.autoHuman : false,
-        // AI 难度：intermediate / advanced（由服务按房间决定）
+        // AI difficulty: intermediate / advanced (decided per room by the server)
         aiLevel: opts.aiLevel,
-        // 本人当前雀士好感度等级：结算面板只展示，不增减
+        // The current player's warrior affinity level: display only on the settlement panel, never changes it
         selfLoveLevel: opts.selfLoveLevel || 0,
-        // 座位 -> 真实 userID，必须与 20408/20014 下发的牌桌 uid 完全一致
+        // Seat → real userID; must exactly match the table uids sent in 20408/20014
         uids: opts.uids || null
       };
       this.onFrame = opts.onFrame || (() => {
@@ -18977,12 +18972,12 @@
       this.stopped = false;
       this.matchOver = false;
     }
-    /** 新连接尚未同步自动操作开关，不得继承旧页面的授权；不改存档或计时。 */
+    /** A new connection has not yet synced its auto-action toggles and must not inherit the old page's authorization; this does not change saves or timers. */
     resetClientSettings() {
       this.clientInternalState = {};
       if (this.engine) this.engine.setInternalState({ 1: false, 2: false, 3: false, 4: false, 5: false });
     }
-    /** 编码并回推一个服务端事件 */
+    /** Encode and push one server event back */
     send(ev, payload) {
       if (this.stopped) return;
       const name = MSG_NAME[ev];
@@ -18999,9 +18994,9 @@
       }
       this.onFrame(ev, bytes);
     }
-    /** 惰性创建引擎。一场（东风战）打完 = 本会话结束：引擎停、matchOver 置位，
-     *  之后【绝不】在同一会话里重建引擎——新一场必须由客户端重新走 20403 匹配，
-     *  server.js 的 20403 handler 会 stop 旧 session 并 new 一个新的 RiichiSession。 */
+    /** Lazily create the engine. When a match (East-wind game) ends, the session is over: the engine stops and matchOver is set,
+     *  and the engine must NEVER be rebuilt in the same session afterwards: a new match must be re-matched by the client via 20403,
+     *  and server.js's 20403 handler stops the old session and creates a new RiichiSession. */
     ensureEngine() {
       if (this.matchOver) return null;
       if (this.engine) return this.engine;
@@ -19023,7 +19018,7 @@
         aiLevel: o.aiLevel,
         selfLoveLevel: o.selfLoveLevel,
         onFinalResult: (scores, engine, humanWin) => this.onFinalResult(scores, engine, humanWin),
-        // false=0号位真人，true=AI代打（测试用）
+        // false = human at seat 0, true = AI plays for them (for testing)
         emit: (ev, payload) => this.send(ev, payload),
         onFinish: (scores) => {
           this.matchOver = true;
@@ -19036,7 +19031,7 @@
       eng.start().catch((e) => this.log("[riichi] \u5F15\u64CE\u5F02\u5E38: " + (e && e.stack || e)));
       return eng;
     }
-    /** 处理一条客户端上行的内层消息 */
+    /** Handle one inner message uplinked by the client */
     handleClient(msgType, innerBytes) {
       if (this.matchOver) {
         if (!this._mutedLogged) {
@@ -19095,7 +19090,7 @@
           this.log("[riichi] \u672A\u5904\u7406\u7684\u5BA2\u6237\u7AEF\u6D88\u606F mt=" + msgType);
       }
     }
-    /** 断线重连快照：本手缓存帧 [ev, bytes][] 折叠成 Offline2OnlineGameScene 字节；不能安全恢复时返回 null。 */
+    /** Reconnect snapshot: fold this hand's cached frames [ev, bytes][] into Offline2OnlineGameScene bytes; return null if it cannot be restored safely. */
     reloadScene(frames) {
       if (!this.engine || this.matchOver) return null;
       try {
@@ -19106,7 +19101,7 @@
         return null;
       }
     }
-    /** 连接断开：让引擎自然停下并不再回推 */
+    /** Connection dropped: let the engine stop naturally and stop pushing */
     stop() {
       this.stopped = true;
       const eng = this.engine;

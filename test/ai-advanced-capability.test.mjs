@@ -1,5 +1,5 @@
-// 高级 AI 能力固定用例：读牌防守、押引、追立直、立直/默听与改良、振听感知、顺位效用、
-// 杠的押引门控；同时验证只读可见信息、确定性与耗时预算。
+// Fixed cases for advanced AI capabilities: reading-based defense, pot odds, chasing riichi, riichi/dama and improvement, furiten awareness, seat utility,
+// pot-odds gating of kans; also verifies read-only visible information, determinism and the time budget.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { performance } from 'node:perf_hooks';
@@ -44,7 +44,7 @@ function makeEngine(players, opts = {}) {
   return engine;
 }
 
-// 公开弃牌：写入牌河与公开日志（第 4 枚实体，避免与手牌冲突）。
+// Public discard: written to the river and the public log (the 4th physical copy, to avoid conflicting with the hand).
 function discard(engine, seat, kind, { riichi = false, tsumogiri = false } = {}) {
   const p = engine.players[seat];
   p.discards.push(tileId(Math.floor(kind / 10), kind % 10, 4));
@@ -67,9 +67,9 @@ test('读牌：现物与立直后通过牌为零风险，筋/壁/字牌见张降
   discard(engine, 1, 41);
   discard(engine, 1, 14);
   discard(engine, 1, 29, { riichi: true });
-  discard(engine, 2, 26); // 立直后他家打出、立直者未荣和：同样安全
+  discard(engine, 2, 26); // After riichi, the opponent discards and the riichi player does not ron: equally safe
   const read = readThreats(engine, 0, () => 3);
-  // 只看立直者的命中率（其他门清家各有极小听牌概率）。
+  // Only looks at the riichi player's hit rate (other menzen players each have a tiny tenpai probability).
   const loss = read.threats.find((t) => t.seat === 1).hit;
   assert.equal(loss[idx(14)], 0, '现物');
   assert.equal(loss[idx(29)], 0, '现物');
@@ -77,7 +77,7 @@ test('读牌：现物与立直后通过牌为零风险，筋/壁/字牌见张降
   assert.ok(loss[idx(17)] < loss[idx(15)], '4m 的筋 7m 比无筋 5m 安全');
   assert.ok(loss[idx(11)] < loss[idx(15)], '筋 1m 比 5m 安全');
   assert.ok(loss[idx(23)] < loss[idx(22)], '6p 通过后其筋 3p 比 2p 安全');
-  // 字牌：见张越多越安全。
+  // Honor tiles: the more visible copies, the safer.
   const hitOf = (r) => r.threats.find((t) => t.seat === 1).hit[idx(45)];
   const one = hitOf(readThreats(engine, 0, (i) => (i === idx(45) ? 1 : 3)));
   const three = hitOf(readThreats(engine, 0, () => 3));
@@ -137,7 +137,7 @@ test('高级：一向听且宝牌多时面对立直继续进攻', () => {
 });
 
 test('高级：进攻时效率相同则打更安全的牌', () => {
-  // 孤张 5s 与 1s 效率相近；1s 是立直者现物。
+  // An isolated 5s and 1s are of similar efficiency; 1s is the riichi player's genbutsu.
   const hand = makeTiles([
     [1, [1, 2, 3, 5, 6, 7]],
     [2, [2, 3, 4, 7, 8]],
@@ -152,7 +152,7 @@ test('高级：进攻时效率相同则打更安全的牌', () => {
 });
 
 test('高级：好型高打点听牌追立直，不因先制立直弃和', () => {
-  // 234m 567m 345p 66s 78s + 宝牌 5m：听 69s 两面。
+  // 234m 567m 345p 66s 78s + dora 5m: waits on 69s ryanmen.
   const hand = makeTiles([
     [1, [2, 3, 4, 5, 6, 7]],
     [2, [3, 4, 5]],
@@ -170,7 +170,7 @@ test('高级：好型高打点听牌追立直，不因先制立直弃和', () =>
 });
 
 test('高级：门清早巡听牌立直（无役嵌张与两面平和都立直，不默听等改良）', () => {
-  // 123m 567p 789s 99p + 24m/34m + 6s：打 6s 分别听 3m 嵌张（无役）、2-5m 两面（平和）。
+  // 123m 567p 789s 99p + 24m/34m + 6s: discarding 6s waits on 3m kanchan (no yaku) or 2-5m ryanmen (pinfu) respectively.
   for (const ranks of [[1, 2, 3, 2, 4], [1, 2, 3, 3, 4]]) {
     const hand = makeTiles([[1, ranks], [2, [5, 6, 7, 9, 9]], [3, [7, 8, 9]], [3, [6]]]);
     const players = [makePlayer(0, hand), makePlayer(1), makePlayer(2), makePlayer(3)];
@@ -182,7 +182,7 @@ test('高级：门清早巡听牌立直（无役嵌张与两面平和都立直�
 });
 
 test('高级：振听听牌只计自摸，荣和受入为 0；打出待牌本身也构成振听', () => {
-  // 234m 678m 345p 55s 67s：听 5s/8s。
+  // 234m 678m 345p 55s 67s: waits on 5s / 8s.
   const hand = makeTiles([[1, [2, 3, 4, 6, 7, 8]], [2, [3, 4, 5]], [3, [5, 5, 6, 7]]]);
   const players = [makePlayer(0, hand), makePlayer(1), makePlayer(2), makePlayer(3)];
   const engine = makeEngine(players);
@@ -197,7 +197,7 @@ test('高级：振听听牌只计自摸，荣和受入为 0；打出待牌本身
 });
 
 test('高级：同枚数待牌中，字牌单骑比中张单骑荣和权重更高', () => {
-  // 123m 456m 789p 234s + 单骑：白 vs 6s。
+  // 123m 456m 789p 234s + tanki: white vs 6s.
   const base = [[1, [1, 2, 3, 4, 5, 6]], [2, [7, 8, 9]], [3, [2, 3, 4]]];
   const honor = makeTiles([...base, [4, [5]]]);
   const middle = makeTiles([...base, [3, [6]]]);
@@ -240,10 +240,7 @@ test('高级：面对威胁的决策确定、不读隐藏信息、耗时在 1 �
   players[2].melds = [{ type: 'pon', tiles: [tileId(4, 5, 1), tileId(4, 5, 2), tileId(4, 5, 3)] }];
   players[2].menzen = false;
   const evaluate = () => engine.aiTurn(0, true, [PlayAction.Normal]);
-  const start = performance.now();
-  const expected = evaluate();
-  const elapsed = performance.now() - start;
-  assert.ok(elapsed < 1_000, `高级决策耗时 ${elapsed.toFixed(1)}ms`);
+  // The trap is installed before the first evaluation: even the first evaluation must not read hidden fields.
   const denyRead = (object, key) => Object.defineProperty(object, key, {
     get() { assert.fail(`AI 读取了隐藏字段 ${key}`); },
   });
@@ -251,5 +248,9 @@ test('高级：面对威胁的决策确定、不读隐藏信息、耗时在 1 �
     for (const key of ['hand', 'drawnTile', 'waits', 'waitTiles', 'shanten']) denyRead(opponent, key);
   }
   for (const key of ['wall', 'replacements', 'uraIndicators']) denyRead(engine, key);
+  const start = performance.now();
+  const expected = evaluate();
+  const elapsed = performance.now() - start;
+  assert.ok(elapsed < 1_000, `高级决策耗时 ${elapsed.toFixed(1)}ms`);
   for (let i = 0; i < 5; i++) assert.deepEqual(evaluate(), expected);
 });

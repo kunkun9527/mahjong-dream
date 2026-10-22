@@ -37,18 +37,18 @@ var RiichiSession = class {
       startScore: opts.startScore != null ? opts.startScore : opts.players === 3 ? 35e3 : 25e3,
       matchLength: opts.matchLength === "hanchan" ? "hanchan" : "east",
       maxHands: opts.maxHands != null ? opts.maxHands : opts.matchLength === "hanchan" ? 64 : 32,
-      // AI 思考延迟倍率。0 = 瞬间（自测用），1 = 正常观感
+      // AI thinking-delay multiplier. 0 = instant (for self-tests), 1 = normal feel
       speed: opts.speed != null ? opts.speed : 1,
       seed: opts.seed,
       baseTime: opts.baseTime != null ? opts.baseTime : 5,
       extraTime: opts.extraTime != null ? opts.extraTime : 20,
       internalState: { ...(opts.internalState || {}) },
       autoHuman: opts.autoHuman != null ? opts.autoHuman : false,
-      // AI 难度：intermediate / advanced（由服务按房间决定）
+      // AI difficulty: intermediate / advanced (decided per room by the server)
       aiLevel: opts.aiLevel,
-      // 本人当前雀士好感度等级：结算面板只展示，不增减
+      // The current player's warrior affinity level: display only on the settlement panel, never changes it
       selfLoveLevel: opts.selfLoveLevel || 0,
-      // 座位 -> 真实 userID，必须与 20408/20014 下发的牌桌 uid 完全一致
+      // Seat → real userID; must exactly match the table uids sent in 20408/20014
       uids: opts.uids || null
     };
     this.onFrame = opts.onFrame || (() => {
@@ -60,19 +60,19 @@ var RiichiSession = class {
     });
     this.log = opts.log || (() => {
     });
-    // 存档/上一场缓存没有通过开局协议同步到 Unity，不能作为当前 UI 的自动操作授权。
-    // 仅本次客户端 ReqSetInternalState 明确提交的项可用于自动和牌/不鸣/摸切。
+    // The saved / previous-match cache was not synced to Unity through the start-of-match protocol, so it cannot authorize automatic actions in the current UI.
+    // Only items explicitly submitted by the client's ReqSetInternalState in this session may be used for auto win / no-call / tsumogiri.
     this.clientInternalState = {};
     this.engine = null;
     this.stopped = false;
     this.matchOver = false;
   }
-  /** 新连接尚未同步自动操作开关，不得继承旧页面的授权；不改存档或计时。 */
+  /** A new connection has not yet synced its auto-action toggles and must not inherit the old page's authorization; this does not change saves or timers. */
   resetClientSettings() {
     this.clientInternalState = {};
     if (this.engine) this.engine.setInternalState({ 1: false, 2: false, 3: false, 4: false, 5: false });
   }
-  /** 编码并回推一个服务端事件 */
+  /** Encode and push one server event back */
   send(ev, payload) {
     if (this.stopped) return;
     const name = MSG_NAME[ev];
@@ -89,9 +89,9 @@ var RiichiSession = class {
     }
     this.onFrame(ev, bytes);
   }
-  /** 惰性创建引擎。一场（东风战）打完 = 本会话结束：引擎停、matchOver 置位，
-   *  之后【绝不】在同一会话里重建引擎——新一场必须由客户端重新走 20403 匹配，
-   *  server.js 的 20403 handler 会 stop 旧 session 并 new 一个新的 RiichiSession。 */
+  /** Lazily create the engine. When a match (East-wind game) ends, the session is over: the engine stops and matchOver is set,
+   *  and the engine must NEVER be rebuilt in the same session afterwards: a new match must be re-matched by the client via 20403,
+   *  and server.js's 20403 handler stops the old session and creates a new RiichiSession. */
   ensureEngine() {
     if (this.matchOver) return null;
     if (this.engine) return this.engine;
@@ -113,7 +113,7 @@ var RiichiSession = class {
       aiLevel: o.aiLevel,
       selfLoveLevel: o.selfLoveLevel,
       onFinalResult: (scores, engine, humanWin) => this.onFinalResult(scores, engine, humanWin),
-      // false=0号位真人，true=AI代打（测试用）
+      // false = human at seat 0, true = AI plays for them (for testing)
       emit: (ev, payload) => this.send(ev, payload),
       onFinish: (scores) => {
         this.matchOver = true;
@@ -126,7 +126,7 @@ var RiichiSession = class {
     eng.start().catch((e) => this.log("[riichi] \u5F15\u64CE\u5F02\u5E38: " + (e && e.stack || e)));
     return eng;
   }
-  /** 处理一条客户端上行的内层消息 */
+  /** Handle one inner message uplinked by the client */
   handleClient(msgType, innerBytes) {
     if (this.matchOver) {
       if (!this._mutedLogged) {
@@ -185,7 +185,7 @@ var RiichiSession = class {
         this.log("[riichi] \u672A\u5904\u7406\u7684\u5BA2\u6237\u7AEF\u6D88\u606F mt=" + msgType);
     }
   }
-  /** 断线重连快照：本手缓存帧 [ev, bytes][] 折叠成 Offline2OnlineGameScene 字节；不能安全恢复时返回 null。 */
+  /** Reconnect snapshot: fold this hand's cached frames [ev, bytes][] into Offline2OnlineGameScene bytes; return null if it cannot be restored safely. */
   reloadScene(frames) {
     if (!this.engine || this.matchOver) return null;
     try {
@@ -196,7 +196,7 @@ var RiichiSession = class {
       return null;
     }
   }
-  /** 连接断开：让引擎自然停下并不再回推 */
+  /** Connection dropped: let the engine stop naturally and stop pushing */
   stop() {
     this.stopped = true;
     const eng = this.engine;

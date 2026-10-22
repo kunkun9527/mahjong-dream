@@ -31,6 +31,7 @@
 - **Max Affection (Lv.6 MAX)**: All characters are set to maximum affection level (Lv.6 MAX) with awakening completed. Match settlement panels properly display Lv.6 MAX instead of Lv.0.
 - **Full Cosmetic Collection**: All 19 avatars (DT11 series), titles, riichi sticks, table cloths, tile faces, tile backs, riichi BGM, and win animations are unlocked in your bag.
 - **Offline Economy & Shops**: Pre-loaded with abundant coins and dream stones. Four offline shops (General Store, Recruitment Shop, Honor Shop, and 8-slot Daily Coin Shop) are functional with atomic local persistence.
+- **Quiet Lobby**: Sign-in, new-player gift, month-card, and activity promotions do not open automatically on login. Match results, One-Round payouts, and working shop purchase feedback remain available.
 - **Offline Safety Guards**: Lobby buttons for online-only features (Friends, Gacha, Guild, Tournaments) display a native toast prompt: *"Feature not available in offline mode"*, preventing crashes or deadlocks.
 
 ---
@@ -55,12 +56,13 @@
 
 ### AI Engine & Fair Play
 
-- **Intermediate AI**: Powers Novice, Adept, Master rooms, and One-Round mode.
+- **Basic AI**: Powers Novice (启航) and Adept (逐梦) rooms. Uses the shared legal-action, tile-efficiency, hand-value, and basic defensive evaluator, without wait-quality refinement, placement adjustments, or lookahead search.
+- **Intermediate AI**: Powers Master (乘风) and One-Round modes; also the default difficulty.
   - Driven by an Expected Value (EV) evaluation model incorporating shanten, effective tile count (ukeire), hand value potential, defensive discard risks (Genbutsu, Suji, Kabe), and push/fold positioning.
   - Chii, Pon, and Open Kan choices are evaluated directly against the EV of skipping to prevent opening hands without a clear yaku.
 - **Advanced AI**: Powers the Throne (御龙) room.
   - Enhances intermediate evaluation with a bounded-budget 1-shanten and tenpai search, projecting exact yaku and scoring values.
-  - Reads opponents from public information only: discard order, tsumogiri, riichi and melds feed per-player tenpai probability, wait-shape danger and hand-value estimates (furiten-safe tiles, flush/toitoi signals). All Last uses placement utility; 2-shanten hands use second-order tile efficiency. In self-play benchmarks it scores +452 points per game against intermediate in 4P (see [ADR 0006](docs/adr/0006-riichi-ai-levels.md)).
+  - Reads opponents from public information only: discard order, tsumogiri, riichi and melds feed per-player tenpai probability, wait-shape danger and hand-value estimates (furiten-safe tiles, flush/toitoi signals). All Last uses placement utility; 2-shanten hands use second-order tile efficiency. The tiers differ by available analysis, not deliberate mistakes. Their win-rate ordering has not yet been established; see [ADR 0006](docs/adr/0006-riichi-ai-levels.md).
 - **100% Fair Play**: The AI only examines its own hand and public discard/meld information. It never peeks at the wall, hidden tiles, or ura-dora. Matches with fixed seeds are completely deterministic and reproducible.
 
 ---
@@ -130,7 +132,7 @@ npm install
 # Run static syntax checks
 npm run check
 
-# Run the automated regression test suite (360 tests)
+# Run the automated regression test suite
 npm test
 
 # Rebuild client runtime (source in mockjs/, output in mock/riichi.js)

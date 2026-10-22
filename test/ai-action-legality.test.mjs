@@ -50,12 +50,14 @@ function engineWith(players, opts = {}) {
 test('AI 明杠提交三张实体牌并可通过 resolveClaims 执行', async () => {
   const players = [
     player(0),
-    player(1, [111, 112, 113, 211, 212, 213, 221, 222, 223, 231, 232, 233, 241]),
+    player(1, [111, 112, 113, 211, 221, 231, 361, 371, 351, 352]),
     player(2),
     player(3),
   ];
   players[0].discards.push(114);
-  // 门清听牌时中级/高级会放弃大明杠（见 ai-levels 测试）；这里只验证旧规则式路径提交的实体牌。
+  // An open yakuhai hand keeps a valid yaku after the kan in every tier.
+  players[1].melds = [{ type: 'pon', tiles: [451, 452, 453], from: 2 }];
+  players[1].menzen = false;
   const engine = engineWith(players, { aiLevel: 'basic' });
   engine.lastDiscard = { seat: 0, card: 114 };
   const actions = engine.claimActions(1, 0, 114);
@@ -72,7 +74,10 @@ test('AI 明杠提交三张实体牌并可通过 resolveClaims 执行', async ()
   await engine.resolveClaims(0, 114, [[], actions, [], []]);
 
   assert.equal(awaitedSeat, 1);
-  assert.deepEqual(players[1].melds, [{ type: 'kan', tiles: [111, 112, 113, 114], from: 0 }]);
+  assert.deepEqual(players[1].melds, [
+    { type: 'pon', tiles: [451, 452, 453], from: 2 },
+    { type: 'kan', tiles: [111, 112, 113, 114], from: 0 },
+  ]);
   assert.equal(players[0].discards.length, 0);
 });
 

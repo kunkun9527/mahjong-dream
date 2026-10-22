@@ -2,15 +2,15 @@ import assert from 'node:assert/strict';
 import { buildWall } from '../../mockjs/tiles.mjs';
 import { Result } from '../../mockjs/proto_enum.mjs';
 
-// deadWall 是初始化时的索引表，不是独立所有权区：前段与 replacements
-// 重叠，后十张才是宝牌区。补牌时移出的牌山尾牌由观察器逐张记账。
+// deadWall is an index table set at initialization, not an independent ownership zone: its front section overlaps with the replacements,
+// and only the last ten tiles are the dora zone. Wall-tail tiles removed when replacing draws are tracked one by one by the observer.
 export function assertInvariants(engine, { sealed = [], winningCard = null, scores = null, expectedActor, label = '' } = {}) {
   const legal = new Set(buildWall({ sanma: engine.sanma }).tiles);
   const rinLen = engine.sanma ? 8 : 4;
   const zones = engine.players.flatMap((p) => [
     ...p.hand, ...p.discards, ...p.melds.flatMap((meld) => meld.tiles),
   ]).concat(engine.wall, engine.replacements, engine.deadWall.slice(rinLen), sealed);
-  // 荣和不复制赢家手牌；抢杠/抢北成功的牌在结算参数中，普通荣和仍在牌河。
+  // Ron does not copy the winner's hand; a tile won by robbing a kan / North pull is in the settlement parameters, while an ordinary ron still sits in the river.
   if (winningCard != null && !zones.includes(winningCard)) zones.push(winningCard);
   assert.equal(new Set(zones).size, zones.length, `实体牌重复：${label}`);
   assert.ok(zones.every((id) => legal.has(id)), `非法实体牌：${label}`);
@@ -47,8 +47,8 @@ export function assertInvariants(engine, { sealed = [], winningCard = null, scor
   }
 }
 
-// 不使用 engine.snapshot()（它省略大量权威字段）。函数和计时器是运行时句柄，
-// 快照保留等待种类/起点/是否有计时器，其余所有自身数据字段均深拷贝。
+// Does not use engine.snapshot() (it omits many authoritative fields). Functions and timers are runtime handles;
+// the snapshot keeps the wait kind / start point / whether a timer exists, and all other own data fields are deep-copied.
 export function stateSnapshot(engine) {
   const state = Object.fromEntries(Object.entries(engine).filter(([key, value]) =>
     typeof value !== 'function' && key !== '_pending'));
@@ -73,8 +73,8 @@ export function assertRejectedUnchanged(engine, method, payload, expectedResult)
   return result;
 }
 
-// 仅包装实例方法，不改牌山、AI、返回值、时序或引擎原型。递归异步动作的
-// 最外层返回已是整局结束，所以同时在下一个阶段的入口检查刚刚提交的状态。
+// Wraps only instance methods; does not change the wall, AI, return values, timing or the engine prototype. The outermost return of a recursive async action
+// is already the end of the whole hand, so the just-committed state is also checked at the entry of the next phase.
 export function observeCommits(engine) {
   const counts = new Map();
   let context = {};
@@ -98,8 +98,8 @@ export function observeCommits(engine) {
         check('发牌提交');
       }
       if (name === 'endHand') context.winningCard = args[0].type === 'ron' ? args[0].card : null;
-      // 结算在局部 scores 上原子计算；players.score 是本手起始缓存，
-      // this.scores 到 finishHand 才提交，不能把两本不同时刻的账混加。
+      // Settlement is computed atomically on local scores; players.score is the cache at the start of this hand,
+      // and this.scores is committed only at finishHand, so accounts from two different moments must not be added together.
       if (['prepareFinalResult', 'buildStopUserInfos'].includes(name)) context.scores = args[0];
       if (name === 'finishHand') context.scores = args[2];
       if (entry.has(name)) check(`${name}:入口提交`,

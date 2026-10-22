@@ -36,7 +36,7 @@ function setup(kind, multiRon = false) {
   const reserved = new Set(engine.players.flatMap((p) => p.hand.concat(p.melds.flatMap((m) => m.tiles))));
   const { tiles } = buildWall({ sanma: isNorth });
   donor.hand.push(...tiles.filter((tile) => !reserved.has(tile)).slice(0, 14 - donor.melds.length * 3 - donor.hand.length));
-  donor.drawnTile = donor.hand.at(-1); // 也覆盖宣告的不是刚摸到的实体牌。
+  donor.drawnTile = donor.hand.at(-1); // Also covers the case where the declared tile is not the one just drawn.
   engine.akaSet = new Set();
   engine.doraIndicators = [];
   engine.uraIndicators = [];
@@ -46,7 +46,7 @@ function setup(kind, multiRon = false) {
   engine.kanCount = 0;
   engine.firstGoAround = false;
   engine.xunNum = 9;
-  engine.finishHand = async () => {}; // 保留真实结算与协议构建，只阻止开始下一局。
+  engine.finishHand = async () => {}; // Keeps the real settlement and protocol construction; only prevents the next hand from starting.
   for (const p of engine.players) engine.updateWaits(p);
   const physical = engine.players.flatMap((p) => p.hand.concat(p.melds.flatMap((m) => m.tiles)));
   assert.equal(new Set(physical).size, physical.length, '测试手牌不能重复实体牌');

@@ -1,19 +1,19 @@
-/* 无 schema 的 protobuf wire-format 编解码（pbdec.py / pbenc.py 的 JS 版）
+/* Schema-free protobuf wire-format encoder/decoder (JS port of pbdec.py / pbenc.py)
  *
- * 解析结果统一表示为三元组数组： [[fieldNumber, wireType, value], ...]
+ * Parse results are uniformly represented as triple arrays: [[fieldNumber, wireType, value], ...]
  *   wireType 0 (varint)  -> value: number
- *   wireType 1 (64bit)   -> value: number（小端读为无符号）
+ *   wireType 1 (64bit)   -> value: number (read as unsigned, little-endian)
  *   wireType 2 (bytes)   -> value: Uint8Array
  *   wireType 5 (32bit)   -> value: number
  *
- * 注意：JS 位运算是 32 位的，varint 超过 31 位必须用乘法累加。
+ * Note: JS bitwise ops are 32-bit, so varints over 31 bits must be accumulated with multiplication.
  */
 (function (global) {
   'use strict';
 
   var MJ = global.__mj || (global.__mj = {});
 
-  // ---------------------------------------------------------------- 解码
+  // ---------------------------------------------------------------- Decoding
   function numberIfSafe(value) {
     return value <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(value) : value;
   }
@@ -33,7 +33,7 @@
     throw new Error('varint 截断');
   }
 
-  /** 解析一段 protobuf，返回 [[fn, wt, value], ...]；失败抛异常。 */
+  /** Parse a protobuf buffer, returning [[fn, wt, value], ...]; throws on failure. */
   function parse(buf) {
     if (buf instanceof ArrayBuffer) buf = new Uint8Array(buf);
     var out = [];
@@ -76,14 +76,14 @@
     return out;
   }
 
-  /** 只取第一个匹配字段的值，没有则返回 undefined。 */
+  /** Return the value of the first matching field only; undefined if absent. */
   function get(buf, fn) {
     var fs = parse(buf);
     for (var i = 0; i < fs.length; i++) if (fs[i][0] === fn) return fs[i][2];
     return undefined;
   }
 
-  /** 转成 {fn: value} 字典（同名字段取最后一个）。 */
+  /** Convert to a {fn: value} dictionary (for repeated field names, the last one wins). */
   function dict(buf) {
     var d = {};
     var fs = parse(buf);
@@ -91,7 +91,7 @@
     return d;
   }
 
-  /** 解 packed varint 数组。 */
+  /** Decode a packed varint array. */
   function unpack(buf) {
     var out = [];
     var pos = 0;
@@ -103,7 +103,7 @@
     return out;
   }
 
-  // ---------------------------------------------------------------- 编码
+  // ---------------------------------------------------------------- Encoding
   function varintBytes(n) {
     n = typeof n === 'bigint' ? n : BigInt(Math.trunc(n));
     n = BigInt.asUintN(64, n);
@@ -116,7 +116,7 @@
     return out;
   }
 
-  /** 累积式写入器。 */
+  /** Accumulating writer. */
   function Writer() { this.parts = []; this.len = 0; }
   Writer.prototype.raw = function (arr) {
     this.parts.push(arr);
@@ -126,12 +126,12 @@
   Writer.prototype.tag = function (fn, wt) {
     return this.raw(varintBytes(fn * 8 + wt));
   };
-  /** varint 字段 */
+  /** varint field */
   Writer.prototype.v = function (fn, n) {
     this.tag(fn, 0);
     return this.raw(varintBytes(n));
   };
-  /** length-delimited 字段（bytes / 子消息 / string） */
+  /** length-delimited field (bytes / sub-message / string) */
   Writer.prototype.s = function (fn, val) {
     if (typeof val === 'string') val = utf8(val);
     if (val instanceof Writer) val = val.bytes();
@@ -154,7 +154,7 @@
     }
     return this.raw(out);
   };
-  /** packed repeated varint（即使单元素也用 packed，匹配原版 wire） */
+  /** Packed repeated varint (always packed, even for a single element, to match the original wire format) */
   Writer.prototype.packed = function (fn, list) {
     var body = [];
     for (var i = 0; i < list.length; i++) body = body.concat(varintBytes(list[i]));
@@ -176,7 +176,7 @@
 
   function W() { return new Writer(); }
 
-  /** 按原 wire type 重新编码一个字段（保序改写时用）。 */
+  /** Re-encode one field with its original wire type (used when rewriting while preserving order). */
   function reencode(w, fn, wt, val) {
     if (wt === 0) return w.v(fn, val);
     if (wt === 2) return w.s(fn, val);
@@ -185,7 +185,7 @@
     throw new Error('不支持的 wire type ' + wt);
   }
 
-  /** 把 blob 里字段 fn 的 varint 值改成 value（保持字段顺序），不存在则追加。 */
+  /** Change the varint value of field fn in blob to value (keeping field order); append it if absent. */
   function setVarint(blob, fn, value) {
     var w = W(), done = false;
     var fs = parse(blob);
@@ -199,7 +199,7 @@
     return w.bytes();
   }
 
-  /** 把 blob 里字段 fn 的 bytes 值改成 value（保持字段顺序），不存在则追加。 */
+  /** Change the bytes value of field fn in blob to value (keeping field order); append it if absent. */
   function setBytes(blob, fn, value) {
     var w = W(), done = false;
     var fs = parse(blob);
@@ -213,7 +213,7 @@
     return w.bytes();
   }
 
-  // ---------------------------------------------------------------- 工具
+  // ---------------------------------------------------------------- Utilities
   function utf8(str) {
     if (global.TextEncoder) return new TextEncoder().encode(str);
     var out = [];

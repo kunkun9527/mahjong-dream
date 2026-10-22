@@ -1,4 +1,4 @@
-// 初始补给与老档案升级共享一次性标记；不能在每次登录/查询时覆盖已消费余额。
+// The initial supply and the legacy save upgrade share a one-time marker; never overwrite an already-consumed balance on each login/query.
 export const OFFLINE_ECONOMY_VERSION = 1;
 export const INITIAL_LOCAL_COINS = 999_999;
 
@@ -9,7 +9,7 @@ export function initializeOfflineEconomy(profile, userData, config) {
     const after = id === config.coinId ? before * 100 : INITIAL_LOCAL_COINS;
     return { dtype: 6, id, count: after - before };
   });
-  // 背包先整体校验；若旧余额无法安全放大，不落下一半迁移或提前写版本标记。
+  // Validate the whole inventory first; if the old balance cannot be scaled safely, do not leave a half-applied migration or write the version marker early.
   userData.changeInventory(deltas);
   profile.coins = INITIAL_LOCAL_COINS;
   profile.ranks = {

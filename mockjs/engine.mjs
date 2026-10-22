@@ -1,6 +1,6 @@
 import { tileId, decodeId, toRiichi, doraFromIndicator, buildWall, shuffle, tileName } from './tiles.mjs';
 import { tileIndex, indexToTileId, countsOf, shantenOfCounts, waitsOfCounts, discardOptionsOfCounts } from './shanten.mjs';
-import { normalizeAiLevel, chooseDiscardByPolicy, shouldFoldHand, claimPolicy, riichiPolicy } from './riichi_ai_policy.mjs';
+import { normalizeAiLevel, chooseDiscardByPolicy, shouldFoldHand, claimPolicy, riichiPolicy, createDecisionBudget } from './riichi_ai_policy.mjs';
 import { kindOf, concealedStr, realMelds, furoGroupStr, furoStr, handStr, calcWin, handShanten, handWaits, chooseDiscard, pickIdFromHand, discardSecondaryScore } from './ai.mjs';
 import { Result, RiichiMsg, PlayAction, ManType, YiType, LiuJuType } from './proto_enum.mjs';
 import { mapYaku, manTypeFromResult } from './yaku_map.mjs';
@@ -27,7 +27,7 @@ var GameEngine = class {
     });
     this.autoHuman = !!opts.autoHuman;
     this.selfLoveLevel = Number(opts.selfLoveLevel) || 0;
-    // AI 难度：basic（旧启发式，仅供对照）/ intermediate / advanced；可按座位单独指定。
+    // Shared policy with progressively reduced analysis: basic / intermediate / advanced.
     const levels = Array.isArray(opts.aiLevels) ? opts.aiLevels : [];
     this.aiLevels = Array.from({ length: players }, (_, seat) => normalizeAiLevel(levels[seat] ?? opts.aiLevel));
     this.speed = opts.speed != null ? opts.speed : 1;
@@ -50,7 +50,7 @@ var GameEngine = class {
     this.scores = null;
     this.xunNum = 0;
     this._pending = null;
-    this._processing = false; // 动作执行中标记（防重复包重放）
+    this._processing = false; // Action-in-progress flag (prevents duplicate-packet replay)
     this._expectedDraw = null;
     this._expectedClaim = null;
     this._nextCantPlays = null;
@@ -69,19 +69,19 @@ var GameEngine = class {
   uidOf(seat) {
     return this.uids[seat];
   }
-  /** 客户端上行 ReqPrepare：解开 runHand 里的等待 */
+  /** Client uplink ReqPrepare: resolves the wait inside runHand */
   submitPrepare() {
     this._prepared = true;
     const w = this._prepareWaiter;
     this._prepareWaiter = null;
     if (w) w();
   }
-  /** 等客户端点「准备」。抓包规律（dongfeng1 完整包）：
-   *  局间（含连庄，isFinal=false）服务器先发 NtfToPrepare/NtfPrepare(机器人)，客户端发
-   *  ReqPrepare，服务器再发 NtfPrepare(自己)/NtfGameStart —— 每局等一次 ReqPrepare。
-   *  终局（isFinal=true）后引擎直接停，不存在“续场再等一次 ReqPrepare”的两段式握手；
-   *  新一场是重新匹配出的新房间、新引擎（见 finishHand）。
-   *  autoHuman（自测无客户端）直接跳过；真人模式留一个兜底超时防止卡死。 */
+  /** Wait for the client to press "ready". Capture pattern (dongfeng1 full packets):
+   *  Between hands (including renchan, isFinal=false) the server first sends NtfToPrepare/NtfPrepare (bots); the client sends
+   *  ReqPrepare, then the server sends NtfPrepare (self)/NtfGameStart: one ReqPrepare wait per hand.
+   *  After the final hand (isFinal=true) the engine simply stops; there is no two-step "continue and wait for ReqPrepare again" handshake;
+   *  a new match is a newly matched room with a new engine (see finishHand).
+   *  autoHuman (self-test, no client) skips directly; human mode keeps a fallback timeout to prevent a hang. */
   waitPrepare(timeoutMs = 15e3) {
     if (this.autoHuman) return Promise.resolve();
     if (this._prepared) {
@@ -107,11 +107,11 @@ var GameEngine = class {
   _d(ms) {
     return this.speed > 0 ? sleep(ms * this.speed) : Promise.resolve();
   }
-  // 各阶段延迟（毫秒，乘以 speed）
+  // Per-phase delays (ms, multiplied by speed)
   get T() {
     return { think: 550, claim: 350, step: 250, hand: 2500 };
   }
-  // ================= 入口 =================
+  // ================= Entry =================
   async start() {
     await this._d(400);
     while (!this.finished) {
@@ -119,7 +119,7 @@ var GameEngine = class {
     }
     if (this.onFinish) this.onFinish(this.scores);
   }
-  // ================= 一局 =================
+  // ================= One hand =================
   async runHand() {
     this.handEnded = false;
     this._expectedDraw = null;
@@ -129,18 +129,18 @@ var GameEngine = class {
     this.kanCount = 0;
     this.firstGoAround = true;
     this.lastDiscard = null;
-    // 公开牌河日志（含被鸣走的弃牌），只记牌种与公开属性，供 AI 读牌使用。
+    // Public discard log (including discards that were later called), recording only tile kinds and public attributes, for AI tile reading.
     this.discardLog = [];
     const { tiles, akaSet } = buildWall({ sanma: this.sanma, akaCount: this.akaCount });
     this.akaSet = akaSet;
     const wall = shuffle(tiles, this.rng);
-    // 王牌总数：四麻14张、三麻18张（三麻拔北规则需8张岭上牌，故王牌扩为18张，宝牌指示牌仍为5张）
+    // Dead-wall size: 14 tiles for 4-player, 18 for 3-player (3-player North pull needs 8 rinshan tiles, so the dead wall is expanded to 18; dora indicators remain 5)
     const deadLen = this.sanma ? 18 : 14;
     const dead = wall.splice(wall.length - deadLen, deadLen);
     this.deadWall = dead;
     const rinLen = this.sanma ? 8 : 4;
     this.replacements = dead.slice(0, rinLen);
-    // 初始宝牌指示牌位置：四麻 dead[4]；三麻前8张是岭上，故 dead[8]（两者均为5张宝牌指示牌，布局一致）
+    // Initial dora indicator position: 4-player dead[4]; in 3-player the first 8 are rinshan, so dead[8] (both have 5 dora indicators, same layout)
     const baoBase = this.sanma ? 8 : 4;
     this.doraIndicators = [dead[baoBase]];
     this.uraIndicators = [dead[baoBase + 1]];
@@ -201,7 +201,7 @@ var GameEngine = class {
     this.emit(RiichiMsg.ENtfGameStart, {
       changWind: this.roundWind - 1,
       juNum: this.juNum + 1,
-      // 实机是 1 基（东1=1），内部保持 0 基
+      // The real client is 1-based (East = 1); internally it stays 0-based
       benChangNum: this.honba,
       zhuangSeat: this.dealerSeat,
       baoPreCard: this.doraIndicators[0],
@@ -239,10 +239,10 @@ var GameEngine = class {
     return ((seat - this.dealerSeat) % this.playersN + this.playersN) % this.playersN + 1;
   }
   isAllLast() {
-    if (this.maxHands === 1) return true;  // 一局战只打一手，开局即 All Last
+    if (this.maxHands === 1) return true;  // A one-round match plays a single hand and starts directly at All Last
     return this.roundWind > this.regularWinds || this.roundWind === this.regularWinds && this.juNum === this.playersN - 1;
   }
-  // ================= 摸牌 =================
+  // ================= Draw =================
   async turnDraw(seat) {
     if (this.handEnded) return;
     if (this.remain <= 0) {
@@ -259,7 +259,7 @@ var GameEngine = class {
     this.xunNum++;
     await this.awaitTurn(seat, true);
   }
-  // 岭上摸牌（杠后）
+  // Rinshan draw (after a kan)
   async drawReplacement(seat) {
     const p = this.players[seat];
     p.tempFuriten = false;
@@ -371,7 +371,7 @@ var GameEngine = class {
     }
     return Result.Fail_ActionNotInCanQiangActions;
   }
-  // ================= 轮到某家行动（手上 14 张） =================
+  // ================= Act on a seat's turn (14 tiles in hand) =================
   async awaitTurn(seat, drew, skipNotify) {
     if (this.handEnded) return;
     const p = this.players[seat];
@@ -406,7 +406,7 @@ var GameEngine = class {
     const useHumanInput = !this.isAiSeat(p) || this._bufferedDraw != null;
     if (useHumanInput) {
       if (!this._expectedDraw && this._bufferedDraw == null) this.expectDraw(seat, drew, can, cantPlays);
-      this._processing = false; // 即将等待人类输入，允许缓存合法早到响应
+      this._processing = false; // About to wait for human input; legal early-arriving responses may be cached
       const payload = await this.waitHuman("draw");
       action = payload.action != null ? payload.action : PlayAction.Normal;
       card = payload.card != null ? payload.card : p.drawnTile;
@@ -420,7 +420,7 @@ var GameEngine = class {
     const result = await this.processTurnAction(seat, action, card, drew, cantPlays);
     if (result !== Result.Succ) throw new Error(`非法内部动作 seat=${seat} action=${action} result=${result}`);
   }
-  // 手牌 14 张时的可选动作
+  // Optional actions with 14 tiles in hand
   turnActions(seat, drew) {
     const p = this.players[seat];
     const acts = [PlayAction.Normal];
@@ -436,7 +436,7 @@ var GameEngine = class {
     }
     return acts;
   }
-  // 手里的北（三麻拔北用），没有则返回 null
+  // North in hand (used for 3-player North pull); returns null if there is none
   northInHand(p) {
     if (p.riichi) {
       const tile = p.drawnTile;
@@ -458,12 +458,12 @@ var GameEngine = class {
     }
     return s.size;
   }
-  // 该席位是否由 AI 操作（autoHuman 为测试用：把 0 号真人席位也交给 AI 代打）
+  // Whether this seat is operated by the AI (autoHuman is for testing: it also hands the seat-0 human to the AI)
   isAiSeat(p) {
     return !p.isHuman || this.autoHuman;
   }
-  // 九种九牌成立条件：仍在首巡（任何鸣牌——含吃碰杠与拔北——都会把 firstGoAround 置 false）
-  // 且刚摸完牌的手牌里有 ≥9 种幺九。成立时人类可选、AI 自动。
+  // Kyuushu kyuuhai (nine kinds of terminals/honors) conditions: still in the first go-around (any call, including chi/pon/kan and North pull, sets firstGoAround to false)
+  // and the hand just drawn holds ≥9 kinds of terminals/honors. When met, humans may choose it and the AI declares it automatically.
   canJiuZhongJiuPai(p) {
     return this.firstGoAround && this.countYaoJiuKinds(p) >= 9;
   }
@@ -520,7 +520,7 @@ var GameEngine = class {
     }
     return result;
   }
-  // 加杠：手上有与已碰的刻子同种的牌
+  // Added kan: the hand has a tile of the same kind as an already-ponned triplet
   addedKanTile(p) {
     for (const m of p.melds) {
       if (m.type !== "pon") continue;
@@ -530,13 +530,13 @@ var GameEngine = class {
     }
     return null;
   }
-  // 表宝牌的「牌种」集合（供 AI 保留宝牌用）
+  // Set of tile kinds of the table dora (for the AI to keep dora)
   doraKinds() {
     const s = /* @__PURE__ */ new Set();
     for (const ind of this.doraIndicators) s.add(kindOf2(doraFromIndicator(ind, this.sanma)));
     return s;
   }
-  // 场上已公开的牌（牌河 + 副露 + 宝牌指示牌）
+  // Tiles already public on the table (discard rivers + melds + dora indicators)
   visibleCounts() {
     const c = new Array(34).fill(0);
     const add = (id) => {
@@ -550,14 +550,14 @@ var GameEngine = class {
     for (const t of this.doraIndicators) add(t);
     return c;
   }
-  // 某家视角下「某牌种还剩几张」（用于受入枚数）
+  // From one seat's viewpoint, how many copies of a tile kind remain (used for the ukeire count)
   remainOfFor(p) {
     const vis = this.visibleCounts();
     const own = countsOf(p.hand);
     const total = (idx) => this.sanma && idx >= 1 && idx <= 7 ? 0 : 4;
     return (idx) => total(idx) - vis[idx] - own[idx];
   }
-  // 统一的弃牌评估入口
+  // Unified discard-evaluation entry point
   bestDiscard(p, extra = {}) {
     return chooseDiscard(p.hand, p.melds, {
       drawnTile: p.drawnTile,
@@ -586,7 +586,7 @@ var GameEngine = class {
       seatWind: this.seatWindOf(p.seat)
     };
   }
-  // 13 张形时更新听牌信息（waits 存牌种码）
+  // Update tenpai info at 13 tiles (waits stores tile-kind codes)
   updateWaits(p) {
     if (p.hand.length % 3 !== 1) return;
     const info = handWaits(p.hand, p.melds);
@@ -597,8 +597,8 @@ var GameEngine = class {
   isFormalTenpaiHand(hand, melds) {
     const info = handWaits(hand, melds);
     if (info.shanten !== 0 || !info.waitKinds.length) return false;
-    // 自己的副露也属于牌形；不能把手中第四张误作等待第五张。
-    // 他家的明牌/自己的弃牌耗尽等待牌仍允许空听，不在这里排除。
+    // Own melds also count as part of the hand shape: a fourth tile in hand must not be mistaken for a fifth waiting tile.
+    // An empty wait is still allowed when others' revealed tiles or our own discards have exhausted the waits; it is not excluded here.
     const ownTiles = hand.concat(realMelds(melds).flatMap((meld) => meld.tiles));
     return info.waitKinds.some((kind) => ownTiles.filter((tile) => kindOf2(tile) === kind).length < 4);
   }
@@ -650,13 +650,13 @@ var GameEngine = class {
     p.score += 1e3;
     this.riichiSticks = Math.max(0, this.riichiSticks - 1);
   }
-  // 14 张形的听牌提示：打哪张 -> 听哪些
+  // Tenpai hints for a 14-tile hand: discard which tile -> wait on which tiles
   //
-  // 编码陷阱：tingInfos.play / ting 用的是「牌种」编码（copy 位固定为 0），
-  // 实机样本 play=380(3索) ting=210(1筒)、play=110(1万)，全部以 0 结尾。
-  // 其余字段（handCards / NtfPlayCard.card / baoPreCard …）才是带 copy 的完整牌 ID。
-  // 之前这里发的是 copy=1 的完整 ID（381/211），客户端按牌种查表匹配不上，
-  // 结果就是「听了牌但不显示听牌、也没有听牌提示」。
+  // Encoding trap: tingInfos.play / ting use the tile-kind encoding (the copy bit is fixed at 0);
+  // real-machine samples: play=380 (3s), ting=210 (1p), play=110 (1m), all ending in 0.
+  // Other fields (handCards / NtfPlayCard.card / baoPreCard …) are full tile IDs with the copy bit.
+  // Previously this sent full IDs with copy=1 (381/211); the client looks up by tile kind and could not match them,
+  // so the result was "tenpai reached, but no tenpai indicator and no tenpai hint shown".
   buildTingInfos(p) {
     if (p.hand.length % 3 !== 2) return [];
     const { shanten: sh, options } = discardOptionsOfCounts(
@@ -691,7 +691,7 @@ var GameEngine = class {
     }
     return out.slice(0, 60);
   }
-  // ================= 处理行动 =================
+  // ================= Handle actions =================
   async processTurnAction(seat, action, card, drew, cantPlays = []) {
     const p = this.players[seat];
     const result = this.validateTurnPayload(
@@ -785,7 +785,7 @@ var GameEngine = class {
       }))
     };
   }
-  // ================= 鸣牌 =================
+  // ================= Calls =================
   claimActions(seat, discarderSeat, card) {
     const p = this.players[seat];
     const acts = [];
@@ -854,12 +854,12 @@ var GameEngine = class {
       const claim = this.aiClaim(seat, discarderSeat, card, canQiang[seat]);
       if (claim) all.push({ seat, ...claim });
     }
-    // 见逃按完成牌形判断，不以是否下发有役荣和按钮为准（无役低目也算）。
+    // Missed-win furiten is judged by whether the hand forms a complete shape, not by whether a ron button with yaku was sent (no-yaku low-han hands count too).
     for (const p of this.players) {
       if (p.seat !== discarderSeat && (canQiang[p.seat]?.includes(PlayAction.Hu) || p.waits?.includes(kindOf2(card)))
         && !all.some((claim) => claim.seat === p.seat && claim.action === PlayAction.Hu)) this.markPassedRon(p);
     }
-    // 第四杠仍可岭上自摸；其后弃牌先裁决荣和，再流局，不能继续吃碰。
+    // A fourth kan can still be a rinshan tsumo; after it, discards are settled for ron first, then the hand is drawn; no further pon/chi.
     if (this.kanCount === 4 && !all.some((claim) => claim.action === PlayAction.Hu)
       && !this.players.some((p) => p.melds.filter((meld) => meld.type === "kan" || meld.type === "ankan").length === 4)) {
       this.confirmRiichiDeclaration(this.players[discarderSeat]);
@@ -925,8 +925,8 @@ var GameEngine = class {
       { seat, discarderSeat, card, actions: this.claimActions(seat, discarderSeat, card) }
     );
     if (validation !== Result.Succ) return validation;
-    this._processing = true; // 鸣牌执行中：此期间到达的包视为重复包丢弃
-    this._bufferedDraw = null; this._bufferedClaim = null; // 清空上一动作的残留缓冲（防重复包重放）
+    this._processing = true; // During a call: packets arriving in this window are treated as duplicates and dropped
+    this._bufferedDraw = null; this._bufferedClaim = null; // Clear the leftover buffer of the previous action (prevents duplicate-packet replay)
     const donor = this.players[discarderSeat];
     if (action === PlayAction.Hu) {
       await this.winRon(seat, discarderSeat, card);
@@ -1002,7 +1002,7 @@ var GameEngine = class {
       if (canQiang[seat]?.includes(PlayAction.Hu)) claims.push({ seat });
     }
     for (const p of this.players) {
-      // 暗杠只有国士能抢；拔北没有抢杠役，无役完成牌形的见逃仍需记录。
+      // A closed kan can only be robbed by kokushi; North pull has no robbing-kan yaku, but a missed win on a no-yaku completed hand still needs recording.
       if (p.seat !== kanSeat && (canQiang[p.seat]?.includes(PlayAction.Hu)
         || !winExtra.chankan && p.waits?.includes(kindOf2(tile)))
         && !claims.some((claim) => claim.seat === p.seat)) this.markPassedRon(p);
@@ -1049,7 +1049,7 @@ var GameEngine = class {
   revealKanDora() {
     const i = this.doraIndicators.length;
     const baoBase = this.sanma ? 8 : 4;
-    // 三麻/四麻宝牌指示牌均5张（initial + 4 kan dora），布局一致，仅起始偏移不同（三麻8/四麻4）
+    // 3-player and 4-player dora indicators are all 5 (initial + 4 kan dora), same layout, differing only in starting offset (3-player 8 / 4-player 4)
     const maxI = 4;
     if (i >= 1 && i <= maxI && this.deadWall[baoBase + 2 * i] != null) {
       const ind = this.deadWall[baoBase + 2 * i];
@@ -1069,10 +1069,10 @@ var GameEngine = class {
     }
     return used;
   }
-  // otherCards 是「自己手里贡献的牌」，**不含**被鸣的那张（实机抓包：
-  // Chi/Peng 均为 2 张、MingGang 为 3 张，被鸣牌只由 NtfPlayCard.card 给出）。
-  // 若把被鸣牌也塞进来，客户端会按 otherCards.length+1 判定副露类型：
-  // 碰(3)→显示成明杠、吃(3)→UI 拼不出顺子而卡死。
+  // otherCards is "the tiles this seat contributes from its own hand", **excluding** the called tile (real-machine capture:
+  // Chi/Pon are 2 tiles each, MingGang is 3; the called tile is only given by NtfPlayCard.card).
+  // If the called tile is also included, the client decides the meld type by otherCards.length+1:
+  // pon (3) is displayed as open kan, and chi (3) cannot be assembled by the UI and freezes it.
   buildQiang(seat, action, otherCards) {
     return {
       seat,
@@ -1081,8 +1081,8 @@ var GameEngine = class {
       userInfos: this.players.map((q) => ({ seat: q.seat }))
     };
   }
-  // otherCards = 发给客户端的「自己手里贡献的牌」（不含被鸣的那张）
-  // meldTiles   = 完整面子（含被鸣牌），仅内部用于算食替禁止牌
+  // otherCards = the "tiles this seat contributes from its own hand" sent to the client (excluding the called tile)
+  // meldTiles = the full meld (including the called tile), used internally only for computing swap-call forbidden tiles
   buildQiangEnd(seat, action, otherCards, meldTiles) {
     const p = this.players[seat];
     return {
@@ -1092,8 +1092,8 @@ var GameEngine = class {
       userInfos: this.players.map((q) => ({
         seat: q.seat,
         tingInfos: q.seat === seat ? this.buildTingInfos(p) : [],
-        // 实机 NtfQiangCardEnd 的 canPlayActions 只能是 []（他家）或 [0]（鸣牌者，
-        // 即「仅可打牌」），绝不带 6/7/8/9/10。完整可选项由紧随其后的 NtfSendCard 下发。
+        // Real-machine NtfQiangCardEnd canPlayActions can only be [] (others) or [0] (the caller,
+        // i.e. "discard only"), never 6/7/8/9/10. The full set of options is sent by the NtfSendCard that immediately follows.
         canPlayActions: q.seat === seat ? [PlayAction.Normal] : [],
         isZhenTing: this.isFuriten(q),
         cantPlays: q.seat === seat ? this.cantPlays(p, action, meldTiles || otherCards || []) : [],
@@ -1103,7 +1103,7 @@ var GameEngine = class {
       }))
     };
   }
-  // 吃碰后的食替禁止牌（同样是牌种编码 copy=0，实机样本 [440,310,280,380,320]）
+  // Post-chi/pon swap-call forbidden tiles (also tile-kind encoded, copy=0; real-machine sample [440,310,280,380,320])
   cantPlays(p, action, meldTiles) {
     if (action !== PlayAction.Chi && action !== PlayAction.Peng) return [];
     const claimed = this.lastDiscard ? this.lastDiscard.card : null;
@@ -1123,7 +1123,7 @@ var GameEngine = class {
     if (claimedTile.rank === ranks[2] && ranks[0] > 1) out.add(claimedTile.suit * 10 + ranks[0] - 1);
     return out;
   }
-  // ================= 和牌 / 流局 =================
+  // ================= Win / draw =================
   async winTsumo(seat) {
     const p = this.players[seat];
     const w = calcWin(p.hand, p.melds, this.akaSet, this.winOpts(p, false));
@@ -1148,7 +1148,7 @@ var GameEngine = class {
       if (!win.isAgari || !win.hasYaku) throw new Error(`非法荣和 seat=${seat}`);
       wins.set(seat, win);
     }
-    // 所有赢家通过校验后才提交状态；多响也只移除一次被抢牌。
+    // State is committed only after all winners pass validation; for multi-ron, the robbed tile is removed only once.
     this.rollbackRiichiDeclaration(donor);
     if (robbed) {
       donor.hand.splice(robbedIndex, 1);
@@ -1176,7 +1176,7 @@ var GameEngine = class {
       noPenalty: true
     });
   }
-  // ================= 结算 =================
+  // ================= Settlement =================
   async endHand(res) {
     if (this.handEnded) return;
     this.handEnded = true;
@@ -1266,7 +1266,7 @@ var GameEngine = class {
           for (let seat = 0; seat < n; seat++) {
             if (seat === winner) continue;
             const paoShare = (isDealerWin || seat === this.dealerSeat ? 16_000 : 8_000) * paoUnits;
-            // 包牌时本场全部由责任者承担，非包役满部分仍正常结算。
+            // The responsible player pays all honba for pao (liability); non-pao yakuman portions still settle normally.
             scores[seat] += paoShare + this.honba * 100;
             scores[winner] -= paoShare + this.honba * 100;
             huDelta[seat] += paoShare;
@@ -1341,8 +1341,8 @@ var GameEngine = class {
     });
     await this.finishHand(gameOver, dealerContinues, scores);
   }
-  // 给 riichi 库的结果补上库里没有的番数（目前只有拔北），并按标准公式重算点数。
-  // 役满不受宝牌影响，原样返回。
+  // Add the han counts that the riichi library's result lacks (currently only North pull), and recompute points by the standard formula.
+  // Yakuman is not affected by dora and is returned unchanged.
   applyExtraFan(w, extraFan, isDealerWin) {
     if (!extraFan || !w || !w.isAgari || w.yakuman > 0) return w;
     const han = (w.han || 0) + extraFan;
@@ -1360,12 +1360,12 @@ var GameEngine = class {
       han,
       ten: c(base2 * (isDealerWin ? 6 : 4)),
       oya: [c(base2 * 2)],
-      // 庄家自摸：每家付 base×2
+      // Dealer tsumo: each opponent pays base×2
       ko: [c(base2 * 2), c(base2)]
-      // 闲家自摸：庄家付 base×2，其他闲家付 base
+      // Non-dealer tsumo: the dealer pays base×2, each other non-dealer pays base
     };
   }
-  // 宝牌拆分统计（表 / 里 / 赤 / 拔北）
+  // Dora breakdown statistics (regular / ura / red / North pull)
   countDora(p, ronTile) {
     const tiles = p.hand.concat(ronTile != null ? [ronTile] : []);
     for (const m of p.melds) if (m.type !== "babei") tiles.push(...m.tiles);
@@ -1388,12 +1388,12 @@ var GameEngine = class {
       babeiAsDora
     };
   }
-  // 剔除库合并出来的「ドラ」条目。
+  // Remove the "ドラ" entries that the library merges in.
   //
-  // 实机 15/15 例证明：宝牌**不进** yiFans，只走 baoFan / liBaoFan / redBaoFan / baBeiFan
-  // 四个专用字段，且 totalFan = Σ(yiFans.fan) + 四项宝牌之和。
-  // 之前这里把宝牌又 push 回 yiFans，客户端结算界面按
-  // 「役列表 + 宝牌行」渲染时宝牌被算了两遍。
+  // Real-machine 15/15 cases prove dora does **not** enter yiFans; it only flows through the four dedicated fields baoFan / liBaoFan / redBaoFan / baBeiFan,
+  // and totalFan = Σ(yiFans.fan) + the sum of the four dora fields.
+  // Previously dora was pushed back into yiFans, so when the client settlement screen renders
+  // "yaku list + dora row", dora was counted twice.
   rebuildYiFans(yiFans) {
     return yiFans.filter((y) => y.yiType !== YiType.Bao && y.yiType !== YiType.RedBao && y.yiType !== YiType.LiBao && y.yiType !== YiType.BaBeiBao);
   }
@@ -1414,7 +1414,7 @@ var GameEngine = class {
     if (dealerContinues && this.dealerSeat === 0) stats.maxRenchan = Math.max(stats.maxRenchan, this.renchanCount);
   }
 
-  // humanWin：本手真人席的和牌明细（未和为 null），供一局战按番数发奖。
+  // humanWin: the human seat's winning details for this hand (null if not won), used by the one-round match to award rewards by han.
   prepareFinalResult(scores, isFinal, humanWin = null) {
     if (!isFinal || this._finalResult || !this.onFinalResult) return;
     this._finalResult = this.onFinalResult(scores.slice(), this, humanWin) || null;
@@ -1435,9 +1435,9 @@ var GameEngine = class {
       const currentDetail = detail instanceof Map ? detail.get(s) : isWinner ? detail : null;
       const rankResult = isFinal && s === 0 ? this._finalResult?.rank : null;
     const change = huDelta ? huDelta[s] || 0 : 0;
-    // changeScore = 本手净分差（含立直棒/本场棒，与实机一致）；
-    // yiFanChangeDian = 纯番符打点（不含立直棒/本场棒，之前的需求）。
-    // handStart 取上一手结束时的累计分(this.scores)，首手则用 startScore。
+    // changeScore = net score change for this hand (including riichi sticks / honba sticks, consistent with the real machine);
+    // yiFanChangeDian = pure han/fu payment (excluding riichi and honba sticks; the earlier requirement).
+    // handStart takes the cumulative score at the end of the previous hand (this.scores); for the first hand, startScore is used.
     const handStart = this.scores ? this.scores[s] : this.startScore;
     const netDelta = scores[s] - handStart;
     const rank = rankOf[s];
@@ -1461,12 +1461,12 @@ var GameEngine = class {
           action: m.type === "chi" ? PlayAction.Chi : m.type === "pon" ? PlayAction.Peng : m.type === "ankan" ? PlayAction.AnGang : PlayAction.MingGang,
           qiangSeat: m.from != null ? m.from : s
         })),
-        // tings 同样是牌种编码（copy=0）：实机流局样本 [230]/[260,230]/[160,130]
+        // tings are also tile-kind encoded (copy=0): real-machine exhaustive-draw samples [230]/[260,230]/[160,130]
         tings: tenpai ? tenpai[s] ? (p.waits || []).map((k) => k * 10) : [] : [],
         alreadyRiichi: p.riichi,
         baBeiCards: p.melds.filter((m) => m.type === "babei").map((m) => m.tiles[0]),
         rank,
-        // 因和牌役番产生的纯打点（只含番符，不含本场棒/立直棒/听牌罚符）。
+        // Pure payment from the yaku han of a win (only han/fu, excluding honba / riichi sticks / tenpai penalties).
         yiFanChangeDian: change,
         jingSuanScore: jing,
         jieBi: Math.round(jing * 100),
@@ -1478,7 +1478,7 @@ var GameEngine = class {
         maxFan: currentDetail?.totalFan || 0,
         realJieBi: 0,
         finalBi: 0,
-        // 好感度不随对局变化，本人席位原样回显当前等级，避免结算面板显示 Lv.0。
+        // Affinity does not change with the match; the human seat echoes its current level, to avoid the settlement panel showing Lv.0.
         level: s === 0 ? this.selfLoveLevel : 0,
         loveValue: 0,
         oldLevel: s === 0 ? this.selfLoveLevel : 0,
@@ -1537,9 +1537,9 @@ var GameEngine = class {
     }
     await this._d(this.T.hand);
   }
-  /** 重置为一局全新东风战（分数归位、局号/本场/庄家清零）。
-   *  注意：终局【不】走这里——真实服终局后引擎就停了，新一场是重新匹配出来的新房间、
-   *  由 20403 链路 new 一个 GameEngine（见 finishHand 的注释）。此方法仅留给外部复用。 */
+  /** Reset to a brand-new East-wind match (scores restored, hand/honba/dealer counters cleared).
+   *  Note: the end of the match does NOT go through here: the real server stops the engine after the final hand, and a new match is a newly matched room
+   *  that creates a new GameEngine through the 20403 chain (see the comment in finishHand). This method is kept only for external reuse. */
   resetMatch() {
     this.scores = new Array(this.playersN).fill(this.startScore);
     this.handIndex = 0;
@@ -1555,21 +1555,26 @@ var GameEngine = class {
   }
   aiTurn(seat, drew, can, cantPlays = []) {
     const level = this.aiLevelOf(seat);
-    if (level === "basic") return this.aiTurnBasic(seat, drew, can, cantPlays);
     const p = this.players[seat];
     if (can.includes(PlayAction.Hu)) return { action: PlayAction.Hu, card: p.drawnTile };
+    // Advanced: riichi evaluation, push/fold decisions and discard search share this decision's computation budget.
+    const budget = createDecisionBudget();
     const danger = this.dangerKinds(seat);
     if (can.includes(PlayAction.BaBei)) {
       const north = this.northInHand(p);
-      if (north != null) return { action: PlayAction.BaBei, card: north };
+      // North may be a required tile for kokushi, a pair or a triplet; do not break the shanten for one dora han.
+      if (north != null && (p.riichi
+        || handShanten(p.hand.filter((tile) => tile !== north), p.melds) <= this.currentShanten(p))) {
+        return { action: PlayAction.BaBei, card: north };
+      }
     }
     if (can.includes(PlayAction.Riichi)) {
-      const decision = riichiPolicy(this, seat, this.formalTenpaiDiscards(p), level);
+      const decision = riichiPolicy(this, seat, this.formalTenpaiDiscards(p), level, budget);
       if (decision?.action === "riichi") return { action: PlayAction.Riichi, card: decision.card };
       if (decision?.action === "dama") return { action: PlayAction.Normal, card: decision.card };
     }
     const kanOk = (can.includes(PlayAction.AnGang) || can.includes(PlayAction.PengGang))
-      && this.aiWantsKan(p, danger) && !shouldFoldHand(this, seat, level);
+      && this.aiWantsKan(p, danger) && !shouldFoldHand(this, seat, level, budget);
     if (kanOk && can.includes(PlayAction.AnGang)) {
       return { action: PlayAction.AnGang, card: this.concealedQuadTile(p) };
     }
@@ -1580,37 +1585,7 @@ var GameEngine = class {
     if (p.riichi && p.riichiTurn !== this.xunNum) {
       return { action: PlayAction.Normal, card: this.bestDiscard(p, { forbiddenKinds, forced: p.drawnTile }).discardId };
     }
-    const best = chooseDiscardByPolicy(this, seat, { forbiddenKinds, level });
-    return { action: PlayAction.Normal, card: best.discardId };
-  }
-  aiTurnBasic(seat, drew, can, cantPlays = []) {
-    const p = this.players[seat];
-    if (can.includes(PlayAction.Hu)) return { action: PlayAction.Hu, card: p.drawnTile };
-    const danger = this.dangerKinds(seat);
-    if (can.includes(PlayAction.BaBei)) {
-      const north = this.northInHand(p);
-      if (north != null) return { action: PlayAction.BaBei, card: north };
-    }
-    if (can.includes(PlayAction.Riichi)) {
-      const decision = this.riichiDecision(p, danger);
-      if (decision) return decision;
-    }
-    if (can.includes(PlayAction.AnGang) && this.aiWantsKan(p, danger)) {
-      return { action: PlayAction.AnGang, card: this.concealedQuadTile(p) };
-    }
-    if (can.includes(PlayAction.PengGang) && this.aiWantsKan(p, danger)) {
-      return { action: PlayAction.PengGang, card: this.addedKanTile(p) };
-    }
-    const currentShanten = this.currentShanten(p);
-    const fold = this.aiShouldFold(p, currentShanten, danger);
-    const best = this.bestDiscard(p, {
-      forbiddenKinds: new Set(cantPlays.map((value) => Math.floor(value / 10))),
-      dangerKinds: danger,
-      dangerWeight: fold ? 22 : currentShanten <= 1 ? 4 : 8,
-      maxShantenLoss: fold ? currentShanten >= 3 ? 2 : 1 : 0,
-      shantenLossPenalty: fold ? 90 : 260,
-      forced: p.riichi && p.riichiTurn !== this.xunNum ? p.drawnTile : null
-    });
+    const best = chooseDiscardByPolicy(this, seat, { forbiddenKinds, level, budget });
     return { action: PlayAction.Normal, card: best.discardId };
   }
   dangerKinds(seat) {
@@ -1657,48 +1632,6 @@ var GameEngine = class {
     }
     return { threats: threats.length, safe, risky, riskByKind };
   }
-  aiShouldFold(p, shanten, danger) {
-    if (!danger) return false;
-    const ranks = this.players.map((player) => player.score).sort((a, b) => b - a);
-    const leading = p.score === ranks[0];
-    const allLast = this.isAllLast();
-    if (allLast && !leading) return shanten >= 3;
-    if (allLast && leading) return shanten >= 1;
-    const dora = p.hand.filter((tile) => this.doraKinds().has(kindOf2(tile)) || this.akaSet.has(tile)).length;
-    if (shanten >= 3) return true;
-    if (shanten === 2 && dora < 2) return true;
-    return shanten === 1 && danger.threats > 1 && dora === 0;
-  }
-  riichiDecision(p, danger) {
-    const discardKinds = this.formalTenpaiDiscards(p);
-    let best = null;
-    const remainOf = this.remainOfFor(p);
-    for (const kind of discardKinds) {
-      const card = p.hand.find((tile) => kindOf2(tile) === kind && !this.akaSet.has(tile)) ?? p.hand.find((tile) => kindOf2(tile) === kind);
-      const hand = p.hand.slice();
-      hand.splice(hand.indexOf(card), 1);
-      const waits = handWaits(hand, p.melds, remainOf);
-      let damaYaku = false;
-      for (const wait of waits.waits) {
-        if (calcWin(hand, p.melds, this.akaSet, this.winOpts(p, true, wait)).hasYaku) {
-          damaYaku = true;
-          break;
-        }
-      }
-      const candidate = { card, ukeire: waits.ukeire, waitCount: waits.waitKinds.length, damaYaku };
-      if (!best || candidate.ukeire > best.ukeire || candidate.ukeire === best.ukeire && candidate.waitCount > best.waitCount || candidate.ukeire === best.ukeire && candidate.waitCount === best.waitCount && candidate.card < best.card) best = candidate;
-    }
-    if (!best) return null;
-    const scores = this.players.map((player) => player.score);
-    const leading = p.score === Math.max(...scores);
-    const lead = p.score - Math.max(...scores.filter((_, seat) => seat !== p.seat));
-    const badWait = best.ukeire <= 2 || best.waitCount === 1 && best.ukeire <= 3;
-    if (best.damaYaku && (danger && badWait || this.isAllLast() && leading && lead >= 8_000)) {
-      return { action: PlayAction.Normal, card: best.card };
-    }
-    if (best.ukeire <= 0 && best.damaYaku) return { action: PlayAction.Normal, card: best.card };
-    return { action: PlayAction.Riichi, card: best.card };
-  }
   aiWantsKan(p, danger = null) {
     const scores = this.players.map((player) => player.score);
     const leading = p.score === Math.max(...scores);
@@ -1712,37 +1645,9 @@ var GameEngine = class {
     const p = this.players[seat];
     if (can.includes(PlayAction.Hu)) return { action: PlayAction.Hu };
     const level = this.aiLevelOf(seat);
-    if (level !== "basic") return this.aiClaimByPolicy(seat, card, can, level);
-    const current = this.currentShanten(p);
-    const danger = this.dangerKinds(seat);
-    if (this.aiShouldFold(p, current, danger)) return null;
-
-    if (can.includes(PlayAction.MingGang)) {
-      const after = this.shantenAfterClaim(p, card, "pon");
-      if (after <= current && this.worthOpening(p, card, "kan") && this.aiWantsKan(p, danger)) {
-        return { action: PlayAction.MingGang, otherCards: this.previewTiles(p, card, 3) };
-      }
-    }
-    if (can.includes(PlayAction.Peng)) {
-      const after = this.shantenAfterClaim(p, card, "pon");
-      if (after < current && this.worthOpening(p, card, "pon")) {
-        return { action: PlayAction.Peng, otherCards: this.previewTiles(p, card, 2) };
-      }
-    }
-    if (can.includes(PlayAction.Chi)) {
-      let best = null;
-      for (const option of this.chiOptions(p, card)) {
-        const after = this.shantenAfterClaim(p, card, "chi", option);
-        const candidate = { option, after };
-        if (!best || candidate.after < best.after || candidate.after === best.after && candidate.option.join() < best.option.join()) best = candidate;
-      }
-      if (best && best.after < current && this.worthOpening(p, card, "chi", best.option)) {
-        return { action: PlayAction.Chi, otherCards: best.option };
-      }
-    }
-    return null;
+    return this.aiClaimByPolicy(seat, card, can, level);
   }
-  // 中级/高级：吃、碰、大明杠与跳过按同一期望值模型比较；开门仍须有明确成役路线。
+  // All levels compare chii, pon, open kan and skip with the same EV model; opening still requires a clear yaku route.
   aiClaimByPolicy(seat, card, can, level) {
     const p = this.players[seat];
     const danger = this.dangerKinds(seat);
@@ -1760,7 +1665,7 @@ var GameEngine = class {
         options.push({ action: PlayAction.Chi, type: "chi", used, forbiddenKinds: this.kuikaeKinds(PlayAction.Chi, [...used, card], card) });
       }
     }
-    const choice = claimPolicy(this, seat, card, options, level);
+    const choice = claimPolicy(this, seat, card, options, level, createDecisionBudget());
     return choice ? { action: choice.action, otherCards: choice.used } : null;
   }
   currentShanten(p) {
@@ -1775,8 +1680,8 @@ var GameEngine = class {
     const claimTiles = claimKind === "chi" ? used : this.previewTiles(p, card, claimKind === "kan" ? 3 : 2);
     const hand = p.hand.filter((tile) => !claimTiles.includes(tile));
     const proposed = { type: proposedType, tiles: [...claimTiles, card] };
-    // 拔北不是面子，也不是断幺九/混一色牌形中的字牌。
-    // 拟鸣牌的实体牌从暗手移到面子，只能计数一次。
+    // A pulled North is not a meld, nor is it an honor tile in the tanyao / honitsu shape.
+    // The real tiles of the proposed call move from the closed hand into a meld and may be counted only once.
     const melds = realMelds(p.melds).concat([proposed]);
     const tiles = hand.concat(melds.flatMap((meld) => meld.tiles));
     const tripletKinds = new Set(melds
@@ -1847,11 +1752,11 @@ var GameEngine = class {
     }
     return out;
   }
-  // ================= 人类输入 =================
-  // 注意竞态：awaitTurn 先 emit(NtfSendCard) 再 await waitHuman('draw') 设置 _pending。
-  // 客户端在收到 NtfSendCard 的瞬间就可能调用 submitDraw，此时 _pending 尚未就绪，
-  // 直接调用会成 no-op 导致引擎永久等待。因此 submitDraw/submitClaim 在未就绪时
-  // 缓存请求，waitHuman 进入等待时立即消费缓冲，避免死锁。
+  // ================= Human input =================
+  // Race condition: awaitTurn emits NtfSendCard first, then awaits waitHuman('draw') to set _pending.
+  // The client may call submitDraw the instant it receives NtfSendCard, when _pending is not yet ready,
+  // and a direct call would become a no-op and the engine would wait forever. So submitDraw/submitClaim cache the request when not ready,
+  // and waitHuman consumes the buffer immediately upon entering the wait, to avoid a deadlock.
   setInternalState(values) {
     for (const [key, value] of Object.entries(values || {})) {
       const state = Number(key);
@@ -1924,8 +1829,8 @@ var GameEngine = class {
         this.resolveHumanPending(pending, payload);
       }, timeoutMs);
       if (this.automaticHumanAction(kind)) {
-        // 客户端可能在微任务执行前取消不鸣，或重连后清除旧授权。
-        // 此时保留原截止时间等待真人，不能继续执行捕获的旧自动动作。
+        // The client may cancel the no-call before the microtask runs, or clear the old authorization after reconnecting.
+        // In that case keep the original deadline and wait for the human; do not keep executing the captured stale auto-action.
         queueMicrotask(() => {
           if (this._pending !== pending) return;
           const automatic = this.automaticHumanAction(kind);
@@ -1969,7 +1874,7 @@ var GameEngine = class {
     this._pending = null;
     resolve({});
   }
-  // 调试快照
+  // Debug snapshot
   snapshot() {
     return {
       ju: this.juNum,

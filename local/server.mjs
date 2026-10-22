@@ -29,14 +29,14 @@ const mock = globalThis.__mj.server;
 mock.quiet(process.env.MJ_DEBUG !== '1');
 if (profile.lobbyData) mock.setUserdata(Buffer.from(profile.lobbyData, 'base64'));
 const economyUpgraded = initializeOfflineEconomy(profile, mock.userdata, ECONOMY_CATALOG.defaults);
-// 内容解锁每次装载都归一（幂等），与只执行一次的货币补给分开。
+// Content unlocks are normalized on every load (idempotent), separate from the one-time currency grant.
 const contentNormalized = mock.userdata.normalizeOfflineContent() !== null;
 mock.updateNickname(profile.nickname);
 mock.updateRanks(profile.ranks);
 mock.updateProfileStats(profile.stats);
 if (economyUpgraded || contentNormalized) {
   profile.lobbyData = Buffer.from(mock.userdata.serialize()).toString('base64');
-  // 补给与完成标记必须一起落盘后才对外提供服务；失败不能假装升级成功。
+  // The grant and the completion marker must be persisted together before serving; a failed write must not pretend the upgrade succeeded.
   await saveProfile(userdataDirectory, profile);
 }
 
@@ -70,8 +70,8 @@ session.onFinalResult = (scores, engine) => {
     matchStats: engine.matchStats,
     roomId: session.rankRoomId,
   });
-  // 终局金币记入真实钱包（背包雀币）；段位、战绩与钱包变更随离桌应答 f24 下发，
-  // 否则客户端选房页段位条与余额停在旧值。
+  // Match-end coins are credited to the real wallet (inventory currency); rank, record and wallet changes are sent in the f24 of the leave-table reply,
+  // otherwise the client's rank bar and balance on the room-select page stay at their old values.
   result.changes = [
     mock.userdata.changeInventory([{ dtype: 6, id: ECONOMY_CATALOG.defaults.coinId, count: result.coins }]),
     ...mock.updateRanks(profile.ranks),
@@ -174,8 +174,8 @@ const server = http.createServer((request, response) => {
 
 const websocketServer = new WebSocketServer({ noServer: true, maxPayload: 2 * 1024 * 1024 });
 let activeSocket = null;
-// 断线后先由 AI 按正常速度代打一段时间，给同进程重连留出窗口（20163.f100 快照恢复）；
-// 超时仍未回来才加速打完当前比赛。
+// After a disconnect, the AI plays on at normal speed for a while to leave a window for same-process reconnect (20163.f100 snapshot restore);
+// if the player still has not returned after the timeout, speed up to finish the current match.
 const RECONNECT_GRACE_MS = 60_000;
 let fastForwardTimer = null;
 
@@ -235,11 +235,11 @@ websocketServer.on('connection', (websocket) => {
 
   websocket.on('message', (data, isBinary) => {
     if (!isBinary) return;
-    // 仅保留消息编号，不记录昵称、存档、手牌或完整报文。
+    // Keep only the message ID; do not record nicknames, saves, hands, or full payloads.
     try {
       recentRequests.push(Number(globalThis.__mj.proto.dict(new Uint8Array(data))[2]) || 0);
       if (recentRequests.length > 12) recentRequests.shift();
-    } catch { /* 诊断解析失败不能改变原分发行为 */ }
+    } catch { /* Diagnostic parse failures must not change the original dispatch behavior */ }
     const frames = mock.dispatch(session, new Uint8Array(data));
     for (const frame of frames) adapter._deliver(frame);
     persistSoon();

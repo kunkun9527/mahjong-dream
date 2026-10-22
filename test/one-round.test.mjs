@@ -75,7 +75,7 @@ function riichiFrames(frames) {
 
 test('一局战组桌回显 YiJu/OneGame，只打一手，按奖励结算且不写段位战绩', async (t) => {
   const old = { ...mock.config };
-  // seed 2：真人席在唯一一手里和出跳满，覆盖发奖路径。
+  // seed 2: the human seat ron-wins a haneman on the only hand, covering the reward payout path.
   Object.assign(mock.config, { seed: 2, matchDelay: 0, engineStartDelay: 0, speed: 0, autoHuman: true });
   const session = mock.createSession();
   const frames = [];

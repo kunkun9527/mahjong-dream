@@ -161,3 +161,64 @@ test('立直结算本人席位回显好感度等级，不再显示 Lv.0', async 
     assert.ok(stop.userInfos.slice(1).every((info) => info.level === 0 && info.oldLevel === 0));
   }
 });
+
+
+test('大厅奖励推广归一：不弹签到、新手、礼包或活动，不改变余额与月卡权益，且按天幂等', () => {
+  const ud = new U.UserData(P.b64decode(data.userdataB64), 10_000_001);
+  const now = Math.floor(Date.UTC(2026, 9, 23, 12) / 1000);
+  ud.setRow(44, '0', P.W().v(1, 123).v(3, 2).v(4, now - 10000).v(5, now + 10000).v(6, 1).s(99, 'newbie').bytes());
+  const act = P.W().v(1, 7).v(3, 2).s(4, P.W().v(1, 1).v(2, 1).bytes()).s(99, 'activity').bytes();
+  ud.setRow(31, '0', P.W().s(1, P.W().v(1, 7).s(2, act).bytes()).v(99, 42).bytes());
+  const pay = P.W().v(2, 100).v(7, now - 1000).v(8, now + 100000).bytes();
+  ud.setRow(29, '0', pay);
+  const stable = Object.fromEntries(ud.moduleOrder.filter((dt) => ![31, 34, 43, 44].includes(dt)).map((dt) => [dt, ud.modules[dt].serialize()]));
+  const signHistory = P.parse(ud.row(34, '0')).filter(([f]) => f !== 1);
+  const changes = ud.normalizeOfflineLobby(now);
+  assert.deepEqual(Object.keys(changes).sort(), ['31', '34', '43', '44']);
+  assert.equal(P.get(ud.row(34, '0'), 1), now);
+  assert.deepEqual(P.parse(ud.row(34, '0')).filter(([f]) => f !== 1), signHistory);
+  assert.equal(P.get(ud.row(44, '0'), 6), now);
+  assert.deepEqual(P.parse(ud.row(44, '0')).filter(([f]) => f !== 6), P.parse(P.W().v(1, 123).v(3, 2).v(4, now - 10000).v(5, now + 10000).s(99, 'newbie').bytes()));
+  const cleanAct = P.get(P.get(ud.row(31, '0'), 1), 2);
+  assert.equal(P.get(cleanAct, 4), undefined);
+  assert.equal(P.get(cleanAct, 3), 2);
+  assert.equal(P.fromUtf8(P.get(cleanAct, 99)), 'activity');
+  assert.equal(P.get(ud.row(31, '0'), 99), 42);
+  for (const key of ud.modules[43].order) {
+    const row = P.get(ud.row(43, key), 3);
+    assert.equal(P.get(row, 11), 0);
+    assert.equal(P.get(row, 8), now);
+  }
+  for (const [dt, bytes] of Object.entries(stable)) assert.deepEqual(ud.modules[dt].serialize(), bytes, '不改动奖励、背包、商店、月卡权益或其他模块');
+  assert.equal(ud.normalizeOfflineLobby(now + 60), null);
+  const versions = Object.fromEntries(ud.moduleOrder.map((dt) => [dt, ud.modules[dt].version]));
+  assert.equal(ud.normalizeOfflineLobby(now + 120), null);
+  for (const [dt, version] of Object.entries(versions)) assert.equal(ud.modules[dt].version, version);
+  const tomorrow = new U.UserData(P.b64decode(data.userdataB64), 10_000_001);
+  tomorrow.normalizeOfflineLobby(now + 86400);
+  assert.ok(tomorrow.modules[34].version > ud.modules[34].version, '旧快照跨日重新加载也必须使昨日客户端缓存失效');
+});
+
+test('资料查询和重新登录前刷新奖励弹窗标记，旧客户端版本得到完整新模块，跨日查询不再弹奖励', () => {
+  const before = mock.userdata.serialize();
+  const session = mock.createSession();
+  try {
+    const ud = new U.UserData(P.b64decode(data.userdataB64), mock.uid);
+    const oldVersion = ud.modules[34].version;
+    mock.setUserdata(ud.serialize());
+    mock.handlers[20001](session);
+    const now = Math.floor(Date.now() / 1000);
+    assert.ok(Math.abs(P.get(mock.userdata.row(34, '0'), 1) - now) < 3);
+    const query = P.W().s(2, P.W().v(1, 34).v(2, oldVersion).bytes()).bytes();
+    const [frame] = mock.handlers[100141](session, query);
+    const module = P.parse(frame[1]).find(([f]) => f === 3)[2];
+    assert.ok(P.get(module, 2) > oldVersion);
+    assert.ok(P.parse(module).some(([f]) => f === 3), '返回新模块行，而非旧版本的空响应');
+    mock.userdata.setRow(34, '0', P.setVarint(mock.userdata.row(34, '0'), 1, now - 86400));
+    mock.handlers[100141](session, query);
+    assert.ok(Math.abs(P.get(mock.userdata.row(34, '0'), 1) - now) < 3);
+  } finally {
+    mock.setUserdata(before);
+    session.destroy();
+  }
+});

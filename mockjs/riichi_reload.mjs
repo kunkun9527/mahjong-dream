@@ -19,9 +19,9 @@ const removeTiles = (hand, tiles) => {
 };
 
 /**
- * 把本手已下发给真人席的通知帧折叠成客户端可见局面（同进程断线重连，20163.f100）。
- * 只使用真人席当时收到的帧，因此不会泄漏他家暗牌或牌山；对局历史（牌河、摸切、立直宣言牌、副露顺序、宝牌、gameID）
- * 与切点一致。返回 null 表示该切点不能用快照恢复，调用方须退回整手重放。
+ * Fold the notification frames already sent to the human seat in this hand into the client-visible position (same-process reconnect, 20163.f100).
+ * Uses only frames the human seat received at the time, so it never leaks opponents' hidden tiles or the wall; match history (discards, tsumogiri, riichi declaration tile, meld order, dora, gameID)
+ * matches the cut point. Returns null if this cut point cannot be restored from a snapshot; the caller must then fall back to a full-hand replay.
  */
 export function foldRiichiFrames(frames, mySeat) {
   let state = null;
@@ -68,12 +68,12 @@ export function foldRiichiFrames(frames, mySeat) {
         player.count -= 1;
         if (player.hand) removeTiles(player.hand, [msg.card]);
       } else if (msg.action === PlayAction.AnGang) {
-        // 暗杠实体由调用方从权威副露补齐（他家暗杠的四张实体本来就在桌面公开）。
+        // Closed-kan tiles are filled in by the caller from authoritative melds (the four tiles of an opponent's closed kan are already public on the table).
         player.melds.push({ action: PlayAction.AnGang, card: msg.card, cards: null, qiangSeat: msg.seat });
         player.count -= 4;
         if (player.hand) removeTiles(player.hand, player.hand.filter((tile) => kindOf(tile) === kindOf(msg.card)));
       } else if (msg.action === PlayAction.PengGang) {
-        // 原 Reload 取 cards[0] 为加杠张，其余按碰恢复后再加杠。
+        // The original Reload takes cards[0] as the added-kan tile and re-adds the rest after restoring the pon.
         const pon = player.melds.find((meld) => meld.action === PlayAction.Peng && kindOf(meld.cards[0]) === kindOf(msg.card));
         if (!pon) throw new Error('重连快照：加杠找不到对应的碰');
         pon.action = PlayAction.PengGang;
@@ -88,7 +88,7 @@ export function foldRiichiFrames(frames, mySeat) {
       const { seat: from, card } = state.lastDiscard;
       const player = state.players[seat];
       state.players[from].otherTake.push(card);
-      // 原 Reload 把 cards[0..1] 当己方贡献、最后一张当被鸣牌。
+      // The original Reload treats cards[0..1] as the self contribution and the last tile as the called tile.
       player.melds.push({ action: msg.action, card, cards: [...msg.otherCards, card], qiangSeat: from });
       player.count -= msg.otherCards.length;
       if (player.hand) removeTiles(player.hand, msg.otherCards);
@@ -100,9 +100,9 @@ export function foldRiichiFrames(frames, mySeat) {
 }
 
 /**
- * 生成 20163.f100 的 riichi.Offline2OnlineGameScene 对象。
- * 动作窗口、分数、立直、振听、听牌与计时读取引擎当前值；它们都只关于真人席或公开信息。
- * 准备阶段、本手已结束、余牌为0（原客户端此时不走 Reload）或正在等待抢杠/抢北时返回 null。
+ * Build the riichi.Offline2OnlineGameScene object for 20163.f100.
+ * Action window, scores, riichi, furiten, waits and timers are read from the engine's current values; all of them concern only the human seat or public information.
+ * Returns null during the prepare phase, when the hand has ended, when 0 tiles remain (the original client does not use Reload then), or while waiting for a robbing-kan / robbing-North window.
  */
 export function buildRiichiReloadScene(frames, engine, mySeat = 0, now = Date.now()) {
   const state = foldRiichiFrames(frames, mySeat);
@@ -112,7 +112,7 @@ export function buildRiichiReloadScene(frames, engine, mySeat = 0, now = Date.no
   const draw = engine._expectedDraw?.seat === mySeat ? engine._expectedDraw : null;
   const claim = engine._expectedClaim?.seat === mySeat ? engine._expectedClaim : null;
   if (claim && claim.card !== state.lastDiscard?.card) return null;
-  // 本人摸牌张必须在手牌最后；其余手牌顺序沿用通知折叠结果。
+  // The human's drawn tile must be last in the hand; the rest of the hand order follows the notification fold result.
   const hand = state.players[mySeat].hand;
   if (me.drawnTile != null && hand.includes(me.drawnTile) && state.cur.seat === mySeat) {
     hand.splice(hand.indexOf(me.drawnTile), 1);

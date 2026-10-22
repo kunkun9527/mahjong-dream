@@ -122,13 +122,13 @@ for (const players of [3, 4]) for (const matchLength of ['east', 'hanchan']) {
           assert.deepEqual(profile.ranks[other], otherRank);
           assert.equal(result.oldLevel, level);
           assert.equal(result.oldPoint, rank.initial);
-          // 独立根据原表推导临界值；不把初始 PT 错当降段底线。
+          // Derives the boundary values independently from the original table; does not mistake the initial PT for the demotion floor.
           if (delta > 0 && level < table.length) {
             if (rank.up > delta) {
               profile.ranks[key] = { level, point: rank.up - delta - 1 };
               assert.equal(applyRankResult(profile, { players, matchLength, placement, roomId: rule.room }).level, level);
             }
-            // 低段一场奖励可能已超过整个升段阈值，合法起点最低为零。
+            // A low-tier match reward may already exceed the whole promotion threshold; the minimum legal starting point is zero.
             profile.ranks[key] = { level, point: Math.max(0, rank.up - delta) };
             const up = applyRankResult(profile, { players, matchLength, placement, roomId: rule.room });
             assert.equal(up.level, level + 1);

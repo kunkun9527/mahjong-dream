@@ -36,6 +36,16 @@ async function aiLevelsForRoom(t, roomId) {
   return session.riichi.engine.aiLevels;
 }
 
+for (const roomId of [1, 2]) {
+  test(`段位战启航/逐梦间（roomID=${roomId}）用低级 AI`, async (t) => {
+    assert.deepEqual(await aiLevelsForRoom(t, roomId), Array(4).fill('basic'));
+  });
+}
+
+test('未知房间默认中级 AI', async (t) => {
+  assert.deepEqual(await aiLevelsForRoom(t, 999), Array(4).fill('intermediate'));
+});
+
 test('段位战御龙间（roomID=4）用高级 AI', async (t) => {
   assert.deepEqual(await aiLevelsForRoom(t, 4), Array(4).fill('advanced'));
 });

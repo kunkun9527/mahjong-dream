@@ -1,4 +1,4 @@
-/* 激情麻将本地单机补丁：游戏 WebSocket 接到本机服务，并阻止所有外网请求。 */
+/* Offline single-player patch for Mahjong Dream: the game WebSocket connects to the local service, and all external network requests are blocked. */
 (function () {
   'use strict';
 
@@ -26,17 +26,17 @@
     stats.frames.push(frame);
     if (stats.frames.length > 200) stats.frames.shift();
   }
-  // ---------------- 界面语言 ----------------
-  // 原客户端按 navigator.language 选择内置语言表（English → 英文表）；mjLang=en 时只改这一个输入。
+  // ---------------- Interface language ----------------
+  // The original client picks its built-in language table from navigator.language (English → English table); with mjLang=en only this one input is changed.
   var LANGUAGES = { en: 'en-US', zh: 'zh-CN' };
   var requestedLanguage = LANGUAGES[new URLSearchParams(location.search).get('mjLang')];
   if (requestedLanguage) {
     ['language', 'userLanguage'].forEach(function (key) {
       try { Object.defineProperty(navigator, key, { configurable: true, get: function () { return requestedLanguage; } }); }
-      catch (e) { /* 只读环境忽略 */ }
+      catch (e) { /* Ignore in read-only environments */ }
     });
     try { Object.defineProperty(navigator, 'languages', { configurable: true, get: function () { return [requestedLanguage]; } }); }
-    catch (e) { /* 只读环境忽略 */ }
+    catch (e) { /* Ignore in read-only environments */ }
   }
 
   window.__mjmock = {
@@ -47,7 +47,7 @@
     dump: function (n) { return stats.frames.slice(-(n || 20)); }
   };
 
-  // ---------------- WebSocket 劫持 ----------------
+  // ---------------- WebSocket hijack ----------------
   var NativeWS = window.WebSocket;
   function PatchedWS(url, protocols) {
     var orig = url;
@@ -74,17 +74,17 @@
   PatchedWS.prototype = NativeWS.prototype;
   PatchedWS.CONNECTING = 0; PatchedWS.OPEN = 1;
   PatchedWS.CLOSING = 2; PatchedWS.CLOSED = 3;
-  // FakeWebSocket 不是原生 WebSocket 的实例，这里让 instanceof 依然成立
+  // FakeWebSocket is not an instance of the native WebSocket; this keeps instanceof working
   try {
     Object.defineProperty(PatchedWS, Symbol.hasInstance, {
       value: function (o) {
         return o instanceof NativeWS;
       }
     });
-  } catch (e) { /* 老浏览器忽略 */ }
+  } catch (e) { /* Ignore on old browsers */ }
   window.WebSocket = PatchedWS;
 
-  // ---------------- fetch 劫持 ----------------
+  // ---------------- fetch hijack ----------------
   var nativeFetch = window.fetch && window.fetch.bind(window);
   if (nativeFetch) {
     window.fetch = function (input, init) {
@@ -99,7 +99,7 @@
     };
   }
 
-  // ---------------- XHR 劫持 ----------------
+  // ---------------- XHR hijack ----------------
   var open = XMLHttpRequest.prototype.open;
   var setRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
   XMLHttpRequest.prototype.open = function (m, u) {
@@ -119,7 +119,7 @@
     return setRequestHeader.call(this, name, value);
   };
 
-  // ---------------- 外部 <script> 拦截 ----------------
+  // ---------------- External <script> interception ----------------
   var setAttr = Element.prototype.setAttribute;
   Element.prototype.setAttribute = function (k, v) {
     if (this.tagName === 'SCRIPT' && k === 'src' && !localUrl(v)) {
@@ -145,16 +145,16 @@
 
   console.log('[offline] 补丁已加载');
 
-  // ---------------- webGLPluginHelper.getUrlParams 安全覆盖 ----------------
-  // framework.js 的实现当 URL 没有 ? 时会 split('?')[1] 拿到 undefined，再 split('&') 炸
-  // 我们用 URLSearchParams 重新实现一份，覆盖到所有可能的挂载点
+  // ---------------- Safe override of webGLPluginHelper.getUrlParams ----------------
+  // framework.js's implementation does split('?')[1] when the URL has no '?', getting undefined, and then split('&') blows up;
+  // we reimplement it with URLSearchParams and install it at every possible mount point.
   function safeGetUrlParams() {
     try {
       var qs = window.location.search;
       var u = new URLSearchParams(qs);
       var obj = {};
       u.forEach(function (v, k) { obj[k] = v; });
-      // 也吃 hash 里的参数
+      // Also reads parameters from the hash
       var h = window.location.hash || '';
       if (h.indexOf('?') >= 0) {
         new URLSearchParams(h.split('?')[1]).forEach(function (v, k) {
@@ -175,18 +175,18 @@
     console.log('[offline] 已 patch webGLPluginHelper.getUrlParams');
     return true;
   }
-  // 轮询：framework.js 是 async 加载，等 Module/webGLPluginHelper 出现
+  // Polling: framework.js loads asynchronously, so wait until Module/webGLPluginHelper appears
   var tries = 0;
   var timer = setInterval(function () {
     tries++;
     var done = false;
-    // 几个常见挂载点
+    // Common mount points
     var candidates = [window, window.Module, window.unityInstance, window.QuickService];
     for (var i = 0; i < candidates.length; i++) {
       var c = candidates[i];
       if (!c || !Object.prototype.hasOwnProperty.call(c, 'webGLPluginHelper')) continue;
       if (patchHelper(c.webGLPluginHelper)) done = true;
       }
-    if (done || tries > 600) clearInterval(timer);  // 最多 60 秒
+    if (done || tries > 600) clearInterval(timer);  // At most 60 seconds
   }, 100);
 })();

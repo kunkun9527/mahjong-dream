@@ -1,19 +1,19 @@
-/* 纯浏览器端的 Mock 服务端 —— mock_server.py 的 JS 版
+/* Pure browser-side mock server: the JS version of mock_server.py
  *
- * 外层 wrapper（packet.proto）
+ * Outer wrapper (packet.proto)
  *   f1  packet_type   1 = Response, 2 = Request / KeepAlive
  *   f2  msg_id
- *   f3  payload（具体业务 proto）
- *   f6  ? 服务端在 KeepAlive 回包里填 2
- *   f7  uid（服务端分配的内部 uid）
- *   f8  ? 固定 1
- *   f11 seq（回显请求里的 seq）
- *   f12 ? 客户端固定填 4001
- *   f24 DataChange —— 用户数据增量回推（保存类操作靠它才算成功）
- *   f27 服务端下行计数器
- *   f29 客户端版本号
+ *   f3  payload (the concrete business proto)
+ *   f6  ? the server fills in 2 in KeepAlive replies
+ *   f7  uid (internal uid assigned by the server)
+ *   f8  ? fixed at 1
+ *   f11 seq (echoes the seq from the request)
+ *   f12 ? the client always fills in 4001
+ *   f24 DataChange: user-data increments pushed back (save operations only succeed through this)
+ *   f27 server downstream counter
+ *   f29 client version number
  *
- * 约定：响应 msg_id = 请求 msg_id + 1，KeepAlive(20019) 例外，原样返回。
+ * Convention: response msg_id = request msg_id + 1; KeepAlive(20019) is the exception and is echoed as-is.
  */
 (function (global) {
   'use strict';
@@ -23,21 +23,21 @@
   var U = MJ.userdata;
   var DATA = MJ.data;
 
-  var UID = 349804;                 // 服务端内部 uid（抓包里服务端返回的）
+  var UID = 349804;                 // Server-internal uid (as returned by the server in packet captures)
   var CLIENT_VERSION = '1.1.107241726.0';
 
   var LOG = { enabled: true, unhandled: [] };
 
-  /** 请求频率统计：msgId -> { n, last }，用于定位「刷屏」消息 */
+  /** Request-rate statistics: msgId -> { n, last }, used to locate "spammy" messages */
   var REQ_STATS = {};
 
-  /** 最近 100141 请求详情（用于诊断刷屏） */
+  /** Details of recent 100141 requests (used to diagnose spam) */
   var LAST_QUERIES = [];
 
-  /** 对局参数：可用 URL 查询串覆盖，也可在控制台改 __mj.config 后重进对局。
-   *    ?mjPlayers=3   三麻（摸到北自动拔北）
-   *    ?mjSeed=12345  固定牌山随机种子，便于复现
-   *    ?mjSpeed=0.4   AI 思考延迟倍率，0 = 瞬间
+  /** Match parameters: can be overridden with URL query strings, or changed in the console via __mj.config before re-entering a match.
+   *    ?mjPlayers=3   3-player (North is pulled automatically on draw)
+   *    ?mjSeed=12345  fixed wall random seed, for reproducibility
+   *    ?mjSpeed=0.4   AI thinking-delay multiplier, 0 = instant
    */
   var CONFIG = MJ.config || (MJ.config = {
     players: 4, matchLength: 'east', akaCount: 1, speed: 1, seed: undefined, autoHuman: false
@@ -47,7 +47,7 @@
       var q = new URLSearchParams(global.location ? global.location.search : '');
       if (q.get('mjPlayers')) {
         CONFIG.players = parseInt(q.get('mjPlayers'), 10);
-        CONFIG.playersExplicit = true;   // 显式指定时忽略匹配请求里的 gameType
+        CONFIG.playersExplicit = true;   // An explicit value overrides the gameType in the match request
       }
       if (q.get('mjLength')) {
         CONFIG.matchLength = q.get('mjLength') === 'hanchan' ? 'hanchan' : 'east';
@@ -58,7 +58,7 @@
       if (q.get('mjSpeed')) CONFIG.speed = parseFloat(q.get('mjSpeed'));
       if (q.get('mjAka')) CONFIG.akaCount = parseInt(q.get('mjAka'), 10);
       if (q.get('mjAutoHuman')) CONFIG.autoHuman = parseInt(q.get('mjAutoHuman'), 10) !== 0;
-    } catch (e) { /* 非浏览器环境 */ }
+    } catch (e) { /* Not a browser environment */ }
   })();
 
   function nameOf(mid) { return (DATA.names && DATA.names[mid]) || '?'; }
@@ -70,7 +70,7 @@
     console.log.apply(console, arguments);
   }
 
-  // 录制回放库：msg_id -> payload
+  // Recording/replay library: msg_id -> payload
   var REPLAY = {};
   for (var k in DATA.replayB64) {
     if (Object.prototype.hasOwnProperty.call(DATA.replayB64, k)) {
@@ -78,44 +78,44 @@
     }
   }
 
-  // 可变的大厅用户数据：保存类操作直接改这里，并通过 wrapper f24 回推增量
+  // Mutable lobby user data: save operations change it directly here and push the increment back through wrapper f24
   var USERDATA = new U.UserData(P.b64decode(DATA.userdataB64), UID);
 
   /* ================================================================== *
-   * 100141 刷屏的真正根因：DT39(Task) 的「刷新点」是时间戳，快照里已过期
+   * Root cause of the 100141 spam: DT39(Task)'s "refresh point" is a timestamp, and the one in the snapshot had already expired
    * ------------------------------------------------------------------
-   * schema（protos/src/user_info/user_info.proto）：
+   * schema (protos/src/user_info/user_info.proto):
    *   TaskInfo{1:ResidentTask} -> ResidentTask{3:map<int32,SingleTaskRecycleData>}
-   *   SingleTaskRecycleData{1:recycleType(1=每日,2=每周), 2:score,
-   *                         3:refreshTime(下次刷新点), 4:realRefreshTime(上次实际刷新)}
+   *   SingleTaskRecycleData{1:recycleType(1=daily,2=weekly), 2:score,
+   *                         3:refreshTime(next refresh point), 4:realRefreshTime(last actual refresh)}
    *
-   * 客户端逻辑是「now >= refreshTime -> 本地任务数据过期 -> 发 100141 查 DT39」。
-   * mock 回「版本相同 + 0 行」，客户端本地的 refreshTime 仍是过去时间，于是
-   * 立刻再查 —— 这就是 43B 请求 / 27B 响应的死循环刷屏（与模块存不存在无关）。
-   * 真实服在刷新点到来时会重算任务、bump 版本、下发「未来的 refreshTime」，
-   * 客户端一轮就收敛，所以真实抓包里 DT39 只是偶发轮询而非刷屏。
+   * The client logic is "now >= refreshTime -> local task data expired -> send 100141 to query DT39".
+   * The mock replied "same version + 0 rows", so the client's local refreshTime stayed in the past, and it
+   * queried again immediately: this is the endless loop of 43B requests / 27B responses (independent of whether the module exists).
+   * When the real server reaches a refresh point, it recomputes tasks, bumps the version, and sends a "future refreshTime";
+   * the client converges in one round, which is why in real captures DT39 is only polled occasionally rather than spammed.
    *
-   * 修复：启动时（以及每次查询 DT39 时）把过期的刷新点推到下一个刷新点，
-   * 并 bump 模块版本 —— 客户端 cliVer < srvVer 会拿到整模块 + 未来刷新点，
-   * 于是不再重复请求这个接口。幂等：未过期时不做任何改动。
+   * Fix: at startup (and each time DT39 is queried), push expired refresh points to the next refresh point,
+   * and bump the module version. A client with cliVer < srvVer gets the whole module plus the future refresh point,
+   * so it stops re-requesting this interface. Idempotent: no change when nothing has expired.
    * ================================================================== */
-  var TZ_OFFSET = 8 * 3600;                 // 刷新点按 UTC+8 的 00:00 计算
+  var TZ_OFFSET = 8 * 3600;                 // Refresh points are computed at 00:00 UTC+8
 
   function dayIndex(ts) { return Math.floor((ts + TZ_OFFSET) / 86400); }
   function dayStart(d) { return d * 86400 - TZ_OFFSET; }
-  function dayOfWeek(d) { return (d + 4) % 7; }      // 0=周日（1970-01-01 是周四）
+  function dayOfWeek(d) { return (d + 4) % 7; }      // 0 = Sunday (1970-01-01 was a Thursday)
 
-  /** 下一个刷新点：type 2=每周(下周一 00:00)，其余按每日(次日 00:00) */
+  /** Next refresh point: type 2 = weekly (next Monday 00:00), otherwise daily (next day 00:00) */
   function nextRefreshPoint(rtype, now) {
     var d = dayIndex(now);
     if (Number(rtype) === 2) {
-      var dow = dayOfWeek(d) || 7;                   // 1..7，7=周日
+      var dow = dayOfWeek(d) || 7;                   // 1..7, 7 = Sunday
       return dayStart(d + (8 - dow));
     }
     return dayStart(d + 1);
   }
 
-  /** 当前周期起点（写入 realRefreshTime：上一次实际刷新时刻） */
+  /** Start of the current cycle (written to realRefreshTime: the time of the last actual refresh) */
   function curPeriodStart(rtype, now) {
     var d = dayIndex(now);
     if (Number(rtype) === 2) {
@@ -130,19 +130,19 @@
     catch (e) { return String(ts); }
   }
 
-  /** 改写一条 SingleTaskRecycleData；未过期返回 null（不改动） */
+  /** Rewrite one SingleTaskRecycleData; returns null if not expired (no change) */
   function fixRecycleValue(valBytes, mapKey, now) {
     var d = P.dict(valBytes);
     var rtype = Number(d[1] != null ? d[1] : mapKey) || 1;
     var old = Number(d[3] || 0);
-    if (old > now) return null;                      // 刷新点还在未来 -> 无需处理
+    if (old > now) return null;                      // Refresh point still in the future -> nothing to do
     var to = nextRefreshPoint(rtype, now);
-    var nb = P.setVarint(valBytes, 3, to);           // refreshTime -> 下一个刷新点
-    nb = P.setVarint(nb, 4, curPeriodStart(rtype, now));  // realRefreshTime -> 本周期起点
+    var nb = P.setVarint(valBytes, 3, to);           // refreshTime -> next refresh point
+    nb = P.setVarint(nb, 4, curPeriodStart(rtype, now));  // realRefreshTime -> start of this cycle
     return { bytes: nb, rtype: rtype, from: old, to: to };
   }
 
-  /** 遍历 ResidentTask.f3(recycles map entry)，过期的改写；无改动返回 null */
+  /** Iterate ResidentTask.f3 (recycles map entries); rewrite the expired ones; returns null if nothing changed */
   function fixResidentTask(bytes, now, report) {
     var fs = P.parse(bytes), w = P.W(), changed = false;
     for (var i = 0; i < fs.length; i++) {
@@ -171,7 +171,7 @@
     return changed ? w.bytes() : null;
   }
 
-  /** DT39 Task：把过期刷新点推到未来并 bump 版本。返回是否有改动（幂等） */
+  /** DT39 Task: push expired refresh points into the future and bump the version. Returns whether anything changed (idempotent) */
   function fixTaskRefreshTime(why) {
     var mod = USERDATA.modules[39];
     if (!mod || !mod.order || !mod.order.length) return false;
@@ -191,10 +191,10 @@
       if (rowChanged) { mod.rows[key] = w.bytes(); changed = true; }
     }
     if (changed) {
-      // 版本必须「随天数单调递增」：每次重载都从快照基线(21530)开始修，
-      // 若固定只 +1，则第二天重载后版本仍是 21531 —— 客户端缓存里也是 21531，
-      // 于是拿不到新数据、但本地刷新点已过期 -> 又开始刷屏。
-      // 这里按「已跨过的天数」加权，保证隔天重载版本一定比客户端缓存更高。
+      // The version must increase monotonically with the days: every reload starts fixing from the snapshot baseline (21530),
+      // so if it only went +1, the version after the next day's reload would still be 21531 — the client cache also has 21531,
+      // so it gets no new data while its local refresh point has expired -> spam starts again.
+      // Here the increment is weighted by the number of days already crossed, guaranteeing that the version after a next-day reload is always higher than the client cache.
       var gap = 0;
       for (var g = 0; g < report.length; g++) {
         if (report[g].from > 0) {
@@ -249,27 +249,27 @@
     this.loggedIn = false;
     this.tableId = 0;
     this.seat = -1;
-    this.socket = null;         // 绑定的 FakeWebSocket，服务端主动下推时用
-    this.lastSeq = 0;           // 最近一次请求的 seq，主动推送时沿用
-    this.riichi = null;         // 立直麻将对局会话（惰性创建）
-    // 断线重连恢复用（见 HANDLERS[20162]）：
-    this.table = null;          // 牌桌快照 { sanma, self, robots }，20403 匹配成型时写入
-    this.walletChanges = null;  // 一局战结算后的道具增量，随下一次离桌/再来一局应答的 f24 下发
-    this.handFrames = [];       // 本局已下发的 20018 通知帧，重连后按序重放以重建局面
-    this.matchTimer = null;       // 可取消的匹配完成计时器
-    this.engineStartTimer = null; // 组桌完成后延迟启动引擎的计时器，同样必须可取消
-    this.matchToken = 0;          // 防止旧计时器在重新匹配后误开桌
+    this.socket = null;         // The bound FakeWebSocket, used when the server pushes actively
+    this.lastSeq = 0;           // seq of the most recent request, reused for active pushes
+    this.riichi = null;         // Riichi mahjong match session (created lazily)
+    // For disconnect-reconnect recovery (see HANDLERS[20162]):
+    this.table = null;          // Table snapshot { sanma, self, robots }, written when 20403 matchmaking completes
+    this.walletChanges = null;  // Item increments from a one-round settlement, sent in the f24 of the next leave-table / play-again reply
+    this.handFrames = [];       // 20018 notification frames sent in this match; replayed in order after reconnect to rebuild the position
+    this.matchTimer = null;       // Cancellable matchmaking-completion timer
+    this.engineStartTimer = null; // Timer that starts the engine after the table is formed; it must also be cancellable
+    this.matchToken = 0;          // Prevents an old timer from opening a table by mistake after re-matching
   }
 
-  /** 服务端主动下推一帧（不由某个请求触发，比如 AI 摸打产生的对局事件）。
-   *  异步投递：同步回调会在客户端的 send() 调用栈里重入，打乱 Unity 的消息队列。 */
+  /** Actively push one frame from the server (not triggered by a request, e.g. match events produced by the AI's draws/discards).
+   *  Delivered asynchronously: a synchronous callback would re-enter on the client's send() call stack and disrupt Unity's message queue. */
   Session.prototype.push = function (msgId, payload, ptype, extra, seq) {
     var sock = this.socket;
     if (!sock || sock.readyState !== OPEN) return;
     var self = this;
-    // 只在实际投递时分配 f27 下行序号。提前 wrap 后再延迟发送，会被
-    // dispatch 的即时心跳响应超车，使客户端收到 38、37 这样的倒序。
-    // f11 RPC 序号仍取 push 调用时的参数，不能读取后续请求的 lastSeq。
+    // The f27 downstream sequence number is assigned only at actual delivery; if it were wrapped early and sent later,
+    // the dispatcher's immediate heartbeat response would overtake it, and the client would receive reversed order such as 38 then 37.
+    // The f11 RPC seq still takes the argument from the push call and must not read the lastSeq of later requests.
     setTimeout(function () {
       if (self.socket !== sock || sock.readyState !== OPEN) return;
       var frame = self.wrap(msgId, payload, seq === undefined ? null : seq, ptype || 1, extra);
@@ -277,7 +277,7 @@
     }, 0);
   };
 
-  /** 连接断开时释放附属资源 */
+  /** Release attached resources when the connection closes */
   Session.prototype.destroy = function () {
     if (this.matchTimer) { clearTimeout(this.matchTimer); this.matchTimer = null; }
     if (this.engineStartTimer) { clearTimeout(this.engineStartTimer); this.engineStartTimer = null; }
@@ -289,17 +289,17 @@
     this.socket = null;
   };
 
-  /** 是否有进行中的对局；断线托管、重连与重放共用此判据。 */
+  /** Whether a match is in progress; disconnect auto-play, reconnect and replay all share this criterion. */
   Session.prototype.liveMatch = function () {
     return !!(this.tableId && this.riichi && !this.riichi.matchOver);
   };
 
-  /** 暂停会话（保留引擎，供重连后复用） */
+  /** Pause the session (keep the engine for reuse after reconnect) */
   Session.prototype.suspend = function () {
-    this.socket = null;  // 断开 WS 绑定，但保留 riichi 引擎
+    this.socket = null;  // Unbind the WS but keep the riichi engine
   };
 
-  /** 重连时把旧会话的引擎接到新 WS 上 */
+  /** On reconnect, attach the old session's engine to the new WS */
   Session.prototype.resume = function (socket) {
     var self = this;
     if (this.socket !== socket) this.shopReplies = new Map();
@@ -311,14 +311,14 @@
     this._replayStarted = false;
     if (this._resyncTimer) { clearTimeout(this._resyncTimer); this._resyncTimer = null; }
 
-    // 重连后客户端要先登录、拉用户数据，才会发 20162 问「我还在局里吗」，
-    // 抓包里这中间隔了约 4 秒。这段时间引擎照旧在摸打，如果实时下推，客户端会
-    // 先看到「当前这一巡」、再看到重放的「本局开头」，牌局直接错乱。
-    // 所以一重连就先把下推挂起攒着，等 20162 触发重放时按序补齐。
+    // After reconnecting, the client must first log in and pull user data before it sends 20162 to ask "am I still in a match?";
+    // in the captures this gap is about 4 seconds. During this time the engine keeps running, and if pushes went live, the client would
+    // first see "the current turn" and then the replayed "start of the match", and the table would be scrambled.
+    // So on reconnect, pushes are suspended and queued, then filled in order when 20162 triggers the replay.
     if (this.liveMatch()) {
       this.replaying = true;
-      // 兜底：客户端始终没来问 20162（例如它压根不打算恢复对局），到点就恢复
-      // 实时下推，不能把帧无限期扣在缓存里。
+      // Fallback: if the client never asks 20162 (e.g. it does not intend to resume the match), resume
+      // live pushes at the deadline; frames must not be held in the cache indefinitely.
       this._resyncTimer = setTimeout(function () {
         self._resyncTimer = null;
         if (!self.replaying) return;
@@ -327,12 +327,12 @@
       }, 10000);
     }
     if (this.riichi) {
-      // 引擎的 emit 需要能推到新 WS。riichi 引擎用的是 emit 回调，需要重建引擎
-      // 这里只保留 riichi 引用，Server.prototype.push 走 socket 下发即可。
+      // The engine's emit must be able to push to the new WS. The riichi engine uses an emit callback, so the engine has to be rebuilt
+      // Only keep the riichi reference here; Server.prototype.push then sends through the socket.
     }
   };
 
-  /** 打包一个下行帧。extra: 额外 wrapper 字段 { fn: value } */
+  /** Pack one downstream frame. extra: extra wrapper fields { fn: value } */
   Session.prototype.wrap = function (msgId, payload, seq, ptype, extra) {
     this.counter += 1;
     var w = P.W();
@@ -342,9 +342,9 @@
     if (extra && extra[6] !== undefined) w.v(6, extra[6]);
     w.v(7, this.uid);
     w.v(8, 1);
-    // f11 = RPC 请求序列号：只有「响应帧」才回显客户端请求的 seq（传数字，含0）。
-    // 服务器主动推送的通知（20408/NtfToPrepare/...）传 null，不写 f11，
-    // 否则客户端会把这些通知误当成「匹配的迟到响应」而忽略，导致卡在匹配界面。
+    // f11 = RPC request sequence number: only response frames echo the client's request seq (pass a number, including 0).
+    // Server-initiated notifications (20408/NtfToPrepare/...) pass null and do not write f11,
+    // otherwise the client would mistake them for a late response to matchmaking and ignore them, getting stuck on the matchmaking screen.
     if (seq !== null && seq !== undefined) w.v(11, seq);
     if (extra && extra[12] !== undefined) w.v(12, extra[12]);
     if (extra && extra[24] !== undefined) w.s(24, extra[24]);
@@ -353,8 +353,8 @@
     return w.bytes();
   };
 
-  // ---------------------------------------------------------- 通用工具
-  /** 把数据变更增量塞进响应帧的 wrapper f24。 */
+  // ---------------------------------------------------------- Common utilities
+  /** Attach data-change increments to the wrapper f24 of a response frame. */
   function withChange(midRsp, changes, body) {
     if (!changes) return [[midRsp, body || new Uint8Array(0), 1, null]];
     var pkt = USERDATA.changeNotify(changes);
@@ -366,7 +366,7 @@
     return [[midRsp, body || new Uint8Array(0), 1, { 24: pkt }]];
   }
 
-  // ---------------------------------------------------------- 各消息处理器
+  // ---------------------------------------------------------- Per-message handlers
   var HANDLERS = {};
 
   function handleShop(sess, payload, seq, mid, perform) {
@@ -418,27 +418,28 @@
 
   HANDLERS[100502] = function (sess, payload, seq) {
     return handleShop(sess, payload, seq, 100502, function () {
-      P.parse(payload); // 空业务消息也必须保证 protobuf 结构合法。
+      P.parse(payload); // Empty business messages must also guarantee a valid protobuf structure.
       return MJ.shop.refreshShop(USERDATA);
     });
   };
 
   /** 20001 KGameServerLoginRequest -> 20002 */
   HANDLERS[20001] = function (sess) {
+    USERDATA.normalizeOfflineLobby();
     sess.loggedIn = true;
     var w = P.W();
     w.s(2, P.W().v(1, sess.uid).bytes());   // user { uid }
     w.v(63, nowS());                        // server time
     w.s(65, sess.sessionId);                // session uuid
-    // 进行中对局标记：真实服在客户端「还坐在一局没打完的牌里」时回 f22=1，
-    // 客户端据此发 20162（Offline2OnlineRequest）来恢复对局；缺了这一位，客户端会
-    // 判定「牌局已不存在」→ 直接发 20102 退回大厅（见 capture/dongfeng1 帧 10-12）。
-    // 仅当本会话确有未结束的对局(tableId 存在)时才置位，避免干扰正常登录/大厅。
+    // In-progress match flag: the official server returns f22=1 when the client is still inside an unfinished hand,
+    // and the client uses this to send 20162 (Offline2OnlineRequest) to resume the match; without this bit, the client
+    // concludes "the table no longer exists" and immediately sends 20102 to return to the lobby (see capture/dongfeng1 frames 10-12).
+    // Only set it when this session really has an unfinished match (tableId exists), so normal login/lobby is not affected.
     if (sess.tableId) w.v(22, 1);
     return [[20002, w.bytes(), 1, null]];
   };
 
-  /** 20019 KGameServerKeepAlive -> 同 id 返回服务器毫秒时间戳 */
+  /** 20019 KGameServerKeepAlive -> return the server's millisecond timestamp with the same id */
   HANDLERS[20019] = function (sess) {
     var body = P.W().v(1, nowMs()).bytes();
     return [[20019, body, 2, { 6: 2, 12: 4001, 29: sess.version }]];
@@ -446,21 +447,23 @@
 
   /** 100141 QueryUserDataRequest -> 100142
    *
-   *  增量协议（与真实服一致，参考 proto/user_info/user_data.proto 的
-   *  QueryUserDataSingleTypeResponse.version）：
-   *    · 未带版本 / uint64-max「全部」哨兵 -> 返回整模块（含服务端当前 version）
-   *    · 带具体版本 Vc：
-   *        - Vc >= 服务端版本 -> 回头部 0 行，version 用「服务端权威值」
-   *                              （不是回显客户端版本，否则客户端永远学不到真实版本）
-   *        - Vc <  服务端版本 -> 直接回整模块，让客户端一轮就拿到最新数据+版本，收敛
+   *  Incremental protocol (consistent with the official server; see proto/user_info/user_data.proto
+   *  QueryUserDataSingleTypeResponse.version):
+   *    · no version given / uint64-max "all" sentinel -> return the whole module (including the server's current version)
+   *    · a specific version Vc is given:
+   *        - Vc >= server version -> return 0 rows in the header; version uses the server's authoritative value
+   *          (not echoing the client version, otherwise the client would never learn the real version)
+   *        - Vc <  server version -> return the whole module directly, so the client gets the latest data and version in one round and converges
    *
-   *  旧实现把客户端版本原样回显且永远回 0 行，IndexedDB 旧缓存与快照版本不一致时
-   *  客户端永远收不到最新数据 → 重查死循环，只能用断 WebSocket 来「重置」。
-   *  现在按服务端权威版本收敛，单次查询即同步，无需断线。
+   *  The old implementation echoed the client version back and always returned 0 rows; when the IndexedDB cache disagreed with the snapshot version,
+   *  the client never received the latest data, causing an endless re-query loop that could only be "reset" by dropping the WebSocket.
+   *  It now converges to the server's authoritative version, so one query syncs, with no disconnect needed.
    */
   HANDLERS[100141] = function (sess, payload) {
-    // 资料版本已按服务端权威值收敛；正常突发查询也必须响应。
-    // 不再用断线重置缓存，否则本地服务会误把仍在游戏的用户交给 AI。
+    // Refresh daily popup guards before reporting authoritative module versions.
+    USERDATA.normalizeOfflineLobby();
+    // The profile version now converges to the server's authoritative value; normal burst queries must also be answered.
+    // No longer reset the cache by disconnecting, otherwise the local service would wrongly hand a user still in a game over to the AI.
     var queries = [];
     try {
       var fs = P.parse(payload);
@@ -470,10 +473,10 @@
         if (q[1] == null) continue;
         queries.push([q[1], q[2] == null ? -1 : q[2]]);
       }
-    } catch (e) { /* 解析失败时退化为全量 */ }
+    } catch (e) { /* Degrade to a full response when parsing fails */ }
 
-    // 时间自愈：涉及 DT39 时先把过期刷新点推到未来（幂等）。这样本次响应就带上
-    // 「未来的 refreshTime」+ 更高版本，客户端一轮即收敛；挂机跨天后也能自愈。
+    // Time self-healing: when DT39 is involved, first push expired refresh points into the future (idempotent). This way the response carries
+    // the future refreshTime plus a higher version, so the client converges in one round; it also self-heals after idling across days.
     var touchTask = !queries.length;
     for (var qi = 0; qi < queries.length; qi++) {
       if (Number(queries[qi][0]) === 39) touchTask = true;
@@ -492,15 +495,15 @@
     var dataCount = 0, missCount = 0, details = [];
     for (var k = 0; k < queries.length; k++) {
       var dt = queries[k][0];
-      // cliVer 可能是 BigInt（uint64 全量哨兵），统一转 number 避免比较/编码抛错
+      // cliVer may be a BigInt (the uint64 full-sentinel), so convert it to a number uniformly to avoid comparison/encoding exceptions
       var raw = queries[k][1];
       var cliVer = (typeof raw === 'bigint') ? Number(raw) : (raw == null ? -1 : Number(raw));
       var mod = USERDATA.modules[dt];
 
       if (mod == null) {
-        // 模块在 mock 快照里不存在（例：dt=3 不在 userdataB64 中）。
-        // 旧实现返回「无版本头部」，客户端永远无法判定已同步 -> 反复重查死循环（刷屏）。
-        // 修复：回显客户端版本（或 0），让客户端能正常收敛、停止轮询。
+        // The module does not exist in the mock snapshot (e.g. dt=3 is not in userdataB64).
+        // The old implementation returned "no version header", so the client could never judge itself synced -> endless re-query loop (spam).
+        // Fix: echo the client version (or 0), so the client can converge normally and stop polling.
         var hv = (cliVer > 0 && cliVer < 1e18) ? cliVer : 0;
         w.s(3, P.W().v(1, dt).v(2, hv).bytes());
         missCount++;
@@ -508,17 +511,17 @@
         continue;
       }
 
-      var isFull = (cliVer < 0) || (cliVer >= 1e18);   // 未带版本 / uint64-max 全量哨兵
+      var isFull = (cliVer < 0) || (cliVer >= 1e18);   // No version given / uint64-max full sentinel
       if (isFull) {
-        w.s(3, mod.serialize());                        // 整模块（带服务端当前版本）
+        w.s(3, mod.serialize());                        // Whole module (with the server's current version)
         dataCount++;
         details.push(dt + ':全量->v' + mod.version);
       } else if (cliVer < mod.version) {
-        w.s(3, mod.serialize());                        // 客户端落后 -> 给整模块，一次同步
+        w.s(3, mod.serialize());                        // Client is behind -> give the whole module, one-shot sync
         dataCount++;
         details.push(dt + ':cli=' + cliVer + '<srv=' + mod.version + '->下发整模块');
       } else {
-        // 已最新/超前：回显「客户端版本」，0 行（与真实服一致——真实服即回显客户端版本）
+        // Already up to date / ahead: echo the client version with 0 rows (consistent with the official server, which also echoes the client version)
         w.s(3, P.W().v(1, dt).v(2, cliVer).bytes());
         details.push(dt + ':cli=' + cliVer + '=srv->0行');
       }
@@ -561,19 +564,19 @@
     return nickname && !/[\u0000-\u001f\u007f]/.test(nickname) ? nickname : null;
   }
 
-  /** 昵称预校验；客户端长度/字符规则优先，本地服务兜底拒绝空白和控制字符。 */
+  /** Nickname pre-validation: the client's length/character rules take precedence; the local service also rejects blank and control characters as a fallback. */
   HANDLERS[100151] = function (sess, payload) {
     var nickname = validNickname(payloadText(payload));
     return [[100152, P.W().v(1, nickname ? 0 : 2).bytes(), 1, null]];
   };
 
-  // 杂货铺改名卡；原客户端没有改名卡时不会发出改名请求。
+  // Rename card from the general store; the original client does not send a rename request without a rename card.
   var RENAME_CARD_ID = 60007;
 
-  /** 修改基础资料。请求 ModifySingleBasicFieldRequest { 1:字段类型, 2:UserBasicField }，
-   *  类型 1/5 为昵称、2 为问候语。客户端回调（DataMgr_BasicInfo.ModifyBaseInfoRequest 的
-   *  lambda）要求应答 { 1:结果码, 2:原请求 }，按 f2.f1 的类型派发界面事件；缺 f2 时改名窗口
-   *  不关闭、昵称不刷新。改名消耗 1 张改名卡，数据通过 f24 更新 DT1/DT6。 */
+  /** Change basic profile fields. Request ModifySingleBasicFieldRequest { 1:field type, 2:UserBasicField },
+   *  type 1/5 = nickname, 2 = greeting. The client callback (the lambda of DataMgr_BasicInfo.ModifyBaseInfoRequest)
+   *  requires a reply { 1:result code, 2:original request } and dispatches UI events by the f2.f1 type; without f2 the rename window
+   *  does not close and the nickname does not refresh. A rename consumes 1 rename card; the data updates DT1/DT6 through f24. */
   HANDLERS[100007] = function (sess, payload) {
     var type = 0;
     try { type = P.dict(payload)[1] || 0; } catch (e) { type = 0; }
@@ -600,7 +603,7 @@
   };
 
   /** 100204 WearMahjongWarriorSculptRequest { 1:SculptId, 2:WarriorId } -> 100205
-   *  Response 本身是空消息，真正让客户端认账的是 wrapper f24 的增量。 */
+   *  The Response itself is an empty message; what actually makes the client accept it is the f24 increment in the wrapper. */
   HANDLERS[100204] = function (sess, payload) {
     var d = P.dict(payload);
     var sculptId = d[1] || 0, warriorId = d[2] || 0;
@@ -611,12 +614,12 @@
   };
 
   /** 100011 SelectEquipmentInUseRequest { 1: repeated Entry{1:DataType,2:Value} } -> 100012
-   *  换头像 / 换出战雀士 / 换皮肤 / 切场景(背景+内景) 全都走这个。
+   *  Changing avatar / in-match warrior / skin / scene (background + interior) all go through this.
    *
-   *  对照正式服抓包（capture/live4）确认的真实回包形态：
-   *    body = SelectEquipmentInUseResponse { 2: <原样回显请求 payload> }
-   *    f24  = DataChangeNotify { 1: UserDataChange{ DT1 整行, ct=MODIFY, ver+N } }
-   *  之前 body 为空 + f24 少套一层 f1，客户端认不了，所以 UI 切不动。 */
+   *  The real response shape, confirmed against the official packet capture (capture/live4):
+   *    body = SelectEquipmentInUseResponse { 2: <request payload echoed verbatim> }
+   *    f24  = DataChangeNotify { 1: UserDataChange{ DT1 full row, ct=MODIFY, ver+N } }
+   *  Previously the body was empty and f24 lacked one layer of f1, so the client could not accept it and the UI could not switch. */
   HANDLERS[100011] = function (sess, payload) {
     var pairs = [];
     var fs = P.parse(payload);
@@ -635,19 +638,19 @@
     }).join(', '));
 
     var changes = USERDATA.selectEquipment(pairs);
-    // 回显：把请求 payload 原封不动塞进 f2（与正式服字节级一致）
+    // Echo: put the request payload into f2 unchanged (byte-identical to the official server)
     var body = payload && payload.length
       ? P.W().s(2, payload).bytes()
       : new Uint8Array(0);
     return withChange(100012, changes, body);
   };
 
-  /** 20007 GetTableList -> 20008 空牌桌列表（离线下没有真实房间） */
+  /** 20007 GetTableList -> 20008 empty table list (offline there are no real rooms) */
   HANDLERS[20007] = function () {
     return [[20008, P.W().v(1, 0).bytes(), 1, null]];
   };
 
-  /** 20009 EnterTable -> 20010 + 20011 广播 */
+  /** 20009 EnterTable -> 20010 + 20011 broadcast */
   HANDLERS[20009] = function (sess) {
     sess.tableId = 100001;
     var body = P.W().v(1, 0).v(2, sess.tableId).bytes();
@@ -655,7 +658,7 @@
     return [[20010, body, 1, null], [20011, bc, 1, null]];
   };
 
-  /** 20012 EnterSeat -> 20013 + 20014 广播 */
+  /** 20012 EnterSeat -> 20013 + 20014 broadcast */
   HANDLERS[20012] = function (sess) {
     sess.seat = 0;
     var body = P.W().v(1, 0).v(2, sess.seat).bytes();
@@ -663,7 +666,7 @@
     return [[20013, body, 1, null], [20014, bc, 1, null]];
   };
 
-  /** 21401 -> 21402 直接回放录制到的响应 */
+  /** 21401 -> 21402: directly replay the recorded response */
   HANDLERS[21401] = function () {
     return [[21402, REPLAY[21402] || new Uint8Array(0), 1, null]];
   };
@@ -675,30 +678,30 @@
     return withChange(100621, changes);
   };
 
-  // ------------------------------------------- 离线不可用的外围在线功能
-  // 原客户端不会把业务错误码自动转成提示文字；外围请求明确失败
-  // （LobbyStatusCode 10 CommandServiceNotAvailable），再用原生 20106
-  // DisplayDebugLogNotify{1:Log} 触发客户端自带的 ShowTips 飘字。
+  // ------------------------------------------- Online-only peripheral features (unavailable offline)
+  // The original client does not automatically turn business error codes into prompt text; the peripheral request explicitly fails
+  // (LobbyStatusCode 10 CommandServiceNotAvailable), then the native 20106
+  // DisplayDebugLogNotify{1:Log} triggers the client's built-in ShowTips toast.
   var OFFLINE_UNAVAILABLE_TEXT = '离线模式下此功能不可用';
   var OFFLINE_UNAVAILABLE_IDS = [
-    // 好友、查看他人资料
+    // Friends, viewing others' profiles
     100040, 100042, 100046, 100047, 100048, 100143,
-    // 雀士好感度养成、档案、抽卡
+    // Warrior affinity growth, profiles, gacha
     100206, 100208, 100210, 100300,
-    // 充值、VIP、Steam 付费
+    // Top-up, VIP, Steam payments
     100400, 100403, 100405, 100407, 100409, 100420, 100422, 100424,
-    // 排行、活动、邮件、公告、新手签到
+    // Rankings, events, mail, announcements, newbie check-in
     100505, 100508, 100510, 100512, 100514,
     100602, 100604, 100606, 100608, 100701, 102100, 102102,
-    // 友人房
+    // Friendly rooms
     20500, 20502, 20504, 20506, 20508, 20510, 20512, 20514, 20516, 20518,
     20520, 20522, 20524, 20526, 20528,
-    // 自设赛事
+    // Custom tournaments
     21001, 21003, 21005, 21007, 21009, 21011, 21101, 21103, 21105, 21107,
     21109, 21111, 21113, 21115, 21117, 21119, 21121, 21123, 21125, 21127,
     21129, 21131, 21133, 21135, 21137, 21139, 21141, 21143, 21145, 21147,
     21150, 21152, 21154,
-    // 奖励赛事的报名与开赛；21401 赛事列表仍回放录制数据，进大厅会自动请求
+    // Reward tournament sign-up and start; the 21401 tournament list still replays recorded data, and the client requests it automatically when entering the lobby
     21403, 21405, 21414, 21417
   ];
   function offlineUnavailable(sess, responseMid) {
@@ -708,22 +711,22 @@
   OFFLINE_UNAVAILABLE_IDS.forEach(function (mid) {
     HANDLERS[mid] = function (sess) { return offlineUnavailable(sess, mid + 1); };
   });
-  // 奖励赛事分组排行、牌谱、赛程：客户端对 30 CommonNotRoomInfo 有原生提示
-  //「比赛信息已失效」（WeeklyCompetitionMgr.DoWeeklyCompetitionErrCode）。
+  // Reward-tournament group rankings, match records and schedules: the client has a native prompt for 30 CommonNotRoomInfo
+  // "The match info is no longer valid" (WeeklyCompetitionMgr.DoWeeklyCompetitionErrCode).
   [21407, 21409, 21411].forEach(function (mid) {
     HANDLERS[mid] = function () {
       return [[mid + 1, P.W().v(1, 30).bytes(), 1, null]];
     };
   });
 
-  // ------------------------------------------- 立直麻将对局通道 (20018)
-  // 20018 (kGameServerLogicData) 的 payload 是 KRiichiMsg（riichi.proto）：
-  //   f1   = msgType（RiichiMsg 枚举）
-  //   f3   = 服务器毫秒时间戳
-  //   f100 = payload（具体 Req*/Rsp*/Ntf* 消息的序列化字节）
-  // 这里只负责拆信封 → 交给浏览器内的对局引擎（mock/riichi.js）→ 把引擎回推的
-  // 事件重新封成 KRiichiMsg 经 20018 下发。整局逻辑（发牌/摸打/副露/立直/和牌/
-  // 流局/连庄/点棒）和 AI 全在浏览器里跑，不需要任何本地服务。
+  // ------------------------------------------- Riichi match channel (20018)
+  // The payload of 20018 (kGameServerLogicData) is KRiichiMsg (riichi.proto):
+  //   f1   = msgType (RiichiMsg enum)
+  //   f3   = server millisecond timestamp
+  //   f100 = payload (serialized bytes of the concrete Req*/Rsp*/Ntf* message)
+  // This only unwraps the envelope → passes it to the in-browser match engine (mock/riichi.js) → re-wraps the engine's pushed
+  // events as KRiichiMsg and sends them via 20018. The full match logic (dealing / draw-discard / melds / riichi / win /
+  // draw / renchan / points) and the AI all run in the browser; no local service is required.
   var RIICHI_NAMES = {
     1: 'ReqPrepare', 2: 'RspPrepare', 3: 'ReqPlayCard', 4: 'RspPlayCard',
     5: 'ReqQiangCard', 6: 'RspQiangCard', 7: 'ReqSetInternalState', 8: 'RspSetInternalState',
@@ -735,16 +738,16 @@
 
   function riichiName(mt) { return RIICHI_NAMES[mt] || String(mt); }
 
-  var RIICHI_NTF_TO_PREPARE = 1001;   // 每局第一帧，断线重放缓存以它为分界
-  var RIICHI_NTF_GAME_START = 1003;   // 开牌帧，用来判断本局是否已经开始
+  var RIICHI_NTF_TO_PREPARE = 1001;   // First frame of each hand; the disconnect replay cache is split at it
+  var RIICHI_NTF_GAME_START = 1003;   // Deal-start frame, used to tell whether this hand has started
 
-  /** 打包 KRiichiMsg 信封（字段顺序与正式服一致：1, 3, 100） */
+  /** Pack the KRiichiMsg envelope (field order consistent with the official server: 1, 3, 100) */
   function encodeKRiichi(msgType, inner) {
     return P.W().v(1, msgType).v(3, nowMs())
       .s(100, inner || new Uint8Array(0)).bytes();
   }
 
-  /** 惰性建立本连接的对局会话 */
+  /** Lazily create this connection's match session */
   function getRiichi(sess) {
     if (sess.riichi) return sess.riichi;
     var R = MJ.riichi;
@@ -752,16 +755,16 @@
       console.error('[mock] 未加载 mock/riichi.js，20018 对局通道不可用');
       return null;
     }
-    // 座位 -> uid，必须和 20408 TableInfo / 20014 EnterSeatBc 下发的完全一致：
-    // 客户端是按 userID 在 NtfToPrepare 的名单里找自己的，对不上就整局丢弃。
+    // Seat → uid; must exactly match the uids sent in 20408 TableInfo / 20014 EnterSeatBc:
+    // the client finds itself in the NtfToPrepare roster by userID; a mismatch discards the whole match.
     var uids = [sess.uid];
     for (var i = 0; i + 1 < CONFIG.players; i++) uids.push(ROBOTS[i].uid);
 
     sess.riichi = new R.RiichiSession({
       players: CONFIG.players,
-      // 三麻起点 35000（抓包 NtfGameStart 里 score/initScore 就是 35000）
+      // Three-player starting score 35000 (in the capture, score/initScore in NtfGameStart are 35000)
       startScore: CONFIG.players === 3 ? 35000 : 25000,
-      // 一局战只打一手；其余规则与段位战相同
+      // A one-round match plays a single hand; other rules are the same as the ranked match
       maxHands: sess.table && sess.table.oneRound ? 1 : undefined,
       matchLength: CONFIG.matchLength,
       akaCount: CONFIG.akaCount,
@@ -769,8 +772,8 @@
       seed: sess.table && sess.table.seed != null ? sess.table.seed : CONFIG.seed,
       uids: uids,
       autoHuman: CONFIG.autoHuman,
-      // 段位战御龙间（roomID=4）用高级 AI，其余房间（含一局战）用中级 AI。
-      aiLevel: sess.rankRoomId === 4 ? 'advanced' : 'intermediate',
+      // Ranked rooms: Qihang/Zhumeng basic, Chengfeng intermediate, Yulong advanced.
+      aiLevel: sess.rankRoomId === 4 ? 'advanced' : sess.rankRoomId === 1 || sess.rankRoomId === 2 ? 'basic' : 'intermediate',
       selfLoveLevel: sess.table && sess.table.self ? sess.table.self.loveLevel || 0 : 0,
       internalState: sess.internalState || {},
       onSettingsChange: function (state) {
@@ -782,7 +785,7 @@
         if (oneRound) return settleOneRound(sess, oneRound, humanWin);
         if (typeof sess.onFinalResult === 'function') {
           var result = sess.onFinalResult(scores, engine);
-          // 本地段位/战绩/金币的数据变更随离桌或再来一局应答的 f24 下发。
+          // Local rank / record / coin data changes are sent in the f24 of the leave-table or play-again reply.
           if (result && result.changes) sess.walletChanges = mergeChanges(sess.walletChanges, result.changes);
           return result;
         }
@@ -794,18 +797,18 @@
       log: function (s) { log(s); },
       onFrame: function (ev, bytes) {
         log('  => 20018 %s %dB', riichiName(ev), bytes.length);
-        // Rsp*（偶数 msgType 且 <1000）是对客户端 Req* 的响应，需回显请求 seq；
-        // Ntf*（>=1000）是主动通知，不带 seq。
+        // Rsp* (even msgType and <1000) are responses to the client's Req*; they must echo the request seq;
+        // Ntf* (>=1000) are active notifications and carry no seq.
         var isRsp = (ev < 1000 && ev % 2 === 0);
-        // 断线重连恢复：缓存本局的通知帧。NtfToPrepare(1001) 是每局的第一帧，
-        // 到它就翻页。Rsp* 是对上行的应答，重放没有意义，不缓存。
-        // 注意这里与 sess.push 相互独立：断线期间 push 会因 socket 关闭而丢帧，
-        // 但缓存照记，这样重连后能把「断线这段时间 AI 摸打的过程」一并补给客户端。
+        // Disconnect-reconnect recovery: cache this hand's notification frames. NtfToPrepare(1001) is the first frame of each hand,
+        // and reaching it turns the page. Rsp* are answers to uplink requests; replaying them is meaningless, so they are not cached.
+        // Note: this is independent of sess.push. During a disconnect, push loses frames because the socket is closed,
+        // but the cache still records them, so after reconnect the AI's draw/discard progress during the disconnect can be filled in for the client.
         if (ev >= 1000) {
           if (ev === RIICHI_NTF_TO_PREPARE) sess.handFrames = [];
           sess.handFrames.push([ev, bytes]);
-          // 重放进行中：新帧只入队，由 replayHand 顺着下标追上来一起发，
-          // 免得历史帧和新帧交错把客户端的牌局搅乱。
+          // Replay in progress: new frames are only enqueued, and replayHand catches up with them in index order,
+          // so historical frames and new frames do not interleave and scramble the client's match.
           if (sess.replaying) return;
         }
         sess.push(20018, encodeKRiichi(ev, bytes), 1, null, isRsp ? (sess._reqSeq || 0) : null);
@@ -815,21 +818,21 @@
   }
 
   /** 20162 KGameServerOffline2OnlineRequest -> 20163
-   *  客户端在登录响应(20002)带 f22=1（进行中对局标记）时，连上后会发一次，
-   *  问「我是不是还在一局没打完的牌里」。mock 的 20002 必须补 f22=1 才会触发本分支
-   *  （见 HANDLERS[20001]）；缺了它，客户端判定牌局已不存在，直接发 20102 退大厅。
+   *  When the client's login response (20002) carries f22=1 (in-progress match flag), it sends this after connecting,
+   *  asking "am I still in a hand that isn't finished?". The mock's 20002 must include f22=1 to trigger this branch
+   *  (see HANDLERS[20001]); without it, the client concludes the table no longer exists and sends 20102 to return to the lobby.
    *
-   *  这里修复的是「重连后误判无对局」，不是所有 Bye! 断线的原因。
-   *  BestHTTP WebSocket.Close() 无参时的默认 reason 是 "Bye!"，不能据此
-   *  确定唯一关闭调用点。BH_NetworkManager.ForceCloseWhenTimeout 是可能路径；
-   *  还需核对心跳、通知投递顺序及客户端处理时序，不能先认定服务端无问题。
+   *  What is fixed here is "after reconnect, misjudged as no match", not every cause of Bye! disconnects.
+   *  BestHTTP WebSocket.Close() with no arguments defaults to reason "Bye!", so this cannot identify the sole close call site.
+   *  BH_NetworkManager.ForceCloseWhenTimeout is a possible path;
+   *  Heartbeats, notification delivery order and client-side handling timing must also be checked; do not assume the server is fault-free.
    *
-   *  能治的是「重连之后」：真实服在这里回 f4=TableInfo，客户端于是知道自己还在
-   *  局内、继续等服务器同步牌局；而这里原先无条件回「无对局」，客户端就认定牌局
-   *  已经不存在，随即发 20102 FinishGameStop 退回大厅——也就是用户看到的
-   *  「Bye! → 重连 → 直接退出对局」。
+   *  What can be fixed is "after reconnect": the official server returns f4=TableInfo here, so the client knows it is still in the match
+   *  and keeps waiting for the server to sync the match; but here it used to unconditionally reply "no match", so the client concluded the match
+   *  no longer existed, then sent 20102 FinishGameStop to return to the lobby. That is what the user saw as
+   *  "Bye! → reconnect → exit the match directly".
    *
-   *  注意 f3 恒为 -1：抓包里有对局时它也是 -1，判据是 f4 在不在，不是 f3。 */
+   *  Note: f3 is always -1; in the captures it is also -1 while a match is in progress, so the criterion is whether f4 is present, not f3. */
   HANDLERS[20162] = function (sess) {
     var live = !!(sess.table && sess.liveMatch());
 
@@ -837,12 +840,12 @@
     w.v(1, sess.uid);
     w.tag(3, 0);
     w.raw([0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01]);
-    // 有进行中对局：带上完整牌桌
+    // Match in progress: include the full table
     if (live) w.s(4, encTableInfo(sess, true));
-    w.v(5, 3);                                    // roomID（日麻抓包原值）
+    w.v(5, 3);                                    // roomID (original value from the mahjong capture)
 
-    // 立直：能在当前切点安全恢复时，按原协议把局面快照放进 f100，客户端走 Reload，
-    // 之后只补发切点之后的新帧；准备阶段、余牌为0、抢杠窗口等切点仍走整手重放。
+    // Riichi: when a snapshot can be safely restored at the current cut point, put the position snapshot in f100 per the original protocol so the client takes the Reload path,
+    // and then only the new frames after the cut point are sent; cut points such as the prepare phase, 0 tiles left, or the robbing-kan window still use a full-hand replay.
     var cut = -1;
     if (live && !sess._replayStarted && sess.riichi && sess.riichi.reloadScene) {
       var scene = sess.riichi.reloadScene(sess.handFrames);
@@ -856,14 +859,14 @@
       sess._replayStarted = true;
       log('  [resync] 有进行中对局，回 TableInfo，%s', cut >= 0
         ? '附局面快照，只补发其后的新帧' : '准备重放本局 ' + sess.handFrames.length + ' 帧');
-      // 真实服在 20163 之后主动推 NtfPrepare/NtfGameStart 把牌局同步回来。
-      // 我们没有「任意局面快照」，改用等价做法：把本局从 NtfToPrepare 起的所有
-      // 通知帧按序重放一遍，客户端顺着这串帧自己走回当前局面。
-      // 断线期间 AI 摸打产生的帧也在缓存里（onFrame 记账与 push 相互独立），一并补上。
+      // After 20163 the official server actively pushes NtfPrepare/NtfGameStart to resync the match.
+      // We have no "arbitrary position snapshot", so we use an equivalent: replay all notification frames of this hand from NtfToPrepare onward in order,
+      // and the client walks through them to reach the current position itself.
+      // Frames produced by AI draws/discards during the disconnect are also in the cache (onFrame bookkeeping and push are independent), and are filled in too.
       //
-      // 这里必须【立刻】挂起实时下推，不能等到 replayHand 真正开跑：中间这段
-      // 等客户端切回牌桌的时间里引擎还在摸打，那些新帧会抢在重放之前发出去，
-      // 客户端就会先看到「当前这一巡」再看到「本局开头」，牌局直接错乱。
+      // Live pushes must be suspended [immediately] here: they cannot wait until replayHand actually starts. During this interval,
+      // while the client switches back to the table, the engine keeps drawing and discarding, and those new frames would go out before the replay,
+      // so the client would see "the current turn" before "the start of the match", and the match would be scrambled.
       sess.replaying = true;
       if (sess._resyncTimer) { clearTimeout(sess._resyncTimer); sess._resyncTimer = null; }
       var cutFrames = sess.handFrames;
@@ -874,11 +877,11 @@
     return [[20163, w.bytes(), 1, null]];
   };
 
-  /** 断线重连：把本局缓存的 20018 通知帧按序重发，让客户端重建局面。
+  /** Disconnect-reconnect: resend this hand's cached 20018 notification frames in order so the client rebuilds the position.
    *
-   *  重放期间 onFrame 只记账不实时下推（sess.replaying），新帧统一排在队尾，
-   *  否则「正在回放的历史帧」和「引擎刚产生的新帧」会交错，客户端牌局直接错乱。
-   *  这里直接按下标遍历活数组 sess.handFrames，引擎边跑边追加，追平即收工。 */
+   *  During the replay, onFrame only does bookkeeping and no live push (sess.replaying); new frames are queued at the tail,
+   *  otherwise "historical frames being replayed" and "new frames just produced by the engine" would interleave and scramble the client's match.
+   *  Here we walk the live array sess.handFrames by index; the engine appends as it runs, and we are done once caught up. */
   function replayHand(sess, from) {
     var frames = sess.handFrames || [];
     if (!frames.length || !sess.socket || sess.socket.readyState !== OPEN) {
@@ -886,20 +889,20 @@
       return;
     }
 
-    // 本局是否已经开牌。已开牌就跳过 NtfToPrepare —— 客户端收到它会再回一次
-    // ReqPrepare，把引擎的 _prepared 预置成 true，害得下一局不等客户端就发牌。
-    // 还停在准备阶段（没有 NtfGameStart）则要原样重放，让客户端补回 ReqPrepare。
+    // Whether this hand has been dealt. If dealt, skip NtfToPrepare: the client would reply
+    // with ReqPrepare, presetting the engine's _prepared to true, so the next hand would deal without waiting for the client.
+    // If still in the prepare phase (no NtfGameStart), replay it as-is so the client sends ReqPrepare again.
     var skipToPrepare = false;
     for (var k = 0; k < frames.length; k++) {
       if (frames[k][0] === RIICHI_NTF_GAME_START) { skipToPrepare = true; break; }
     }
 
     log('  [resync] 开始重放（已开牌=%s）', skipToPrepare);
-    // 批处理下推：每批发 BATCH 帧、批间留 BATCH_GAP 毫秒。客户端在主线程 Update 里
-    // 排队消费，单 tick 只处理几帧不会卡到再次超时（Bye!）；同时批处理把整局重放耗时
-    // 从「逐帧 8ms」压到接近真实服（真实服发的是 20163 里的局面快照 f100，几乎瞬时）。
+    // Batch push: send BATCH frames per batch with BATCH_GAP ms between batches. The client queues consumption in the main-thread Update,
+    // handling only a few frames per tick so it does not time out again (Bye!); batching also cuts the whole hand's replay time
+    // from "8 ms per frame" to close to the real server (the real server sends the position snapshot f100 in 20163, almost instantly).
     var BATCH = 6, BATCH_GAP = 6;
-    // 已随 20163.f100 下发快照时，从快照切点开始补发；若期间已换手（缓存被 NtfToPrepare 重置）则从头补。
+    // If a 20163.f100 snapshot was already sent, catch up from the snapshot cut point; if the hand has changed in the meantime (cache reset by NtfToPrepare), catch up from the start.
     var i = from > 0 && from <= frames.length ? from : 0;
     (function next() {
       if (!sess.socket || sess.socket.readyState !== OPEN) { sess.replaying = false; sess._replayStarted = false; return; }
@@ -921,23 +924,23 @@
     })();
   }
 
-  // ------------------------------------------- 排位匹配 → 开局 (20403)
-  // 抓包里真实的开局链路（capture/dongfeng1/ws.jsonl 行 616-631）：
+  // ------------------------------------------- Ranked matchmaking → start of match (20403)
+  // The real start-of-match sequence from the capture (capture/dongfeng1/ws.jsonl lines 616-631):
   //   C->S 20403 RankingMatchRequest{ srm{ gameType, roomType, roomID, matchSource } }
-  //   S->C 20404 RankingMatchResponse{}                    ← 空包，只是 ack
-  //   ...约 1.5-2.4s 匹配等待...
-  //   S->C 20408 RankingMatchResultNotify{ tableInfo }      ← 房间成型，只含自己
-  //   S->C 20164 UserOfflineNotify{ userID }  ┐ 每个对手一组，
-  //   S->C 20014 EnterSeatBC{ tableUserInfo } ┘ 表示「该玩家离线托管并入座」
-  //   S->C 20018 NtfToPrepare → 客户端才回 ReqPrepare，对局开始
-  // 关键：客户端必须先收到 20408 + 20014 建好牌桌，才会切到对局场景。
-  // 少了这两步，后面的 20018 帧会被直接丢弃（客户端还在大厅场景）。
+  //   S->C 20404 RankingMatchResponse{}                    ← empty packet, just an ack
+  //   ...about 1.5-2.4s matchmaking wait...
+  //   S->C 20408 RankingMatchResultNotify{ tableInfo }      ← room formed, containing only self
+  //   S->C 20164 UserOfflineNotify{ userID }  ┐ one per opponent,
+  //   S->C 20014 EnterSeatBC{ tableUserInfo } ┘ meaning "this player is offline-managed and seated"
+  //   S->C 20018 NtfToPrepare → the client replies ReqPrepare, and the match begins
+  // Key point: the client must first receive 20408 + 20014 to build the table before it switches to the match scene.
+  // Without these two steps, the subsequent 20018 frames are dropped outright (the client is still in the lobby scene).
 
   var GAME_TYPE = { SANMA: 4002, YONMA: 4001 };
-  // 只处理立直麻将的匹配请求，其他游戏类型（四川50xx/斗地主4101/掼蛋4111 等）提示离线不可用
+  // Only riichi mahjong matchmaking requests are handled; other game types (Sichuan 50xx / Dou Dizhu 4101 / Guandan 4111 etc.) show "offline unavailable"
   var RIICHI_GAME_TYPES = { 4001: true, 4002: true };
 
-  /** 离线对手档案，warrior/skin 会在匹配时随机分配。 */
+  /** Offline opponent profiles; warrior/skin are randomly assigned at matchmaking. */
   var ROBOTS = [
     {
       uid: 10000, nick: '赤木茂', frame: 2001, title: 3001, level: 6, pt: 14
@@ -952,8 +955,8 @@
 
   var BANG_POOL = [140001, 140002, 140003, 140004, 140006, 140007, 140009];
 
-  /** 雀士 → 皮肤/头像 对应关系（皮肤与头像成对，随机抽一组）。
-   *  数据来源：角色,皮肤,头像 对应表。键即为可用雀士 ID 池。 */
+  /** Warrior → skin/avatar mapping (skin and avatar come in pairs; one set is drawn at random).
+   *  Data source: the role,skin,avatar mapping table. Its keys form the pool of available warrior IDs. */
   var WARRIOR_TABLE = {
     1:  [{ skin: 1001, head: 1001 }, { skin: 3701002, head: 1009 }],
     2:  [{ skin: 2001, head: 1002 }, { skin: 3702002, head: 1007 }],
@@ -967,8 +970,8 @@
     10: [{ skin: 10001, head: 1019 }]
   };
 
-  /** 从 USERDATA 读取本机玩家当前选中的装备，组装成 SimpleInGameSummaryInfo。
-   *  每次匹配时动态读取，确保用户在大厅换角色/皮肤后下一局能生效。 */
+  /** Read the local player's currently selected equipment from USERDATA and assemble a SimpleInGameSummaryInfo.
+   *  Read dynamically at each match, so that a change of character/skin in the lobby takes effect in the next match. */
   function getSelfProfile(sess, sanma) {
     var localRank = sess && sess.localProfile ? sess.localProfile.ranks[sanma ? 'sanma' : 'yonma'] : null;
     var profile = {
@@ -997,14 +1000,14 @@
           if (map[26]) profile.warrior = map[26];     // DT_MAHJONG_WARRIOR
         }
       }
-      // 从雀士数据行读取当前皮肤（sculptId）
+      // Read the current skin from the warrior data row (sculptId)
       var wRow = USERDATA.row(26, profile.warrior);
       if (wRow) {
         var inner = P.get(wRow, 3);                   // MahjongWarriorData
         if (inner) {
           var sculptId = P.get(inner, 3);             // SculptId
           if (sculptId) profile.skin = sculptId;
-          profile.loveLevel = P.get(inner, 5) || 0;   // 好感度等级（结算面板展示）
+          profile.loveLevel = P.get(inner, 5) || 0;   // Affinity level (shown on the settlement panel)
         }
       }
     } catch (e) {
@@ -1013,7 +1016,7 @@
     return profile;
   }
 
-  /** 给 AI 机器人随机分配一个雀士及其皮肤/头像 */
+  /** Randomly assign a warrior and its skin/avatar to an AI bot */
   function makeRobot(idx, humanWarrior, rng) {
     var base = ROBOTS[idx];
     var ids = Object.keys(WARRIOR_TABLE).filter(function (id) { return Number(id) !== Number(humanWarrior); });
@@ -1050,7 +1053,7 @@
   /** TableUserInfo */
   function encTableUser(seat, p, isRobot) {
     var w = P.W();
-    if (seat) w.v(1, seat);                 // seat 0 走 proto 默认值，与抓包一致
+    if (seat) w.v(1, seat);                 // seat 0 uses the proto default values, consistent with the capture
     w.s(2, encProfile(p));
     w.v(3, p.uid);
     if (isRobot) w.v(7, 1);
@@ -1058,19 +1061,19 @@
   }
 
 
-  /** 随机 20 字符牌局 ID，形如 d9s4grlhjab6eqidh2jg */
+  /** Random 20-character match ID, in the form d9s4grlhjab6eqidh2jg */
   function randGameId(rng) {
     var cs = 'abcdefghijklmnopqrstuvwxyz0123456789', s = '';
     for (var i = 0; i < 20; i++) s += cs.charAt(Math.floor(rng() * cs.length));
     return s;
   }
 
-  /** TableInfo —— 数据全部取自 sess.table（20403 匹配成型时写入的牌桌快照）。
-   *  本机玩家档案从 USERDATA 动态读取，确保用户在大厅换角色/皮肤后下一局生效。
+  /** TableInfo: all data is taken from sess.table (the table snapshot written when 20403 matchmaking forms).
+   *  The local player's profile is read dynamically from USERDATA, so a change of character/skin in the lobby takes effect in the next match.
    *
-   *  withRobots=false（20403 匹配）：只含本机玩家，对手随后由 20014 逐个入座。
-   *  withRobots=true （20163 断线恢复）：一次性含齐所有席位——重连时客户端不会再走
-   *  一遍入座流程，抓包里真实服的 20163.f4 就是四个 TableUserInfo 全带上的。 */
+   *  withRobots=false (20403 matchmaking): only the local player; opponents are then seated one by one by 20014.
+   *  withRobots=true (20163 disconnect recovery): all seats at once. On reconnect the client does not go
+   *  through the seating flow again; the real server's 20163.f4 in the capture carries all four TableUserInfo. */
   function encTableInfo(sess, withRobots) {
     var t = sess.table;
     var w = P.W()
@@ -1084,38 +1087,38 @@
       }
     }
     return w
-      // common_define.TableInfo：5 subType（东风 0 / 半庄 1 / 一局 3）、6 roomType（回显请求）、8 roomID。
+      // common_define.TableInfo: 5 subType (East 0 / hanchan 1 / one-round 3), 6 roomType (echoed from the request), 8 roomID.
       .v(5, t.oneRound ? 3 : t.matchLength === 'hanchan' ? 1 : 0)
       .v(6, t.roomType || 7)
       .v(8, t.roomId || 1)
       .s(9, t.logId)
       .s(10, t.gameId)
-      // 旧版客户端还从这两个字段读取同一组标识。
+      // Older clients also read the same identifiers from these two fields.
       .s(11, t.logId)
       .s(12, t.gameId)
       .bytes();
   }
 
-  /** 20403 KgameServerRankingMatchRequest -> 20404，随后异步完成组桌并开局 */
+  /** 20403 KgameServerRankingMatchRequest -> 20404; then forms the table asynchronously and starts the match */
   HANDLERS[20403] = function (sess, payload) {
     var srm = {};
     try {
       var d = P.dict(payload);
       if (d[1] instanceof Uint8Array) srm = P.dict(d[1]);
-    } catch (e) { /* 用默认值 */ }
+    } catch (e) { /* Use default values */ }
     if (d && d[1] instanceof Uint8Array) {
       log('  [match] request=%s', Array.prototype.map.call(d[1], function (b) {
         return ('0' + b.toString(16)).slice(-2);
       }).join(''));
     }
 
-    // 本项目只做单机立直：四川、斗地主、掼蛋等其他玩法一律提示离线不可用
+    // This project only supports single-player riichi: Sichuan, Dou Dizhu, Guandan and other games show "offline unavailable"
     if (!RIICHI_GAME_TYPES[srm[1]]) {
       log('  [match] gameType=%s 非立直，离线不可用', srm[1]);
       return offlineUnavailable(sess, 20404);
     }
 
-    // 请求里的 gameType 决定三麻/四麻，URL 参数 ?mjPlayers 优先
+    // The gameType in the request decides 3- vs 4-player; the URL parameter ?mjPlayers takes priority
     var sanma = srm[1] === GAME_TYPE.SANMA;
     if (CONFIG.playersExplicit) sanma = CONFIG.players === 3;
     else CONFIG.players = sanma ? 3 : 4;
@@ -1138,8 +1141,8 @@
     sess.tableId = 1;
     sess.seat = 0;
 
-    // 重新匹配（取消后再点、或上一局残留）时必须丢掉旧会话，
-    // 否则 ensureEngine 拿到的是上一局的引擎，不会再推 NtfToPrepare。
+    // On re-matching (re-clicking after cancel, or a leftover from the previous hand), the old session must be dropped,
+    // otherwise ensureEngine would get the previous hand's engine and would not push NtfToPrepare again.
     if (sess.riichi) {
       try { sess.riichi.stop(); } catch (e) { /* ignore */ }
       sess.riichi = null;
@@ -1154,11 +1157,11 @@
       if (sess.matchToken !== matchToken) return;
       if (!sess.socket || sess.socket.readyState !== OPEN) return;
 
-      // 1) 房间成型 —— 动态读取本机玩家装备
+      // 1) Table formed: read the local player's equipment dynamically
       var selfProfile = getSelfProfile(sess, sanma);
       var matchSeed = CONFIG.seed != null ? Number(CONFIG.seed) >>> 0 : randomSeed();
       var matchRng = seededRng(matchSeed);
-      // 牌桌快照：断线重连时 20162 要用它原样复述牌桌（房间号/对手/装备都不能变）
+      // Table snapshot: on reconnect, 20162 must replay the table from this (room number / opponents / equipment must not change)
       sess.table = {
         sanma: sanma,
         matchLength: CONFIG.matchLength,
@@ -1176,7 +1179,7 @@
         selfProfile.warrior, selfProfile.skin, matchSeed);
       sess.push(20408, P.W().s(2, encTableInfo(sess, false)).bytes(), 1, null);
 
-      // 2) 对手逐个「离线托管 + 入座」—— 随机分配雀士
+      // 2) Each opponent is "offline-managed + seated" one by one: randomly assigned warriors
       var n = (sanma ? 3 : 4) - 1;
       for (var i = 0; i < n; i++) {
         var r = makeRobot(i, selfProfile.warrior, matchRng);
@@ -1187,7 +1190,7 @@
         sess.push(20014, P.W().s(1, encTableUser(seat, r, true)).v(2, sess.table.roomType || 7).bytes(), 1, null);
       }
 
-      // 3) 牌桌就绪，拉起引擎 —— 它会主动推 NtfToPrepare(1001)
+      // 3) Table ready, start the engine: it will actively push NtfToPrepare(1001)
       var engineStartDelay = CONFIG.engineStartDelay != null ? CONFIG.engineStartDelay : 200;
       sess.engineStartTimer = setTimeout(function () {
         sess.engineStartTimer = null;
@@ -1198,12 +1201,12 @@
       }, engineStartDelay);
     }, delay);
 
-    // 一局战「再来一局」不经 20102 离桌，上一局未下发的奖励/报名费增量随本应答送达。
+    // The one-round "play again" does not go through 20102 leave-table; rewards / entry-fee increments not sent in the previous hand arrive with this reply.
     return withChange(20404, takeWalletChanges(sess));
   };
 
-  // ------------------------------------------- 一局战结算
-  /** 合并若干 { dtype: [[key, data, ct], ...] } 增量；同一行只保留最后一次。 */
+  // ------------------------------------------- One-round settlement
+  /** Merge several { dtype: [[key, data, ct], ...] } increments; for the same row keep only the last one. */
   function mergeChanges(base, list) {
     var out = base || null;
     var items = Array.isArray(list) ? list : [list];
@@ -1231,15 +1234,15 @@
     return changes;
   }
 
-  /** 一局战终局：报名费与番数奖励一次入账，增量随离桌应答 f24 下发；不写段位与战绩。
-   *  返回值由引擎写进真人席 GameStopUserInfo.itemRewardLevel/itemRewards，
-   *  客户端 GameEndResultView.TryShowOneRoundGameReward 据此弹奖励窗。 */
+  /** One-round match end: the entry fee and han rewards are credited once; the increments are sent in the f24 of the leave-table reply; rank and record are not written.
+   *  The return value is written by the engine into the human seat's GameStopUserInfo.itemRewardLevel/itemRewards,
+   *  and the client's GameEndResultView.TryShowOneRoundGameReward shows the reward window based on it. */
   function settleOneRound(sess, room, humanWin) {
     var result;
     try {
       result = MJ.oneRound.settleOneRound(USERDATA, room, humanWin);
     } catch (e) {
-      // 开局后余额被别处花掉时不记负债，也不发奖。
+      // If the balance is spent elsewhere after the match starts, no debt is recorded and no reward is paid.
       log('  [oneRound] 结算失败：%s', e.message);
       return null;
     }
@@ -1249,7 +1252,7 @@
     return { itemRewardLevel: result.itemRewardLevel, itemRewards: result.itemRewards };
   }
 
-  /** 20405 取消匹配 -> 20406 */
+  /** 20405 cancel matchmaking -> 20406 */
   HANDLERS[20405] = function (sess) {
     log('  [match] 取消匹配');
     if (sess.matchTimer) { clearTimeout(sess.matchTimer); sess.matchTimer = null; }
@@ -1261,7 +1264,7 @@
     return [[20406, new Uint8Array(0), 1, null]];
   };
 
-  /** 20025 LeaveTable -> 20026：对局中或结算界面点「回到大厅」 */
+  /** 20025 LeaveTable -> 20026: the player clicks "return to lobby" during the match or on the settlement screen */
   HANDLERS[20025] = function (sess) {
     log('  [leave] 离桌');
     if (sess.matchTimer) { clearTimeout(sess.matchTimer); sess.matchTimer = null; }
@@ -1274,7 +1277,7 @@
   };
 
   /** 20102 ClientFinishGameStopRequest -> 20103
-   *  真实抓包：isFinal 结算后客户端发此消息确认退出，服务器回 20103 后回到大厅 */
+   *  Real capture: after isFinal settlement the client sends this message to confirm exit; the server replies 20103 and then returns to the lobby. */
   HANDLERS[20102] = function (sess) {
     log('  [finish] 客户端确认结算完成，退出对局');
     if (sess.matchTimer) { clearTimeout(sess.matchTimer); sess.matchTimer = null; }
@@ -1286,11 +1289,11 @@
     return withChange(20103, takeWalletChanges(sess), P.W().v(1, 0).bytes());
   };
 
-  /** 20018 上行：交给引擎，所有回帧都走 sess.push 异步下推 */
+  /** 20018 uplink: handed to the engine; all reply frames are pushed asynchronously via sess.push */
   HANDLERS[20018] = function (sess, payload, seq) {
-    // 已离桌（20102 结算确认 / 20025 回大厅后 tableId=0）就不要再惰性建会话了，
-    // 否则客户端结算界面残留的 ReqPrepare 会凭空拉起一局新对局。
-    // 真实服在这种状态下对 20018 上行零响应（见 capture/dongfeng1/ws.jsonl 终局段）。
+    // If already left the table (tableId=0 after the 20102 settlement confirmation / 20025 return to lobby), do not lazily create a session again,
+    // otherwise the ReqPrepare left on the settlement screen would spawn a new match out of nowhere.
+    // The real server gives zero response to 20018 uplinks in this state (see the final section of capture/dongfeng1/ws.jsonl).
     if (!sess.tableId) { log('  <riichi> 已离桌，忽略 20018 上行'); return []; }
     var r = getRiichi(sess);
     if (!r) return [];
@@ -1298,13 +1301,13 @@
     var msgType = d[1] || 0;
     var inner = (d[100] instanceof Uint8Array) ? d[100] : new Uint8Array(0);
     log('  <riichi> %s %dB', riichiName(msgType), inner.length);
-    // 记录本次请求 seq，供引擎同步回推的 Rsp* 帧回显（如 ReqPrepare -> RspPrepare）
+    // Record this request's seq so the Rsp* frames the engine pushes synchronously can echo it (e.g. ReqPrepare -> RspPrepare)
     sess._reqSeq = seq || 0;
     r.handleClient(msgType, inner);
     return [];
   };
 
-  // ------------------------------------------------------------ 请求派发
+  // ------------------------------------------------------------ Request dispatch
   function dispatch(sess, raw) {
     var fields;
     try {
@@ -1367,7 +1370,7 @@
   // ------------------------------------------------------- FakeWebSocket
   var CONNECTING = 0, OPEN = 1, CLOSING = 2, CLOSED = 3;
 
-  // 上一个对局会话（断线重连时复用，避免对局因客户端主动关 WS 而丢失）
+  // The previous match session (reused on disconnect-reconnect, so the match is not lost when the client actively closes the WS)
   var _lastSession = null;
 
   function FakeWebSocket(url, protocols) {
@@ -1383,7 +1386,7 @@
     this.onerror = null;
     this.onclose = null;
     this._listeners = {};
-    // 重连复用旧的 riichi 对局会话
+    // Reconnect: reuse the old riichi match session
     if (_lastSession && (_lastSession.riichi || _lastSession.liveMatch())) {
       this._session = _lastSession;
       this._session.resume(this);
@@ -1396,7 +1399,7 @@
     this._session.socket = this;
 
     log('[mock] 建立虚拟连接 %s', this.url);
-    // 异步触发 open，模拟真实握手时序（同步触发会让调用方还没绑上 onopen）
+    // Trigger open asynchronously to simulate the real handshake timing (a synchronous trigger would fire before the caller has bound onopen)
     setTimeout(function () {
       if (self.readyState !== CONNECTING) return;
       self.readyState = OPEN;
@@ -1432,12 +1435,12 @@
     }
   };
 
-  /** 按 binaryType 把响应包装成客户端期望的形态。 */
+  /** Wrap the response in the form the client expects, according to binaryType. */
   FakeWebSocket.prototype._deliver = function (bytes) {
     var self = this;
     var data;
     if (this.binaryType === 'arraybuffer') {
-      // 复制一份独立的 ArrayBuffer，避免调用方持有我们的内部视图
+      // Copy an independent ArrayBuffer so the caller does not hold our internal view
       data = bytes.slice().buffer;
     } else {
       data = new Blob([bytes]);
@@ -1461,13 +1464,13 @@
       console.warn('[mock] 不支持的发送类型', payload);
       return;
     }
-    // 复制一份，防止调用方复用同一块 buffer 导致后续解析读到脏数据
+    // Copy it, to prevent the caller from reusing the same buffer, which would make later parsing read dirty data
     bytes = bytes.slice();
 
     var self = this;
     var frames = dispatch(this._session, bytes);
     if (!frames.length) return;
-    // 异步投递，模拟网络往返；同步回调会打乱 Unity 的消息队列
+    // Async delivery, simulating network round trips; a synchronous callback would scramble Unity's message queue
     setTimeout(function () {
       if (self.readyState !== OPEN) return;
       for (var i = 0; i < frames.length; i++) self._deliver(frames[i]);
@@ -1479,11 +1482,11 @@
     var self = this;
     var activeGame = !!(self._session && self._session.liveMatch());
     if (!activeGame) {
-      // 非对局中：正常优雅关闭（回 1000 或客户端给的码，关帧握手照常完成）
+      // Not in a match: normal graceful close (replies 1000 or the client's code; the close handshake completes as usual)
       this.readyState = CLOSING;
       setTimeout(function () {
         self.readyState = CLOSED;
-        // 不销毁会话：保留 riichi 引擎，客户端重连时复用（避免对局中断）
+        // Do not destroy the session: keep the riichi engine for reuse on client reconnect (to avoid interrupting the match)
         _lastSession = self._session;
         self._session.suspend();
         self._emit('close', {
@@ -1494,13 +1497,13 @@
       }, 0);
       return;
     }
-    // 对局进行中：模拟「网络掉线」。真实服断网时不回关帧，BestHTTP 检测到连接异常
-    // （onError）→ 以异常码 onClose(1006, wasClean=false) 收尾 → 客户端保留在局状态并
-    // 自动重连 → 重连后发 20162 询问并恢复对局（见 capture/dongfeng1）。
-    // 只发 error 客户端不会判定连接已结束、也就不重连；真实 WebSocket 掉线是 error 之后
-    // 再补一个 wasClean=false 的 close，这里照此补上，客户端才会触发重连。
-    // 关键在于：这是【服务端侧】发起的断开（客户端并未调用 ws.close），所以客户端的
-    // 在局状态不会被清空——重连后才会发 20162 而不是 20102。引擎始终保留在 _lastSession。
+    // Match in progress: simulate a "network drop". The real server does not reply to the close frame when the network is cut; BestHTTP detects the abnormal connection
+    // (onError) → closes with the abnormal code onClose(1006, wasClean=false) → the client keeps its in-match state and
+    // reconnects automatically → after reconnecting it sends 20162 to ask and resume the match (see capture/dongfeng1).
+    // Sending only an error does not make the client consider the connection ended, so it won't reconnect; in a real WebSocket drop, a close with wasClean=false follows the error,
+    // so it is appended here, which is what makes the client trigger a reconnect.
+    // Key point: this is a disconnect initiated on the SERVER side (the client did not call ws.close), so the client's
+    // in-match state is not cleared; after reconnect it sends 20162 rather than 20102. The engine always stays in _lastSession.
     this.readyState = CLOSED;
     _lastSession = self._session;
     self._session.suspend();
@@ -1518,7 +1521,7 @@
   FakeWebSocket.prototype.CLOSING = CLOSING;
   FakeWebSocket.prototype.CLOSED = CLOSED;
 
-  // ------------------------------------------------------------------ 导出
+  // ------------------------------------------------------------------ Exports
   MJ.server = {
     FakeWebSocket: FakeWebSocket,
     Session: Session,
@@ -1536,19 +1539,19 @@
     updateRanks: function (ranks) { return USERDATA.updateRanks(ranks); },
     updateProfileStats: function (stats) { return USERDATA.updateProfileStats(stats); },
 
-    /** 当前大厅数据状态（可在控制台直接改） */
+    /** Current lobby data state (can be edited directly in the console) */
     get userdata() { return USERDATA; },
 
-    /** 恢复到初始快照 */
+    /** Restore to the initial snapshot */
     reset: function () {
       USERDATA = new U.UserData(P.b64decode(DATA.userdataB64), UID);
       console.log('[mock] 用户数据已重置');
     },
 
-    /** 关掉刷屏日志 */
+    /** Turn off the spam log */
     quiet: function (on) { LOG.enabled = (on === false); },
 
-    /** 查看被明确拒绝的未实现请求。 */
+    /** View explicitly rejected, unimplemented requests. */
     unhandled: function () {
       var seen = {};
       LOG.unhandled.forEach(function (r) {
@@ -1558,7 +1561,7 @@
       return seen;
     },
 
-    /** 导出当前大厅数据，方便存成新的 patch */
+    /** Export the current lobby data, for saving as a new patch */
     dump: function () {
       var b = USERDATA.serialize();
       var s = '';

@@ -22,7 +22,7 @@ export function applyRankResult(profile, { players, matchLength, placement, room
   let point = oldPoint + change;
   if (level < table.length && point >= rule.up) {
     level += 1;
-    // 雀梦之巅过渡段继承上一段 PT；普通升段从原表初始 PT 开始。
+    // The Dream Pinnacle transition tier inherits the previous tier's PT; regular promotions start from the original table's initial PT.
     point = table[level - 1].inherit ? point : table[level - 1].initial;
   } else if (level > 1 && rule.canDecrease && point < 0) {
     level -= 1;
@@ -111,7 +111,7 @@ function normalizeProfile(value) {
   return {
     ...defaults,
     ...profile,
-    // 旧默认昵称迁移为新默认昵称；玩家自行改过的昵称不受影响。
+    // Migrate the old default nickname to the new default nickname; nicknames the player changed are left untouched.
     nickname: profile.nickname === '离线玩家' ? defaults.nickname : (profile.nickname ?? defaults.nickname),
     version: PROFILE_VERSION,
     ranks: {
@@ -157,7 +157,7 @@ export async function saveProfile(directory, profile) {
         await fs.rename(temporary, file);
         break;
       } catch (error) {
-        // Windows 短暂的读句柄/杀毒扫描可阻止替换；始终保留旧档案，最多尝试三次。
+        // A Windows read handle or antivirus scan can block the replace; always keep the old profile and try at most three times.
         if (!['EPERM', 'EACCES', 'EBUSY'].includes(error.code) || attempt >= 2) throw error;
         await delay(10 * 2 ** attempt);
       }

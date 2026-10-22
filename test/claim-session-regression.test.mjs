@@ -9,7 +9,7 @@ async function flush() {
 
 function setup(t, players, action = PlayAction.Peng, bank = 20) {
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
-  // 只隔离整场启动循环，保留实际弃牌、动作生成、等待、校验和鸣牌执行。
+  // Isolates only the whole start-of-game loop; actual discards, action generation, waiting, validation and call execution are kept.
   t.mock.method(GameEngine.prototype, 'start', async () => {});
   const frames = [];
   const saved = { 0: 1, 1: 1, 2: 1, 3: 0, 4: 0, 5: 1 };

@@ -43,7 +43,7 @@ test('不变量辅助自检：两个可弃牌座位或动作执行座位错误�
 
 test('不变量辅助自检：非法动作返回错误却只提交一半必须报错', () => {
   const engine = completeFixture();
-  // 人为模拟旧实现先改手牌再返回错误；辅助必须识别部分提交。
+  // Deliberately simulates an old implementation that changed the hand before returning an error; the helper must recognize partial commits.
   engine.submitDraw = () => {
     engine.players[0].hand.push(engine.wall.shift());
     return Result.Fail_CardNotInHand;
@@ -75,7 +75,7 @@ for (const players of [3, 4]) for (const matchLength of ['east', 'hanchan']) {
       const wait = engine.waitHuman;
       let draws = 0;
       let claims = 0;
-      // 驱动正常真人入口提交 AI 建议，不更改引擎判定/行动执行/返回值。
+      // Drives the normal human entry to submit the AI suggestion, without changing the engine's judgement / action execution / return values.
       engine.waitHuman = function (kind) {
         const pending = wait.call(this, kind);
         const method = kind === 'draw' ? 'submitDraw' : 'submitClaim';
@@ -88,7 +88,7 @@ for (const players of [3, 4]) for (const matchLength of ['east', 'hanchan']) {
         if (kind === 'draw') {
           draws++;
           assertRejectedUnchanged(this, method, { action: PlayAction.Normal, card: 999 }, Result.Fail_CardNotInHand);
-          // 同牌种的伪实体或对手实体不能冒充自己的牌。
+          // A fake or opponent physical tile of the same kind cannot pass as one's own tile.
           const foreign = this.players[1].hand.find((id) => !this.players[0].hand.includes(id));
           assertRejectedUnchanged(this, method, { action: PlayAction.Normal, card: foreign }, Result.Fail_CardNotInHand);
           payload = this.aiTurn(window.seat, window.drew, window.actions, window.cantPlays);
@@ -102,7 +102,7 @@ for (const players of [3, 4]) for (const matchLength of ['east', 'hanchan']) {
             || { action: PlayAction.Guo, otherCards: [] };
         }
         assert.equal(this[method](payload), Result.Succ);
-        // 同窗已消费，重放必须失败，连缓冲/供托/计时状态也不得改变。
+        // The same window has already been consumed; replay must fail, and even the buffer / reserve / timer state must not change.
         assertRejectedUnchanged(this, method, payload, Result.Fail_InvalidSequence);
         return pending;
       };
@@ -120,7 +120,7 @@ for (const players of [3, 4]) for (const matchLength of ['east', 'hanchan']) {
 
 test('错误座位无法建立真人窗口，经两个提交入口均拒绝且状态不变', () => {
   const engine = completeFixture();
-  // ReqPlayCard/ReqQiangCard 协议没有客户端 seat；座位来自可信窗口。
+  // ReqPlayCard / ReqQiangCard protocols have no client seat; the seat comes from the trusted window.
   for (const seat of [1, 2, 3, -1, 4]) {
     engine.expectDraw(seat, true, [PlayAction.Normal]);
     assertRejectedUnchanged(engine, 'submitDraw', { action: PlayAction.Normal, card: 111 }, Result.Fail_InvalidSequence);

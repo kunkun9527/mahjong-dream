@@ -98,7 +98,7 @@ test('自己的副露与暗手凑齐四张等待牌，不得算听第五张的�
   const melds = [{ type: 'pon', tiles: [111, 112, 113], from: 1 }, ...openMelds];
   assert.equal(engine.isFormalTenpaiHand([114], melds), false);
   assert.equal(engine.isFormalTenpaiHand([191], melds), true);
-  // 两面等待的两端都被自己的暗杠占满，也不存在可完成的牌形。
+  // Both ends of the two-sided wait are occupied by one's own closed kan, so no completable shape exists either.
   const kans = [
     { type: 'ankan', tiles: [111, 112, 113, 114] },
     { type: 'ankan', tiles: [141, 142, 143, 144] },

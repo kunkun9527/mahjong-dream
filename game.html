@@ -7,20 +7,20 @@
     <link rel="shortcut icon" href="TemplateData/favicon.ico">
     <link rel="stylesheet" href="TemplateData/style.css">
 
-    <!-- 本地服务提供权威 WebSocket；补丁在 Unity 初始化前安装劫持。 -->
+    <!-- The local service provides the authoritative WebSocket; the patch installs its hijacks before Unity initializes. -->
     <script type="text/javascript" src="offline-patch.js"></script>
     <script type="text/javascript" src="spark-md5.js"></script>
 
     <script>
-        // Stub QuickSDK 全局，避免 _init 时 QuickSDK 未定义导致 PlayerLoop 递归崩溃
+        // Stub the QuickSDK global so _init does not crash PlayerLoop recursion when QuickSDK is undefined
         (function(){
           window.QuickSDK = {
-            // 真实签名 init(productCode, productKey, debug, callback)
+            // Real signature: init(productCode, productKey, debug, callback)
             init: function(productCode, productKey, debug, cb){
               console.log('[Mock] QuickSDK.init', productCode, productKey, debug);
               try { setTimeout(function(){ if (typeof cb==='function') cb({ status: true }); }, 50); } catch(e) {}
             },
-            // 真实签名 login(callback)
+            // Real signature: login(callback)
             login: function(cb){
               console.log('[Mock] QuickSDK.login');
               try { setTimeout(function(){
@@ -39,12 +39,12 @@
             on: function(){},
             off: function(){},
             config: function(){},
-            // 游戏在登录成功后调用
+            // The game calls this after a successful login
             uploadGameRoleInfo: function(roleInfo, cb){ try { if(typeof cb==='function') cb({code:0}); } catch(e){} },
-            // 其他可能的回调方法
+            // Other possible callback methods
             reportEvent: function(){}, submitExtraData: function(){}, callNative: function(){},
           };
-          // 任何未声明的方法都返回 success
+          // Any undeclared method returns success
           window.QuickSDK = new Proxy(window.QuickSDK, {
             get(t, k) { if (k in t) return t[k]; return function(){ try { if(arguments.length>0 && typeof arguments[arguments.length-1]==='function') arguments[arguments.length-1]({code:0, status:true}); } catch(e){} }; }
           });
@@ -103,7 +103,7 @@
         updateBannerVisibility();
       }
       
-      // 中文版渠道固定简体中文；mjLang=en 时改用快照自带的国际版构建，它按浏览器语言选择内置英文表。
+      // The Chinese build always uses Simplified Chinese; with mjLang=en, switch to the international build bundled in the snapshot, which picks the built-in English table by browser language.
       var intl = new URLSearchParams(location.search).get("mjLang") === "en";
       var buildUrl = intl ? "Build_intl" : "Build";
       var loaderUrl = buildUrl + "/mj-h5.loader.js";
@@ -191,7 +191,7 @@
       };
 
       var time = setInterval(() => {
-        // 进度条慢慢增加
+        // Progress bar slowly increasing
         if(currentProgress >= 45 && currentProgress < 100){
           currentProgress = currentProgress + 1;
           progressBarFull.style.width = currentProgress + "%";
@@ -199,7 +199,7 @@
       }, 50);
       if (intl) {
         if (!new URLSearchParams(location.search).has("uid")) {
-          // 国际版 H5SDK 没有 uid/sign 会停在资源初始化；沿用快照原国际版入口的离线占位值。
+          // The international H5SDK stalls at resource init without uid/sign; keep the offline placeholder values from the original international entry.
           history.replaceState(null, "", location.pathname + location.search + "&uid=1&sign=19a5aaae0d826f5ac640a4dbfafb1612");
         }
         useEnglishPlayerPrefs().then(function () { document.body.appendChild(script); });
@@ -207,8 +207,8 @@
         document.body.appendChild(script);
       }
 
-      // 中文版启动时把 PlayerPrefs 的 LanguageID 写成 6（简中），国际版优先读这个存档值而不是浏览器语言；
-      // 英文入口在 Unity 挂载存档前把它改成 4（English）。记录格式：键长度、键名、0xFE、int32 小端。
+      // The Chinese build writes PlayerPrefs LanguageID as 6 (Simplified Chinese) at startup; the international build prefers this saved value over the browser language;
+      // the English entry changes it to 4 (English) before Unity mounts the save. Record format: key length, key name, 0xFE, little-endian int32.
       function useEnglishPlayerPrefs() {
         return new Promise(function (done) {
           var open = indexedDB.open("/idbfs");

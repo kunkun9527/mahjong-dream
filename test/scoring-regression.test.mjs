@@ -51,7 +51,7 @@ test('无其他役的拔北岭上允许自摸，入口与终局只计算一次�
   assert.equal(engine.canTsumo(p), true);
   assert.ok(engine.turnActions(1, true).includes(PlayAction.Hu));
   await engine.winTsumo(1);
-  // 岭上 1 番 + 北宝 1 番，三麻自摸损：庄 1000、闲 500。
+  // Rinshan 1 han + North dora 1 han; 3-player tsumo loss: dealer 1000, non-dealer 500.
   assert.deepEqual(engine.scores, [49_000, 51_500, 49_500]);
   const info = stopped(frames).userInfos.find(({ seat }) => seat === 1);
   assert.equal(info.totalFan, 2);
@@ -129,7 +129,7 @@ test('四麻和三麻包牌自摸的本场棒全部由责任者支付，庄闲�
     setPao(engine, winner, 2);
     await engine.endHand({ type: 'tsumo', winner, card: 111, win: paoWin(units, winner === 0) });
     const expected = new Array(n).fill(50_000);
-    // 非包部分仍按正常自摸损支付，本场总额不变。
+    // The non-pao part is still paid at the normal tsumo loss, and the total of this hand's payments does not change.
     if (units > 1) for (let seat = 0; seat < n; seat++) {
       if (seat === winner) continue;
       const payment = winner === 0 || seat === 0 ? 16_000 : 8_000;

@@ -118,7 +118,7 @@ test('立直宣言实际扣千点，未放铳确认后供托与一发状态保�
 test('立直暗杠拒绝改变等待牌种及不是新摸牌的送杠', () => {
   const { engine } = engineFixture();
   const p = engine.players[0];
-  // 九莲十三面等待，杠掉 1m 刻子后等待牌种减少。
+  // Nine Gates' thirteen-sided wait: after kanning the 1m triplet, the number of waiting tile kinds decreases.
   p.hand = tiles('1112345678999m1m');
   p.riichi = true;
   p.riichiTurn = 1;

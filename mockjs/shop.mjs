@@ -1,6 +1,6 @@
 import { ECONOMY_CATALOG as C } from './economy_catalog.mjs';
 
-// ShopType 不是 UI 的 MahjongShopLabelType；从原元数据提取，不能直接使用标签编号。
+// ShopType is not the UI's MahjongShopLabelType; it is extracted from the original metadata, so do not use the label IDs directly.
 export const SHOP_TYPE = Object.freeze(C.shopTypes);
 export const SHOP_ERROR = Object.freeze({ INVALID: 1, INSUFFICIENT: 2010, LIMIT: 2011, NOT_FOUND: 2012 });
 const TOKEN_IDS = [60002, 60001, 60009, 60010, 60011, 60012];
@@ -53,7 +53,7 @@ function readState(user, now) {
   const state = {
     row,
     lastRefresh: Number(d[2] || 0),
-    // 对照 GetRefreshShopCount/FreeRefreshShopCount：f4 为总次数，f6 为免费额度。
+    // Corresponds to GetRefreshShopCount/FreeRefreshShopCount: f4 is the total count, f6 the free allowance.
     refreshCount: Number(d[4] || 0),
     freeAllowance: Number(d[6] || 0),
     items: P().parse(row).filter(([n, w]) => n === 1 && w === 2).map(([, , bytes]) => {
@@ -98,7 +98,7 @@ export function synchronizeShop(user, now = Math.floor(Date.now() / 1000)) {
 function uniqueReward(user, item) {
   if (item.type === 26) {
     if (user.row(26, item.id)) return { error: SHOP_ERROR.LIMIT };
-    // 离线快照保留全角色、最高好感度；缺少的旧档案使用同一角色模板，不复制他人装备。
+    // The offline snapshot keeps all warriors at max affinity; missing legacy saves use the same warrior template and do not copy anyone else's equipment.
     const template = new user.constructor(P().b64decode(globalThis.__mj.data.userdataB64), user.uid);
     const bytes = template.row(26, item.id);
     return bytes ? { dtype: 26, key: String(item.id), bytes } : { error: SHOP_ERROR.NOT_FOUND };
@@ -114,7 +114,7 @@ function uniqueReward(user, item) {
   return { dtype: item.type, key: '0', bytes };
 }
 
-/** 购买数量来自 f3；普通四商店 f4 固定 1，价格、库存及奖励均由服务端目录决定。 */
+/** The purchase quantity comes from f3; for the regular four shops f4 is fixed at 1; price, stock and rewards are all determined by the server catalog. */
 export function purchase(user, request, now = Math.floor(Date.now() / 1000)) {
   const { shopType, itemId, quantity, exchangeCount, gearIndex = 0 } = request;
   if (!positive(itemId) || !positive(quantity) || quantity > 0x7fffffff || exchangeCount !== 1 || gearIndex !== 0) {
@@ -177,7 +177,7 @@ export function refreshShop(user, now = Math.floor(Date.now() / 1000)) {
   const free = state.refreshCount < state.freeAllowance;
   const index = Math.max(0, state.refreshCount - state.freeAllowance);
   const offer = C.refresh[Math.min(index, C.refresh.length - 1)];
-  // 刷新配置的 TokenType 与普通商店枚举不同：0 雀币、1 梦石。
+  // The refresh config's TokenType differs from the regular shop enum: 0 = coins, 1 = Dream Stones.
   const currency = offer.tokenType === 0 ? 60001 : 60002;
   const cost = free ? 0 : offer.price;
   if (user.inventoryCount(6, currency) < cost) return { error: SHOP_ERROR.INSUFFICIENT };

@@ -21,7 +21,7 @@
   <title>Unity WebGL Player | 激情麻将</title>
   <style>
     html, body, div, span, applet, object, iframe, h1, h2, h3, h4, h5, h6, p, blockquote, pre, a, abbr, acronym, address, big, cite, code, del, dfn, em, img, ins, kbd, q, s, samp, small, strike, strong, sub, sup, tt, var, b, u, i, center, dl, dt, dd, ol, ul, li, fieldset, form, label, legend, table, caption, tbody, tfoot, thead, tr, th, td, article, aside, canvas, details, embed, figure, figcaption, footer, header, hgroup, menu, nav, output, ruby, section, summary, time, mark, audio, video,button{margin:0;padding:0;font-style: normal;}
-    /*禁止浏览器修改字体大小*/
+    /* Prevent the browser from changing font size */
     html{font-size: 12px;}
     html body{
       -webkit-text-size-adjust: none !important;
@@ -40,9 +40,9 @@
       transform-origin: top left;
       transform: rotate(90deg) translateY(-100%)
     }
-    /* 设置 iframe 和嵌套元素的背景色为黑色 */
+    /* Set the background color of the iframe and nested elements to black */
     iframe {
-      background-color: black;  /* 确保 iframe 也有黑色背景 */
+      background-color: black;  /* Make sure the iframe also has a black background */
     }
     #Frame {
       border-style: unset;
@@ -55,7 +55,7 @@
 <script>
   var orientation = window.orientation;
 
-  //开始时调用
+  //Called at startup
   var Frame = document.getElementById("Frame");
 
   var setOrientation = 1
@@ -80,14 +80,14 @@
 
       console.log("index size ", window.innerHeight, ":", window.innerHeight);
 
-      //通过css样式旋转90度
+      //Rotate 90 degrees via CSS
       Frame.classList.add("landscape-screen");
     } else {
       console.log("当前是横屏");
       Frame.height = window.innerHeight;
       Frame.width = window.innerWidth;
 
-      //通过移除类去掉css样式
+      //Remove the CSS style by removing the class
       Frame.classList.remove("landscape-screen");
     }
   };
@@ -95,7 +95,7 @@
   unityRefreshOrientation()
 
   Frame.addEventListener('load', function() {
-    // 确保 iframe 加载完成后再发送消息
+    // Make sure the iframe has finished loading before sending messages
     Frame.contentWindow.postMessage('refreshMethod', '*');
     unityRefreshOrientation()
   });
@@ -103,7 +103,7 @@
   window.addEventListener('resize', function () {
     setTimeout(function() {
       console.log("等待结束，执行后续操作！");
-      // 这里可以放置需要执行的代码
+      // Put the code to run here
       Frame.contentWindow.postMessage('refreshMethod', '*');
 
       unityRefreshOrientation()
@@ -112,18 +112,18 @@
   });
 
   window.addEventListener('message', function(event) {
-    const data = event.data; // 获取子页面传递的参数
+    const data = event.data; // Get the parameters passed from the child page
 
     if (data && data.action === 'receiveOrientationFromUnity') {
-      console.log('接收到子页面的数据 Received from Unity:', data.value);  // 处理接收到的数据
+      console.log('接收到子页面的数据 Received from Unity:', data.value);  // Handle the received data
       setOrientation = data.value;
       Frame.contentWindow.postMessage('refreshMethod', '*');
       unityRefreshOrientation()
     }
     else
     {
-      console.log('接收到子页面的数据 event origin:', event.origin);  // 处理接收到的数据
-      console.log('接收到子页面的数据 event data:', event.data);  // 处理接收到的数据
+      console.log('接收到子页面的数据 event origin:', event.origin);  // Handle the received data
+      console.log('接收到子页面的数据 event data:', event.data);  // Handle the received data
       var obj = null;
       try{
         obj = JSON.parse(event.data);

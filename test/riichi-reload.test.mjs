@@ -7,7 +7,7 @@ import { PlayAction, RiichiMsg } from '../mockjs/proto_enum.mjs';
 const sorted = (tiles) => [...tiles].sort((a, b) => a - b);
 const macrotask = () => new Promise((resolve) => setImmediate(resolve));
 
-// 真人席0按“积极鸣牌、能杠就杠、否则用AI出牌”的脚本应答，覆盖吃碰明杠/暗杠/加杠/立直/拔北的牌河与副露。
+// Human seat 0 answers with a script that "calls actively, kans whenever possible, and otherwise discards via AI", covering the rivers and melds of chi / pon / open kan / closed kan / added kan / riichi / North pull.
 function humanAnswer(engine) {
   const p = engine.players[0];
   if (engine._pending.kind === 'claim') {
@@ -22,7 +22,7 @@ function humanAnswer(engine) {
   return engine.aiTurn(0, drew, actions, cantPlays);
 }
 
-// 快照只能由切点前下发的帧和公开/本人信息组成，并与权威状态逐项一致。
+// The snapshot may consist only of frames sent before the cut point plus public / own information, and must match the authoritative state item by item.
 function checkScene(scene, engine, frames) {
   decodeMsg('Offline2OnlineGameScene', encodeMsg('Offline2OnlineGameScene', scene));
   assert.equal(scene.remainDuiCardNum, engine.remain);

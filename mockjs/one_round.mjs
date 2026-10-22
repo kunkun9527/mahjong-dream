@@ -1,6 +1,6 @@
-// 立直一局战（1-Round，原客户端 roomType=6）：只打一手，按真人和牌番数从原配置
-// DailyCompetitionOneMatchRewardTb 领奖。配置键 = roomID × 10000 + roomLevel，与客户端
-// OneRoundGameCfgMgr.GetOneMatchRewardCfg 一致：roomID 1 为梦石场、2 为雀币场，roomLevel 1..5 为报名档位。
+// Riichi 1-Round match (roomType=6 in the original client): play a single hand; rewards are granted by the human's winning han from the original config
+// DailyCompetitionOneMatchRewardTb. Config key = roomID × 10000 + roomLevel, consistent with the client's
+// OneRoundGameCfgMgr.GetOneMatchRewardCfg: roomID 1 is the Dream Stone room, 2 the coin room; roomLevel 1..5 are the entry-fee tiers.
 import { ECONOMY_CATALOG as C } from './economy_catalog.mjs';
 import { ManType } from './proto_enum.mjs';
 
@@ -10,7 +10,7 @@ export function oneRoundRoom(roomId, roomLevel) {
   return C.oneRound.find((row) => row.id === roomId * 10_000 + roomLevel) || null;
 }
 
-/** riichi.EnumItemRewardLevel：1..4 番 → 1..4，满贯 5、跳满 6、倍满 7、三倍满 8、役满 9、双倍役满 10。 */
+/** riichi.EnumItemRewardLevel: 1..4 han → 1..4, mangan 5, haneman 6, baiman 7, sanbaiman 8, yakuman 9, double yakuman 10. */
 export function oneRoundRewardLevel(win) {
   if (!win) return 0;
   if (win.yakuman >= 2) return 10;
@@ -18,7 +18,7 @@ export function oneRoundRewardLevel(win) {
   return Math.min(Math.max(win.totalFan || 0, 0), 4);
 }
 
-/** 报名费与奖励一次结算到背包（DT 6）；返回 NtfGameStop 用的奖励字段与 DataChange。 */
+/** Settle the entry fee and rewards into inventory (DT 6) in one step; return the reward fields and DataChange used by NtfGameStop. */
 export function settleOneRound(user, room, humanWin) {
   const level = oneRoundRewardLevel(humanWin);
   const rewards = level ? room.rewards[level - 1] : [];
@@ -31,7 +31,7 @@ export function settleOneRound(user, room, humanWin) {
   };
 }
 
-/** 报名费足额才允许开局。 */
+/** The match may start only if the entry fee is fully covered. */
 export function canAffordOneRound(user, room) {
   return room.cost.every((item) => user.inventoryCount(6, item.id) >= item.count);
 }

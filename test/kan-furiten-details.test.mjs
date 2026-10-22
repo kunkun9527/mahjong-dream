@@ -134,7 +134,7 @@ for (const players of [3, 4]) {
 
   test(`${players}麻同一人四杠不流局，可继续弃牌及四杠子自摸，第五暗加明杠均不下发且提交不变`, async () => {
     const { engine, frames, p, declare } = fourthKan(players, 'ankan', true);
-    // 四组杠后单骑绿发，岭上摸中未成对，弃发后继续等中。
+    // Four waits after a kan on a single-tile green dragon wait: the rinshan draw did not pair; after discarding, still waiting on Chun.
     p.hand = [...tiles('9999p'), 461];
     await declare();
     assert.equal(engine.handEnded, false);
@@ -229,7 +229,7 @@ for (const players of [3, 4]) {
         assert.equal(p.tempFuriten, !riichi);
         assert.equal(p.riichiFuriten, riichi);
         assert.equal(engine.canRon(p, 473), false);
-        // 恢复真实摸牌方法，检查进入 awaitTurn（尚未弃牌）时已经解除临时振听。
+        // Restores the real draw method, and checks that the temporary furiten is cleared when entering awaitTurn (before any discard).
         delete engine.turnDraw;
         engine.wall = [461, 462];
         engine.remain = 2;

@@ -3,7 +3,7 @@ import { YiType, ManType } from './proto_enum.mjs';
 var DIRECT = {
   "\u7ACB\u76F4": YiType.LiZhi,
   "\u30C0\u30D6\u30EB\u7ACB\u76F4": YiType.ShuangLiZi,
-  // 2101 双立直
+  // 2101 Double Riichi
   "\u4E00\u767A": YiType.YiFa,
   "\u9580\u524D\u6E05\u81EA\u6478\u548C": YiType.MengQianQingZiMoHu,
   "\u5E73\u548C": YiType.PingHu,
@@ -47,9 +47,9 @@ var DIRECT = {
   "\u5929\u548C": YiType.TianHu,
   "\u5730\u548C": YiType.DiHu,
   "\u30C9\u30E9": YiType.Bao,
-  // 宝（表宝牌）
+  // Dora (regular dora indicator)
   "\u8D64\u30C9\u30E9": YiType.RedBao
-  // 赤宝（赤5 dora）
+  // Red dora (red 5 dora)
 };
 function windYiType(key, roundWind, seatWind) {
   const m = key.match(/^(場風|自風)([東南西北])$/);
@@ -94,7 +94,7 @@ function manTypeFromResult({ han, fu = 0, yakuman, name }) {
   if (han >= 8) return ManType.BeiMan;
   if (han >= 6) return ManType.TiaoMan;
   if (han >= 5) return ManType.ManGuan;
-  // 低番高符满贯：4 番 40 符以上 / 3 番 70 符以上即满贯档（荣和 8000）
+  // Low-han high-fu mangan: 4 han 40 fu+ / 3 han 70 fu+ count as mangan (8000 for ron)
   if ((han === 4 && fu >= 40) || (han === 3 && fu >= 70)) return ManType.ManGuan;
   return ManType.NoMan;
 }

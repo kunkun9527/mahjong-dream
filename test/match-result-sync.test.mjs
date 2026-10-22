@@ -1,5 +1,5 @@
-// 段位战终局后，本地段位/战绩/金币的数据变更必须随离桌应答 f24 下发给客户端，
-// 否则选房页段位条与余额停在旧值（浏览器验收发现：连续对局后段位条不刷新）。
+// After a ranked match ends, local rank / record / coin data changes must be sent to the client in the f24 of the leave-table reply,
+// otherwise the rank bar and balance on the room-select page stay at old values (found in browser acceptance: the rank bar did not refresh after consecutive matches).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -60,7 +60,7 @@ test('段位战终局：段位与金币变更随 20102 离桌应答 f24 下发',
   });
 
   const coinsBefore = mock.userdata.inventoryCount(6, 60001);
-  // 四麻段位战东风（gameType 4001, roomType 7, roomID 1）。
+  // Four-player ranked East-wind (gameType 4001, roomType 7, roomID 1).
   rpc(session, 20403, 3, P.W().s(1, P.W().v(1, 4001).v(3, 7).v(4, 1).v(6, 1).bytes()).bytes());
   const end = Date.now() + 60_000;
   while (!riichiNames(frames).includes('NtfGameStop') || calls === 0) {
@@ -77,6 +77,6 @@ test('段位战终局：段位与金币变更随 20102 离桌应答 f24 下发',
   assert.ok(yonma, '下发四麻段位 PT');
   const coin = changedRows(finish[0], 6).map((row) => P.dict(row[2])).find((row) => row[1] === 60001);
   assert.equal(coin[2], coinsBefore + 100);
-  // 只下发一次：之后的离桌不再重复携带。
+  // Sent only once: later leave-table replies do not carry it again.
   assert.equal(rpc(session, 20025, 10, new Uint8Array(0))[0][24], undefined);
 });

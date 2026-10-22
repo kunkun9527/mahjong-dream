@@ -5,7 +5,7 @@
 
 ## Key files
 - `browser_entry.mjs` — bundle 入口；定义 `RiichiSession`（计时、AI 调度、消息桥接），把各模块导出到 `globalThis.__mj`。
-- `riichi_ai_policy.mjs` — 立直 AI 中级/高级策略：统一期望值弃牌/鸣牌评估、押引、立直/默听比较、高级固定预算摸牌搜索（ADR 0006）。`engine.mjs` 的 `aiTurn/aiClaim` 按 `aiLevels` 分派，`basic` 为旧启发式。
+- `riichi_ai_policy.mjs` — 立直三档 AI 共用期望值弃牌/鸣牌、押引与立直/默听框架；低级裁减待牌质量与顺位，中级保留但不搜索，高级加公开读牌和固定预算摸牌搜索（ADR 0006）。`engine.mjs` 的 `aiTurn/aiClaim` 按 `aiLevels` 控制能力，合法性与关键北保护三档共用。
 - `riichi_ai_read.mjs` — 高级 AI 读牌模型：只用公开信息（牌河顺序/摸切/立直/副露/宝牌/余牌）估计各家听牌概率、逐张放铳率与威胁打点；公开牌河日志由 `engine.mjs` 的 `discardLog` 提供。
 - `riichi_reload.mjs` — 重连快照：把本手已下发通知帧折叠为客户端可见局面，构造 `Offline2OnlineGameScene`（20163 `f100`）；不安全切点返回 `null` 退回整手重放。
 - `engine.mjs` — 立直 `GameEngine`：牌山、动作窗口、鸣牌/立直/杠/拔北、和了与流局、计分、局序（东风/半庄/一局）。牌局唯一真相。

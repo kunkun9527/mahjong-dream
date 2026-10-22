@@ -21,7 +21,7 @@ function realMelds(melds) {
 }
 function furoGroupStr(meld, akaSet) {
   const suit = decodeId(meld.tiles[0]).suit;
-  // riichi 用两张牌表示暗杠，必须把红牌保留在这两个代表牌中。
+  // riichi represents a closed kan with two tiles; the red tile must be kept among these two representative tiles.
   const tiles = meld.type === "ankan"
     ? [...meld.tiles].sort((a, b) => Number(akaSet?.has(b) || false) - Number(akaSet?.has(a) || false)).slice(0, 2)
     : meld.tiles;
@@ -58,13 +58,13 @@ function calcWin(concealedIds, melds, akaSet, opts = {}) {
   let res;
   try {
     const calculator = new Riichi(str.toLowerCase());
-    // riichi 1.2.0 的 calcFu 把边张牌与 hasAgariFu 布尔值比较，漏掉
-    // 12 等 3 / 89 等 7 的两符。只修正受影响分解，且必须在择优前算点。
+    // riichi 1.2.0's calcFu compares the edge-wait tile with the hasAgariFu boolean, missing
+    // the two-fu cases of 12 waiting on 3 / 89 waiting on 7. Only fix the affected decompositions, and compute points before choosing the best.
     const calcFu = calculator.calcFu;
     calculator.calcFu = function () {
       calcFu.call(this);
       if (this.tmpResult.yaku['七対子'] || this.tmpResult.yaku['平和']) return;
-      // currentPattern 末尾是已完成副露，不能用其中的牌判断本次等待。
+      // currentPattern ends with a completed open meld, so its tiles cannot be used to judge the current wait.
       const concealedPattern = this.currentPattern.slice(0, this.currentPattern.length - this.furo.length);
       const runs = concealedPattern.filter((group) => Array.isArray(group)
         && group.length === 3 && group[0] !== group[1]);
@@ -73,7 +73,7 @@ function calcWin(concealedIds, melds, akaSet, opts = {}) {
       const countedWait = concealedPattern.some((group) => typeof group === 'string' && group === this.agari)
         || runs.some((group) => group[1] === this.agari);
       if (!edgeWait || countedWait) return;
-      // 原结果已进位，不能直接加两符；按当前库的面子表示重算未进位符数。
+      // The original result is already rounded up, so two fu cannot be added directly; recompute the un-rounded fu count from the current library's meld representation.
       let fu = 20 + (!this.isTsumo && this.isMenzen() ? 10 : 0) + (this.isTsumo ? 2 : 0) + 2;
       for (const group of this.currentPattern) {
         if (typeof group === 'string') {
@@ -91,9 +91,9 @@ function calcWin(concealedIds, melds, akaSet, opts = {}) {
       this.tmpResult.fu = Math.max(30, Math.ceil(fu / 10) * 10);
     };
     if (opts.rinshan && opts.ronTile == null) {
-      // riichi 1.2.0 只识别有杠副露的岭上；雀魂拔北补牌同样可成岭上。
-      // 在每个分解的役判定后补役，让原库继续算宝牌、符和最优点数；
-      // 不能在 calc() 返回无役/0 符后再加番，也不能修改全局原型。
+      // riichi 1.2.0 only recognizes rinshan for open kans; Mahjong Soul's North-tile pull (nukidora) draw also counts as rinshan.
+      // After the yaku check of each decomposition, add the bonus yaku so the original library still computes dora, fu and the best score;
+      // do not add han after calc() returns no-yaku/0 fu, and do not modify global prototypes.
       const calcYaku = calculator.calcYaku;
       calculator.calcYaku = function () {
         calcYaku.call(this);

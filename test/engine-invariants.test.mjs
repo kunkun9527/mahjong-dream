@@ -4,8 +4,8 @@ import { GameEngine } from '../mockjs/engine.mjs';
 import { buildWall } from '../mockjs/tiles.mjs';
 import { RiichiMsg } from '../mockjs/proto_enum.mjs';
 
-// 只在对局通知的稳定边界检查；准备阶段尚未同步 remain，结算阶段
-// scores 与 players.score 的提交也不在同一时刻，不应视为局中状态。
+// Checked only at stable boundaries of match notifications; during the prepare phase remain is not yet synced, and during settlement
+// the commits of scores and players.score do not happen at the same moment, so it should not be treated as in-match state.
 const stableEvents = new Set([
   RiichiMsg.ENtfGameStart, RiichiMsg.ENtfSendCard, RiichiMsg.ENtfPlayCard,
   RiichiMsg.ENtfQiangCard, RiichiMsg.ENtfQiangCardEnd,
@@ -31,7 +31,7 @@ test('四模式多种子自战在通知边界保持实体牌唯一、牌数和�
           const live = [...owned, ...engine.wall, ...engine.replacements];
           assert.equal(new Set(live).size, live.length, `实体牌重复：${label}`);
           assert.ok(live.every((id) => legalIds.has(id)), `非法实体牌：${label}`);
-          // 引擎保留十张宝牌/里宝指示牌；每次补牌封存一张牌山尾牌。
+          // The engine keeps ten dora / ura-dora indicator tiles; each replacement draw seals one wall-tail tile.
           const sealedTail = replacementCount - engine.replacements.length;
           assert.equal(live.length + 10 + sealedTail, legalIds.size, `实体牌数：${label}`);
           assert.equal(engine.remain, engine.wall.length, `余牌：${label}`);

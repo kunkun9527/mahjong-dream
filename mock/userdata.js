@@ -1,16 +1,16 @@
-/* 大厅用户数据（100142）的可变状态模型 —— userdata.py 的 JS 版
+/* Mutable state model for lobby user data (100142), the JS version of userdata.py
  *
- * 协议结构（还原自 IL2CPP global-metadata）：
+ * Protocol structure (reverse-engineered from IL2CPP global-metadata):
  *   QueryUserDataResponse      { 1:Result, 2:UserId, 3:repeated UserDataSingleTypeResponse }
  *   UserDataSingleTypeResponse { 1:DataType, 2:Version, 3:repeated UserDataSingleRow }
  *   UserDataSingleRow          { 1:DataId(string), 2:Data(bytes) }
  *
- * 服务端在任意响应帧的 wrapper f24（DataChangeFieldNumber）里回推增量：
+ * On any response frame, the server pushes increments in the wrapper f24 (DataChangeFieldNumber):
  *   UserDataChange             { 1:UserId, 2:repeated UserDataSingleTypeChange }
  *   UserDataSingleTypeChange   { 1:DataType, 2:Version, 3:repeated UserDataSingleRowChange }
  *   UserDataSingleRowChange    { 1:DataId, 2:Data, 3:ChangeType }
  *
- * 客户端「保存」类操作不改本地缓存，只等这个增量；收不到就判定失败并回滚 UI。
+ * Client-side "save" operations do not change the local cache; they only wait for this increment. If none arrives, the operation is judged failed and the UI is rolled back.
  */
 (function (global) {
   'use strict';
@@ -24,7 +24,7 @@
   var DT_HEAD = 11;
   var DT_MAHJONG_WARRIOR = 26;
   var DT_MAHJONG_WARRIOR_SKIN = 37;
-  var DT_SIGN_IN = 34;   // 签到：row "0".f1 = 最后签到 Unix 时间戳，跨日判定看它
+  var DT_SIGN_IN = 34;   // Check-in: row "0".f1 = last check-in Unix timestamp; the cross-day check reads this
   var DT_PROFILE = 42;
 
   var DT_NAMES = {
@@ -47,12 +47,12 @@
     this.dtype = dtype;
     this.version = version;
     this.rows = rows;      // { key(string): Uint8Array }
-    this.order = order;    // 保持原始行顺序
-    this.extra = extra;    // 其它未知字段的原始编码
+    this.order = order;    // Keep the original row order
+    this.extra = extra;    // Raw encoding of other unknown fields
   }
 
   Module.prototype.serialize = function () {
-    // proto3：默认值（0 / 空 bytes）不编码，否则字节数对不上原版
+    // proto3: default values (0 / empty bytes) are not encoded, otherwise the byte count will not match the original
     var w = P.W();
     w.v(1, this.dtype);
     if (this.version) w.v(2, this.version);
@@ -71,7 +71,7 @@
   // ------------------------------------------------------------ UserData
   function UserData(blob, uid) {
     this.uid = uid || 0;
-    this.headParts = [];      // 顶层非 f3 字段（Result / UserId 等）
+    this.headParts = [];      // Top-level non-f3 fields (Result / UserId etc.)
     this.modules = {};
     this.moduleOrder = [];
 
@@ -122,7 +122,7 @@
     return m.rows[String(key)] || null;
   };
 
-  /** 写入一行并给模块版本 +1，返回 [key, data, changeType]。 */
+  /** Write one row and bump the module version by +1; returns [key, data, changeType]. */
   UserData.prototype.setRow = function (dtype, key, data) {
     key = String(key);
     var m = this.modules[dtype];
@@ -137,7 +137,7 @@
     return [key, data, ct];
   };
 
-  /** 背包数量：物品 / 礼物 / 材料共享 { 1:id, 2:count } 结构。 */
+  /** Item quantities: items / gifts / materials share the { 1:id, 2:count } structure. */
   UserData.prototype.inventoryCount = function (dtype, id) {
     if (![6, 7, 8].includes(dtype) || !Number.isSafeInteger(id) || id <= 0) {
       throw new RangeError('非法背包物品');
@@ -150,7 +150,7 @@
     return count;
   };
 
-  /** 先验证全部扣款/发货，再一次性提交；失败不改数量、模块版本或行顺序。 */
+  /** Validate all charges/deliveries first, then commit them in one go; on failure, quantities, module version and row order are left unchanged. */
   UserData.prototype.changeInventory = function (deltas) {
     var totals = new Map();
     for (var delta of deltas) {
@@ -181,10 +181,10 @@
     return changes;
   };
 
-  /** wrapper f24 的真实结构（对照正式服抓包 100012 确认）：
+  /** Real structure of wrapper f24 (confirmed against the official-server capture 100012):
    *    f24 = DataChangeNotify { 1: UserDataChange }
-   *  即 UserDataChange 外面还套了一层 f1，早期版本漏掉了这层，
-   *  客户端解不出增量 -> 保存类操作全部静默失败（UI 不刷新 / 回滚）。 */
+   *  i.e. UserDataChange is wrapped in an extra f1; early versions missed this layer,
+   *  so the client could not decode the increment and all save operations silently failed (UI not refreshed / rolled back). */
   UserData.prototype.changeNotify = function (changes) {
     return P.W().s(1, this.changePacket(changes)).bytes();
   };
@@ -211,8 +211,8 @@
     return w.bytes();
   };
 
-  // ---------------------------------------------------------- 业务操作
-  /** 换皮肤：MahjongWarrior row[warriorId].Data.f3(MahjongWarriorData).f3 = sculptId */
+  // ---------------------------------------------------------- Business operations
+  /** Change skin: MahjongWarrior row[warriorId].Data.f3(MahjongWarriorData).f3 = sculptId */
   UserData.prototype.wearSculpt = function (warriorId, sculptId) {
     var row = this.row(DT_MAHJONG_WARRIOR, warriorId);
     if (!row) return null;
@@ -226,7 +226,7 @@
     return out;
   };
 
-  /** 换使用中装备：UserBasic.f2(UserBasicEquipment).f1 = map<DataType, int> */
+  /** Change the equipped gear in use: UserBasic.f2(UserBasicEquipment).f1 = map<DataType, int> */
   UserData.prototype.selectEquipment = function (pairs) {
     var row = this.row(DT_BASIC_INFO, '0');
     if (!row) return null;
@@ -254,22 +254,71 @@
     }
     row = P.setBytes(row, 2, w.bytes());
     var ch = this.setRow(DT_BASIC_INFO, '0', row);
-    // 正式服每换一项 version +1（一次请求带 N 项就 +N），这里对齐
+    // The official server bumps the version by +1 for each item changed (one request with N items → +N); this matches that
     if (pairs.length > 1) this.modules[DT_BASIC_INFO].version += pairs.length - 1;
     var out = {};
     out[DT_BASIC_INFO] = [ch];
     return out;
   };
 
-  // ---------------------------------------------------------- 跨日签到
-  /** 跨日签到：把 SignIn(34) row "0" 的 f1（最后签到时间戳）改成「现在」，
-   *  其余字段（f2 签到历史 / f3 起始日期）原样保留。返回 {34:[[key,data,MODIFY]]}
-   *  增量，由调用方经 wrapper f24 回推，使客户端跨日判定清除、停止 Task 高频轮询。
+  // ---------------------------------------------------------- Cross-day check-in
+  // Suppress unsupported lobby reward promotions without granting or spending items.
+  // SignIn.f1 and NewSignIn.f6 are UTC+8 daily popup guards; gift data is nested in f3.
+  UserData.prototype.normalizeOfflineLobby = function (now) {
+    now = now == null ? Math.floor(Date.now() / 1000) : now;
+    var day = Math.floor((now + 8 * 3600) / 86400);
+    var self = this, changes = {};
+    function today(value) { return Math.floor((Number(value || 0) + 8 * 3600) / 86400) === day; }
+    function update(dtype, key, bytes) {
+      var old = self.row(dtype, key);
+      if (old && old.length === bytes.length && old.every(function (b, i) { return b === bytes[i]; })) return;
+      if (!changes[dtype]) changes[dtype] = [];
+      changes[dtype].push(self.setRow(dtype, key, bytes));
+      // Reloading an older snapshot must invalidate yesterday's client-side cache too.
+      self.modules[dtype].version = Math.max(self.modules[dtype].version, day * 1024);
+    }
+    var sign = this.row(DT_SIGN_IN, '0') || new Uint8Array(0);
+    if (!today(P.get(sign, 1))) update(DT_SIGN_IN, '0', P.setVarint(sign, 1, now));
+    var newbie = this.modules[44];
+    if (newbie) newbie.order.forEach(function (key) {
+      var row = newbie.rows[key];
+      if (!today(P.get(row, 6))) update(44, key, P.setVarint(row, 6, now));
+    });
+    var gifts = this.modules[43];
+    if (gifts) gifts.order.forEach(function (key) {
+      var row = gifts.rows[key], data = P.get(row, 3);
+      if (!data) return;
+      if (P.get(data, 11) || !today(P.get(data, 8))) {
+        data = P.setVarint(P.setVarint(data, 11, 0), 8, now);
+        update(43, key, P.setBytes(row, 3, data));
+      }
+    });
+    var acts = this.modules[31];
+    if (acts) acts.order.forEach(function (key) {
+      var row = acts.rows[key], w = P.W();
+      P.parse(row).forEach(function (f) {
+        if (f[0] === 1 && f[1] === 2) {
+          var entry = f[2], data = P.get(entry, 2), clean = P.W();
+          if (data) {
+            P.parse(data).forEach(function (a) { if (a[0] !== 4 || a[1] !== 2) P.reencode(clean, a[0], a[1], a[2]); });
+            entry = P.setBytes(entry, 2, clean.bytes());
+          }
+          w.s(1, entry);
+        } else P.reencode(w, f[0], f[1], f[2]);
+      });
+      update(31, key, w.bytes());
+    });
+    return Object.keys(changes).length ? changes : null;
+  };
+
+  /** Cross-day check-in: set SignIn(34) row "0"'s f1 (last check-in timestamp) to "now";
+   *  other fields (f2 check-in history / f3 start date) are kept as-is. Returns the {34:[[key,data,MODIFY]]}
+   *  increment, which the caller pushes back via wrapper f24, so the client's cross-day check clears and it stops high-frequency Task(39) polling.
    *
-   *  根因：快照 SignIn.f1=1786266336(2026-08-09) 已跨日，客户端每进大厅就检测到
-   *  「今天还没签到」，于是发 KclientSignInReq(100620) 并周期性轮询 Task(39) 等
-   *  跨日刷新；之前 100620 没有 handler（auto-ok 空包），客户端收不到签到完成信号，
-   *  轮询死循环。这里把签到时间戳刷成今天即可让它收手。 */
+   *  Root cause: the snapshot's SignIn.f1=1786266336(2026-08-09) is already past the day boundary, so every time the client enters the lobby it detects
+   *  "not checked in today", sends KclientSignInReq(100620) and periodically polls Task(39) waiting for
+   *  the cross-day refresh. Previously 100620 had no handler (auto-ok empty packet), so the client never received the check-in completion signal,
+   *  and the polling looped forever. Setting the check-in timestamp to today makes it stop. */
   UserData.prototype.dailySignIn = function () {
     var key = '0';
     var row = this.row(DT_SIGN_IN, key);
@@ -288,8 +337,8 @@
     var out = {};
     out[DT_SIGN_IN] = [ch];
 
-    // 真实服签到后 f24 推送 DT34+DT39+DT6+DT38，这里同步推送 DT39 以避免客户端因签到后
-    // 任务未更新而反复查 DT39（参见 server.js 100141 刷屏检测）
+    // After a real check-in, the official server pushes DT34+DT39+DT6+DT38 in f24; here we also push DT39, so the client does not keep re-querying DT39 because its task was not updated after check-in
+    // (see the 100141 spam detection in server.js)
     var taskMod = this.modules[39];
     if (taskMod) {
       taskMod.version += 3;
@@ -299,7 +348,7 @@
     return out;
   };
 
-  /** 模块版本+1（数据不变），返回 f24 增量。 */
+  /** Bump the module version (data unchanged); returns the f24 increment. */
   UserData.prototype.bumpModule = function (dtype) {
     var m = this.modules[dtype];
     if (!m) return null;
@@ -315,7 +364,7 @@
     return out;
   };
 
-  /** 合并 GameSetting 到 DT2，版本+1，返回 f24 增量。 */
+  /** Merge GameSetting into DT2 and bump the version +1; returns the f24 increment. */
   UserData.prototype.updateGameSetting = function (gameSetting) {
     var row = this.row(2, '0');
     if (!row) return null;
@@ -340,8 +389,8 @@
     return true;
   }
 
-  /** DT42 ProfileInfo 的实测字段：10场次、11局数、12和牌、13放铳、14副露、
-   *  16和牌打点、17被飞、18最大连庄、19和牌巡目、20荣和、21自摸、22立直。 */
+  /** DT42 ProfileInfo measured fields: 10 matches, 11 hands, 12 wins, 13 deal-ins, 14 melds,
+   *  16 win points, 17 busted by others (tobi), 18 max consecutive dealer wins, 19 win turn, 20 ron wins, 21 tsumo wins, 22 riichi. */
   function encodeProfileInfo(bytes, stats) {
     var w = P.W(), fs = P.parse(bytes || new Uint8Array(0));
     var replaced = { 10: 1, 11: 1, 12: 1, 13: 1, 14: 1, 16: 1, 17: 1, 18: 1, 19: 1, 20: 1, 21: 1, 22: 1, 40: 1 };
@@ -382,7 +431,7 @@
     return w.bytes();
   }
 
-  /** 把唯一 JSON 档案的三/四麻东风、半庄统计同步回原客户端 DT42 战绩页。 */
+  /** Sync the single JSON profile's 3-/4-player East-wind and hanchan stats back to the original client's DT42 record page. */
   UserData.prototype.updateProfileStats = function (stats) {
     var row = this.row(DT_PROFILE, '0');
     if (!row || !stats || !stats.yonma || !stats.sanma) return null;
@@ -400,7 +449,7 @@
   };
 
 
-  /** 同步三/四麻本地段位到 DT41；4001=四麻，4002=三麻。 */
+  /** Sync the 3-/4-player local rank to DT41; 4001 = 4-player, 4002 = 3-player. */
   UserData.prototype.updateRanks = function (ranks) {
     var out = [];
     var modes = [{ key: '4001', rank: ranks && ranks.yonma }, { key: '4002', rank: ranks && ranks.sanma }];
@@ -415,7 +464,7 @@
     return out;
   };
 
-  /** 修改本地昵称：UserBasic.f1(UserBasicInfo).f1 = nickname。 */
+  /** Change the local nickname: UserBasic.f1(UserBasicInfo).f1 = nickname. */
   UserData.prototype.updateNickname = function (nickname) {
     var row = this.row(DT_BASIC_INFO, '0');
     if (!row) return null;
@@ -426,18 +475,18 @@
     return this._makeChange(DT_BASIC_INFO, ch[0], ch[1], ch[2]);
   };
 
-  // 原配置 MjWTbGoodwillLevel 最高为 6 级，MjWTbWarriorAudio 语音门槛最高也是 Lv6。
+  // The original config MjWTbGoodwillLevel tops out at level 6, and the MjWTbWarriorAudio voice threshold is at most Lv6 as well.
   var MAX_WARRIOR_LEVEL = 6;
-  // 原配置 PlayerInfoTbHead 的全部 19 个头像。
+  // All 19 avatars from the original config PlayerInfoTbHead.
   var ALL_HEAD_IDS = [];
   for (var headId = 1001; headId <= 1019; headId++) ALL_HEAD_IDS.push(headId);
 
-  /** 离线版内容全解锁：补齐头像，把雀士好感度固定为最高级并已觉醒。
-   *  幂等，每次装载档案后调用；不涉及货币和段位。无变化时返回 null。 */
+  /** Full offline content unlock: fill in all avatars, and set every warrior's affinity to the highest level and awakened.
+   *  Idempotent, called after each profile load; does not touch currency or rank. Returns null if nothing changed. */
   UserData.prototype.normalizeOfflineContent = function () {
     var changes = {}, changed = false;
 
-    // DT11 Head 行 "0"：repeated f1 { 1:HeadId, 2:{ 1:HeadId, 2:获得时间 } }
+    // DT11 Head row "0": repeated f1 { 1:HeadId, 2:{ 1:HeadId, 2:acquired time } }
     var head = this.row(DT_HEAD, '0');
     if (head) {
       var owned = {}, latest = 0;
@@ -460,7 +509,7 @@
       }
     }
 
-    // DT26 雀士：row.f3 MahjongWarriorData { 5:Level, 7:Arousal }
+    // DT26 warriors: row.f3 MahjongWarriorData { 5:Level, 7:Arousal }
     var warriors = this.modules[DT_MAHJONG_WARRIOR];
     if (warriors) {
       var keys = warriors.order.slice();
@@ -476,7 +525,7 @@
       }
     }
 
-    // DT1 UserBasic.f20 WarriorList：repeated { 1:WarriorId, 2:Level }
+    // DT1 UserBasic.f20 WarriorList: repeated { 1:WarriorId, 2:Level }
     var basic = this.row(DT_BASIC_INFO, '0');
     if (basic) {
       var basicW = P.W(), raised = false;
