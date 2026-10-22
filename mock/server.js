@@ -567,14 +567,26 @@
     return [[100152, P.W().v(1, nickname ? 0 : 2).bytes(), 1, null]];
   };
 
-  /** 修改基础资料；快照中该 RPC 仅用于昵称，数据通过 f24 更新 DT1。 */
+  // 杂货铺改名卡；原客户端没有改名卡时不会发出改名请求。
+  var RENAME_CARD_ID = 60007;
+
+  /** 修改基础资料。请求 ModifySingleBasicFieldRequest { 1:字段类型, 2:UserBasicField }，
+   *  类型 1/5 为昵称、2 为问候语。客户端回调（DataMgr_BasicInfo.ModifyBaseInfoRequest 的
+   *  lambda）要求应答 { 1:结果码, 2:原请求 }，按 f2.f1 的类型派发界面事件；缺 f2 时改名窗口
+   *  不关闭、昵称不刷新。改名消耗 1 张改名卡，数据通过 f24 更新 DT1/DT6。 */
   HANDLERS[100007] = function (sess, payload) {
+    var type = 0;
+    try { type = P.dict(payload)[1] || 0; } catch (e) { type = 0; }
+    if (type !== 1 && type !== 5) return offlineUnavailable(sess, 100008);
     var nickname = validNickname(payloadText(payload));
-    if (!nickname) return [[100008, P.W().v(1, 2).bytes(), 1, null]];
-    var changes = USERDATA.updateNickname(nickname);
+    if (!nickname) return [[100008, P.W().v(1, 2).s(2, payload).bytes(), 1, null]];
+    var changes = [USERDATA.updateNickname(nickname)];
+    if (USERDATA.inventoryCount(6, RENAME_CARD_ID) > 0) {
+      changes.push(USERDATA.changeInventory([{ dtype: 6, id: RENAME_CARD_ID, count: -1 }]));
+    }
     if (sess.localProfile) sess.localProfile.nickname = nickname;
     if (typeof sess.onNicknameChange === 'function') sess.onNicknameChange(nickname);
-    return withChange(100008, changes, P.W().v(1, 0).bytes());
+    return withChange(100008, mergeChanges(null, changes), P.W().v(1, 0).s(2, payload).bytes());
   };
 
   /** 100003 KClientLobbyModifyGameSettingRequest -> 100004 */
