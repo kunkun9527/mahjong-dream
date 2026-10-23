@@ -1,0 +1,28 @@
+{
+  "adr": "docs/adr/0010-derived-settlement-titles.md",
+  "source": {
+    "bundle": "mjab_jp_ui_ingame_bae168ce5cac36fd332ea44d80071cb5.bundle",
+    "arts": "arts_a9ec274b1600e9ab96079f8d586b0c99.json",
+    "versionsMd5": "875c11cdce11b14d9fc0bffc8596f87d"
+  },
+  "titles": {
+    "ui_settlement_img_mg_en": "Mangan",
+    "ui_settlement_img_tm_en": "Haneman",
+    "ui_settlement_img_bm_en": "Baiman",
+    "ui_settlement_img_sbm_en": "Sanbaiman"
+  },
+  "outputs": {
+    "StreamingAssets/Bundles/WebGL/mjab_jp_ui_ingame_153ee3f29285e1477538586aea86fdc1.bundle": {
+      "md5": "153ee3f29285e1477538586aea86fdc1",
+      "size": 1566238
+    },
+    "StreamingAssets/Bundles/arts_053407d4f262b61f3c9461e13c7f497a.json": {
+      "md5": "053407d4f262b61f3c9461e13c7f497a",
+      "size": 232173
+    },
+    "StreamingAssets/Bundles/versions.mj.json": {
+      "md5": "2fa6aec1ae1bae486349d9d05f9322b3",
+      "size": 274
+    }
+  }
+}

@@ -9,7 +9,7 @@
 - `local/server.mjs` — HTTP + WebSocket 服务，装载 `mock/` 兼容层。
 - `host-mode.js` + `web-host.js` — 宿主判定；浏览器内加载后端与 `localStorage` 存档，或转发 Node 的 `/api/profile`。`modifier.js` — 右侧 ⚙ 存档修改器。
 - `clock-bridge.js` — 校验加载哈希固定的 v3 派生 WASM，投影权威时间、确认原生手牌可操作后起表，并在 Unity 消费/渲染/Reload 完成后确认当前连接的恢复批次（ADR 0009）。
-- `game.html` + `offline-patch.js` — Unity 入口与离线补丁（WebSocket 指向本机或页内 `FakeWebSocket`、拦截外网请求、资源按子路径解析）；始终加载 `Build_intl/`，启动前修复旧 PlayerPrefs 错误配额、默认同意条款，仅在未选语言时设为英文。
+- `game.html` + `offline-patch.js` — Unity 入口与离线补丁（WebSocket 指向本机或页内 `FakeWebSocket`、拦截外网请求、资源按子路径解析）；始终加载 `Build_intl/`，启动前修复旧 PlayerPrefs 错误配额、默认同意条款，仅在未选语言时设为英文；把 `versions.json` 指向派生的 `versions.mj.json`（ADR 0010）。
 - `mock/server.js` — 全部消息处理器。
 - `mockjs/engine.mjs` — 立直权威引擎。
 
@@ -20,6 +20,7 @@
 | 网页版 | Cloudflare Pages 关联仓库发布根目录（`_headers` 声明 Brotli 编码与资源包长缓存）；任意静态服务器也可 |
 | 构建 bundle | `npm run build`（`mockjs/` → `mock/riichi.js`） |
 | 重新派生计时客户端 | `npm run build:clock`（仅 Unity 构建变化或钩子调整时；需临时 wabt + Python wasmtime/brotlicffi，见 ADR 0009） |
+| 重新派生结算档位贴图 | `python -B tools/build_settlement_titles.py`（需临时 UnityPy==1.25.4 + Pillow，见 ADR 0010） |
 | 语法检查 | `npm run check`（新增源码要加进 `package.json` 的 check 列表） |
 | 测试 | `npm test`；单个：`node --test test/engine-smoke.test.mjs` |
 | 调试 | `MJ_DEBUG=1 MJ_USERDATA_DIR=<临时目录> npm start`；URL 参数 `mjPlayers/mjLength/mjSeed/mjSpeed` |
@@ -41,6 +42,6 @@
 - 不重新接入生产域名、远端 WSS 或任何联网流程。
 - 浏览器状态不是牌局真相；AI 不得读对手暗牌、未来牌山。
 - 协议字段名、消息名、枚举值沿用原协议；改协议同时查 `mockjs/riichi_desc.mjs`、编解码调用方、`mock/server.js` 和测试。
-- 规则基线：立直 ADR 0002（雀魂段位战）；存档 ADR 0001、双宿主 ADR 0007（档案规则只改 `mockjs/profile*.mjs`，两边自动同步）；商店经济 ADR 0003；立直 AI 分级 ADR 0006；NPC 名单/风格与对局记录恢复 ADR 0008；派生计时客户端 ADR 0009。
+- 规则基线：立直 ADR 0002（雀魂段位战）；存档 ADR 0001、双宿主 ADR 0007（档案规则只改 `mockjs/profile*.mjs`，两边自动同步）；商店经济 ADR 0003；立直 AI 分级 ADR 0006；NPC 名单/风格与对局记录恢复 ADR 0008；派生计时客户端 ADR 0009；派生结算档位贴图 ADR 0010。
 - 规则、协议、存档、服务行为的改动必须带回归测试；不提交 `.tmp-*`、截图等调试文件。
 - 提交信息用 Conventional Commits（中文描述），例如 `fix(engine): 修正三麻拔北抢和`。

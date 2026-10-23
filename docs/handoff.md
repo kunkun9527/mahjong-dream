@@ -4,6 +4,8 @@
 >
 > 最后核对日期：2026-10-23。基线 `27fa526` 上的用户试玩问题已修复：前台原生手牌可操作后起表，庄家每小局含连庄 8＋20；后台新窗口继续计时；耗尽备用只显示白色基础 5；原生倒计时改为每帧刷新，首个“5”不再因秒节拍错位多停 1～2 秒；基础与备用分别取整，备用不足 1 秒时“5+1”不再与黄色单数字来回闪；新页面重新进桌再重放，同页保留快照与消费确认。完整验证 **506/506**，受控 Edge 双宿主关闭重开通过。已获提交推送和线上更新授权；当前版本以 Git/Cloudflare Pages 为准。真实系统挂起、自然抢杠/抢北与移动端仍未完整验收。
 >
+> 2026-10-24：英文和牌结算的档位贴图原为直译 “Full Han / Jump Full Han / Double Full Han / Triple Full Han”，现由派生资源包改为 Mangan / Haneman / Baiman / Sanbaiman（ADR 0010，`tools/build_settlement_titles.py`）。原包、原清单和 `versions.json` 不动，`offline-patch.js` 改读 `versions.mj.json`。隔离无头 Edge 实测：静态宿主派生包一次加载成功，结算显示 Mangan/Haneman/Baiman/Sanbaiman；Node 宿主加载派生资源并进入牌桌菜单正常。全量 **510/510**。
+>
 > **产品范围（2026-10-18 起）：只做单机立直麻将（四麻/三麻）。** 四川麻将后端已删除（最后完整版本见提交 `a469df1`），四川、斗地主、掼蛋及好友/抽卡/邮件等外围入口一律返回原生“This feature is unavailable in offline mode”提示。
 
 ## 1. 先看结论

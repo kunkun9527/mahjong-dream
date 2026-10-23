@@ -96,7 +96,7 @@ npm run build   # rebuild mock/riichi.js from mockjs/
 
 - Browser and offline versions share one backend: [ADR 0007](docs/adr/0007-browser-and-node-hosts.md)
 - Architecture: [`docs/technical-architecture.md`](docs/technical-architecture.md) · Code map: [`codemap.md`](codemap.md)
-- Rules baseline: [ADR 0002](docs/adr/0002-use-mahjong-soul-ranked-rules.md) · AI tiers: [ADR 0006](docs/adr/0006-riichi-ai-levels.md) · NPCs and match recovery: [ADR 0008](docs/adr/0008-npc-roster-and-match-recovery.md) · Countdown bridge (hash-pinned derived Unity WASM): [ADR 0009](docs/adr/0009-derived-unity-clock-client.md)
+- Rules baseline: [ADR 0002](docs/adr/0002-use-mahjong-soul-ranked-rules.md) · AI tiers: [ADR 0006](docs/adr/0006-riichi-ai-levels.md) · NPCs and match recovery: [ADR 0008](docs/adr/0008-npc-roster-and-match-recovery.md) · Countdown bridge (hash-pinned derived Unity WASM): [ADR 0009](docs/adr/0009-derived-unity-clock-client.md) · English settlement han-level art (derived asset bundle): [ADR 0010](docs/adr/0010-derived-settlement-titles.md)
 - History: [`docs/handoff.md`](docs/handoff.md), [`docs/repair-backlog.md`](docs/repair-backlog.md)
 
 <details>
@@ -130,4 +130,4 @@ npm run build   # rebuild mock/riichi.js from mockjs/
 
 ---
 
-*Fan-made preservation project. Not affiliated with the original developer or publisher. The original Unity client files are preserved; a separate hash-pinned derived WASM synchronizes the countdown (ADR 0009).*
+*Fan-made preservation project. Not affiliated with the original developer or publisher. The original Unity client files are preserved; a separate hash-pinned derived WASM synchronizes the countdown (ADR 0009), and a derived asset bundle replaces the literal "Full Han" settlement titles with Mangan/Haneman/Baiman/Sanbaiman (ADR 0010).*

@@ -12,11 +12,14 @@
     try { return new URL(String(value), location.href).origin === location.origin; }
     catch (e) { return false; }
   }
+  // Derived Unity asset manifest (ADR 0010): versions.json → versions.mj.json, which points the asset manifest at the
+  // settlement-title bundle with corrected English art. The original files stay untouched.
+  var DERIVED_ASSETS = { '/StreamingAssets/Bundles/versions.json': 'StreamingAssets/Bundles/versions.mj.json' };
   function localAssetUrl(value) {
     try {
       var parsed = new URL(String(value), location.href);
       if (parsed.pathname.indexOf('/StreamingAssets/') === 0) {
-        return new URL(parsed.pathname.slice(1) + parsed.search, BASE).href;
+        return new URL((DERIVED_ASSETS[parsed.pathname] || parsed.pathname.slice(1)) + parsed.search, BASE).href;
       }
     } catch (e) { /* block below */ }
     return null;

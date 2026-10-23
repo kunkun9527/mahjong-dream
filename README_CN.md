@@ -94,7 +94,7 @@ npm run build   # 由 mockjs/ 重新生成 mock/riichi.js
 
 - 网页版与离线版共用同一后端：[ADR 0007](docs/adr/0007-browser-and-node-hosts.md)
 - 架构：[`docs/technical-architecture.md`](docs/technical-architecture.md) · 代码地图：[`codemap.md`](codemap.md)
-- 规则基线：[ADR 0002](docs/adr/0002-use-mahjong-soul-ranked-rules.md) · AI 分级：[ADR 0006](docs/adr/0006-riichi-ai-levels.md) · NPC 与对局恢复：[ADR 0008](docs/adr/0008-npc-roster-and-match-recovery.md) · 倒计时桥接（哈希固定的派生 Unity WASM）：[ADR 0009](docs/adr/0009-derived-unity-clock-client.md)
+- 规则基线：[ADR 0002](docs/adr/0002-use-mahjong-soul-ranked-rules.md) · AI 分级：[ADR 0006](docs/adr/0006-riichi-ai-levels.md) · NPC 与对局恢复：[ADR 0008](docs/adr/0008-npc-roster-and-match-recovery.md) · 倒计时桥接（哈希固定的派生 Unity WASM）：[ADR 0009](docs/adr/0009-derived-unity-clock-client.md) · 英文结算档位贴图（派生资源包）：[ADR 0010](docs/adr/0010-derived-settlement-titles.md)
 - 历史记录：[`docs/handoff.md`](docs/handoff.md)、[`docs/repair-backlog.md`](docs/repair-backlog.md)
 
 <details>
@@ -128,4 +128,4 @@ npm run build   # 由 mockjs/ 重新生成 mock/riichi.js
 
 ---
 
-*粉丝自制的保存项目，与原开发商、发行商无关；原始 Unity 客户端文件保留不动，另用哈希固定的派生 WASM 同步倒计时（ADR 0009）。*
+*粉丝自制的保存项目，与原开发商、发行商无关；原始 Unity 客户端文件保留不动，另用哈希固定的派生 WASM 同步倒计时（ADR 0009），并用派生资源包把英文结算档位改为 Mangan/Haneman/Baiman/Sanbaiman（ADR 0010）。*
