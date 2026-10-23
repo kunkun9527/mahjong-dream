@@ -13,8 +13,6 @@ var WIND_NAME = { 1: "东", 2: "南", 3: "西", 4: "北" };
  *  This allowance stays server-side only: the client renders `defaultMinTimeout − ServerRedundantTimeOut` as the base
  *  countdown but switches to the bank when the *announced* base ends, so announcing it would leave a visible stall. */
 export var SERVER_REDUNDANT_TIMEOUT = 3;
-/** Visible, non-chargeable entrance allowance on the match's first human draw window. */
-export var FIRST_START_REDUNDANT_TIMEOUT = 8;
 var kindOf2 = (id) => {
   const d = decodeId(id);
   return d.suit * 10 + d.rank;
@@ -69,7 +67,6 @@ var GameEngine = class {
     this._pending = null;
     this._humanClock = null;
     this._windowId = 0;
-    this._usedFirstStartGrace = false;
     this._processing = false; // Action-in-progress flag (prevents duplicate-packet replay)
     this._expectedDraw = null;
     this._expectedClaim = null;
@@ -119,7 +116,7 @@ var GameEngine = class {
     if (this.onReplayDone) this.onReplayDone(!next);
     return null;
   }
-  /** Hosts supply the conjunction of visibility, connection and completed synchronization. */
+  /** Hosts gate only real disconnection and unfinished recovery, never page visibility. */
   setHumanPresent(present) {
     present = !!present;
     if (this.humanPresent === present) return;
@@ -147,15 +144,13 @@ var GameEngine = class {
     this.note("clock", JSON.stringify({ event: present ? "resume" : "pause", ...this.humanTime() }));
   }
   _openHumanClock(kind) {
-    const bonus = kind === "draw" && this.handIndex === 0 && !this._usedFirstStartGrace ? FIRST_START_REDUNDANT_TIMEOUT : 0;
-    if (bonus) this._usedFirstStartGrace = true;
     this._humanClock = {
-      id: ++this._windowId, kind, base: this.baseTime, bonus,
+      id: ++this._windowId, kind, base: this.baseTime,
       bank: Number.isFinite(this.players[0].timeBank) ? this.players[0].timeBank : this.extraTime,
       elapsedMs: 0, runningSince: this.humanPresent ? Date.now() : null,
     };
     this._publishHumanClock();
-    this.note("clock", JSON.stringify({ event: "open", ...this.humanTime(), bonus }));
+    this.note("clock", JSON.stringify({ event: "open", ...this.humanTime() }));
   }
   _freezeHumanClock() {
     const clock = this._humanClock;
@@ -171,7 +166,7 @@ var GameEngine = class {
     if (!clock) return null;
     const time = this.humanTime(now);
     const baseMs = Math.max(0, clock.base * 1000 - time.elapsedMs);
-    const totalMs = Math.max(0, (clock.base + clock.bonus + clock.bank) * 1000 - time.elapsedMs);
+    const totalMs = Math.max(0, (clock.base + clock.bank) * 1000 - time.elapsedMs);
     return { id: clock.id, baseMs, extraMs: totalMs - baseMs, running: clock.runningSince != null };
   }
   _publishHumanClock() {
@@ -184,11 +179,10 @@ var GameEngine = class {
     const elapsedMs = c.elapsedMs + (c.runningSince == null ? 0 : Math.max(0, now - c.runningSince));
     const elapsed = elapsedMs / 1000;
     const baseLeft = Math.max(0, c.base - elapsed);
-    const bonusLeft = Math.max(0, c.bonus - Math.max(0, elapsed - c.base));
-    const bankLeft = Math.max(0, c.bank - Math.max(0, elapsed - c.base - c.bonus));
+    const bankLeft = Math.max(0, c.bank - Math.max(0, elapsed - c.base));
     return { id: c.id, kind: c.kind, elapsedMs, bankLeft,
-      defaultMinTimeout: Math.ceil(baseLeft), leftTimer: Math.ceil(bonusLeft + bankLeft),
-      timeoutMs: Math.max(0, (c.base + c.bonus + c.bank + SERVER_REDUNDANT_TIMEOUT) * 1000 - elapsedMs) };
+      defaultMinTimeout: Math.ceil(baseLeft), leftTimer: Math.ceil(bankLeft),
+      timeoutMs: Math.max(0, (c.base + c.bank + SERVER_REDUNDANT_TIMEOUT) * 1000 - elapsedMs) };
   }
   uidOf(seat) {
     return this.uids[seat];

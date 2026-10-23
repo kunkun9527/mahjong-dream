@@ -143,12 +143,8 @@
         return currentSession && currentSession.riichi && currentSession.riichi.engine
           ? currentSession.riichi.engine.humanClockState() : null;
       };
-      host.setPageVisible = function (visible) {
-        return currentSession ? currentSession.setPageVisible(visible) : false;
-      };
       mj.server.onSessionCreated = function (session) {
         currentSession = session;
-        session.setPageVisible(!document.hidden);
         host.attach(session);
         if (!resumePending) return;
         resumePending = false;
@@ -188,9 +184,6 @@
     downloadLogs: downloadLogs,
     diagnosticText: function () { return diagnosticLines.join("\n"); },
     ready: started.then(function () {}),
-    setPageVisible: function (visible) {
-      return started.then(function (host) { return host ? host.setPageVisible(visible) : false; });
-    },
     request: function (body) {
       if (mode === 'browser') return started.then(function (host) { return host.handle(body); });
       return fetch('api/profile', {

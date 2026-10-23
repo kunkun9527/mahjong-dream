@@ -280,34 +280,6 @@
 
   console.log('[offline] 补丁已加载');
 
-  // One visibility bridge for both hosts. Native Unity has no pause/reset JS API: on return, use its existing Reload path.
-  var visibilityBeat = null;
-  function syncVisibility() {
-    var visible = !document.hidden;
-    if (window.__mjHostMode === 'node') {
-      if (nativeFetch) nativeFetch(BASE + 'api/page-visibility?visible=' + (visible ? '1' : '0'), {
-        method: 'POST', cache: 'no-store', keepalive: !visible
-      }).catch(function (error) { console.warn('[offline] 可见性上报失败', error.message); });
-    } else if (window.__mjHost) {
-      window.__mjHost.setPageVisible(visible).then(function (resync) {
-        if (resync && gameSocket && gameSocket.readyState === 1) gameSocket.close(1012, 'foreground-resync');
-      }).catch(function (error) { console.error('[offline] 可见性处理失败', error); });
-    }
-  }
-  function visibilityChanged() {
-    if (visibilityBeat) clearInterval(visibilityBeat);
-    visibilityBeat = null;
-    syncVisibility();
-    if (!document.hidden) visibilityBeat = setInterval(syncVisibility, 2000);
-  }
-  document.addEventListener('visibilitychange', visibilityChanged);
-  window.addEventListener('pagehide', function () {
-    if (visibilityBeat) clearInterval(visibilityBeat);
-    visibilityBeat = null;
-  });
-  window.addEventListener('pageshow', visibilityChanged);
-  visibilityChanged();
-
   // ---------------- Safe override of webGLPluginHelper.getUrlParams ----------------
   // framework.js's implementation does split('?')[1] when the URL has no '?', getting undefined, and then split('&') blows up;
   // we reimplement it with URLSearchParams and install it at every possible mount point.

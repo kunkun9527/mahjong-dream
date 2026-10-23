@@ -34,13 +34,13 @@ function page(mode = 'node') {
         abortHandler: (message) => resolve({ error: message }) }, {}, () => resolve({ ok: true })));
       return { ...result, imports, config };
     },
-    hide() { context.document.hidden = true; listeners.get('visibilitychange')(); },
+    hide() { context.document.hidden = true; listeners.get('visibilitychange')?.(); },
     instantiate,
   };
 }
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
-test('Node毫秒投影只扣活动时间；冻结、重连和新窗口不重赠基础段或备用', () => {
+test('Node毫秒投影在后台继续计时，只有真实断线或同步才冻结', () => {
   const { bridge, advance, hide } = page();
   bridge.accept({ id: 1, baseMs: 5000, extraMs: 20000, running: true });
   advance(7000);
@@ -51,11 +51,12 @@ test('Node毫秒投影只扣活动时间；冻结、重连和新窗口不重赠�
   bridge.accept({ id: 1, baseMs: 0, extraMs: 18000, running: true });
   advance(2000);
   hide();
-  advance(60000);
-  assert.equal(bridge.current().extraMs, 16000);
+  advance(3000);
+  assert.equal(bridge.current().extraMs, 13000);
+  assert.equal(bridge.current().running, true);
   bridge.freeze();
   advance(60000);
-  assert.equal(bridge.current().extraMs, 16000);
+  assert.equal(bridge.current().extraMs, 13000);
   bridge.accept(null);
   assert.equal(bridge.current(), null);
   bridge.accept({ id: 2, baseMs: 3000, extraMs: 0, running: false });

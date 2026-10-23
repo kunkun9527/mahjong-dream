@@ -144,5 +144,4 @@
         consumed: recovery.consumed.has(recovery.counter), reloadDone: recovery.reloadDone,
         sent: !!recovery.sent, idle: idle, reloadPending: reloadPending } : null }; },
   };
-  document.addEventListener('visibilitychange', function () { if (document.hidden) freeze(); });
 })();

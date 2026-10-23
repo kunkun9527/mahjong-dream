@@ -149,7 +149,7 @@ test('听牌提示在别人行动时也带着自己的听牌信息（13 张手�
   assert.equal(playCard.userInfos[1].tingInfos.length, 0, '不下发他人的暗手信息');
 });
 
-test('比赛第一手把入场演出的 8 秒也公告给客户端（leftTimer），之后恢复备用余量', async () => {
+test('比赛第一手和后续摸牌都只公告实际备用余量，不另加8秒', async () => {
   const engine = drawEngine();
   const frames = [];
   engine.emit = (ev, payload) => frames.push({ ev, payload });
@@ -161,7 +161,7 @@ test('比赛第一手把入场演出的 8 秒也公告给客户端（leftTimer�
   engine.waitHuman = () => new Promise(() => {});
   void engine.turnDraw(0);
   const frame = (items) => items.find((item) => item.payload?.userInfos);
-  assert.equal(frame(frames).payload.userInfos[0].leftTimer, 28, '第一手：备用 20 + 入场 8');
+  assert.equal(frame(frames).payload.userInfos[0].leftTimer, 20, '第一手：基础5秒以外只有20秒备用');
   engine.cancelPending(); // A real hand transition closes the preceding decision window.
   engine.handIndex = 1;
   frames.length = 0;

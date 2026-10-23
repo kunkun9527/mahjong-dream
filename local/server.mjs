@@ -237,36 +237,10 @@ async function handleDiagnostics(request, response) {
   } catch { response.writeHead(400).end(); }
 }
 
-// A hidden tab is not a disconnected player: pause the human clock instead of freezing the table or letting the AI take over.
-let pageVisible = true;
-let visibilityTimer = null;
-const VISIBILITY_GRACE_MS = 4_000;
-function notePageVisibility(visible) {
-  clearTimeout(visibilityTimer);
-  visibilityTimer = null;
-  if (pageVisible !== visible) console.log('[local] 页面' + (visible ? '回到前台，先同步画面再续时' : '切到后台，精确冻结剩余时间'));
-  pageVisible = visible;
-  const resync = session.setPageVisible(visible);
-  if (visible) {
-    visibilityTimer = setTimeout(() => notePageVisibility(false), VISIBILITY_GRACE_MS);
-    if (resync && activeSocket?.readyState === WebSocket.OPEN) {
-      console.log('[local] 前台恢复：触发原客户端重连同步');
-      activeSocket.close(1012, 'foreground-resync');
-    }
-  }
-}
-
 const server = http.createServer((request, response) => {
   const pathname = new URL(request.url, 'http://127.0.0.1').pathname;
   if (pathname === '/api/diagnostics') {
     void handleDiagnostics(request, response);
-    return;
-  }
-  if (pathname === '/api/page-visibility') {
-    if (request.headers.origin && request.headers.origin !== `http://${request.headers.host}`) { response.writeHead(403).end(); return; }
-    if (request.method !== 'POST') { response.writeHead(405, { Allow: 'POST' }).end(); return; }
-    notePageVisibility(new URL(request.url, 'http://127.0.0.1').searchParams.get('visible') !== '0');
-    response.writeHead(204, { 'Cache-Control': 'no-store' }).end();
     return;
   }
   if (pathname === '/api/profile') {
@@ -353,7 +327,6 @@ websocketServer.on('connection', (websocket) => {
   session.resume(adapter);
   clearTimeout(awayTimer);
   awayTimer = null;
-  session.setPageVisible(pageVisible);
   publishHumanClock();
   // The frozen turn resumes its clock once the client has re-synced the table (mock/server.js playerBack).
   profileHost.touch();
@@ -398,9 +371,6 @@ websocketServer.on('connection', (websocket) => {
     }
     session.suspend();
     profileHost.touch();
-    clearTimeout(visibilityTimer);
-    visibilityTimer = null;
-    pageVisible = false;
     if (session.riichi?.engine && !session.riichi.matchOver) {
       session.riichi.engine.setHumanPresent(false);
       armAwayTimer(AWAY_LIMIT_MS);

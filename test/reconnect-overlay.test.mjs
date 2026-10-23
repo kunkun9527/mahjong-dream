@@ -11,8 +11,9 @@ function element(tag) {
   return { tagName: tag.toUpperCase(), style: {}, children: [], id: '', textContent: '', appendChild(child) { this.children.push(child); }, setAttribute() {} };
 }
 
-function load(clock) {
-  const sockets = [];
+function load(clock, mode = 'node') {
+  const sockets = [], fetches = [], visibilityCalls = [];
+  const events = new Map();
   const timers = new Map();
   let seq = 0;
   let now = 0;
@@ -21,7 +22,7 @@ function load(clock) {
     addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); }
     removeEventListener() {}
     send() {}
-    close() {}
+    close() { this.closed = true; }
     emit(type, ev = { type }) {
       let stopped = false;
       ev.stopImmediatePropagation = () => { stopped = true; };
@@ -34,9 +35,13 @@ function load(clock) {
     documentElement: { appendChild() {} },
     createElement: element,
     querySelector: () => null,
-    addEventListener() {},
+    hidden: false,
+    addEventListener(name, fn) { events.set(name, fn); },
   };
-  const win = { WebSocket: FakeWS, document, __mjClock: clock, addEventListener() {} };
+  const win = { WebSocket: FakeWS, document, __mjClock: clock, __mjHostMode: mode,
+    __mjHost: { setPageVisible(visible) { visibilityCalls.push(visible); return Promise.resolve(visible); } },
+    fetch(url) { fetches.push(String(url)); return Promise.resolve({}); },
+    addEventListener(name, fn) { events.set(name, fn); } };
   const context = vm.createContext({
     window: win,
     document,
@@ -57,7 +62,9 @@ function load(clock) {
   const socket = new win.WebSocket('ws://riichi_proxy/game');
   const overlay = () => context.window.__mjmock.overlay;
   return {
-    socket,
+    socket, fetches, visibilityCalls,
+    visibility(hidden) { document.hidden = hidden; events.get('visibilitychange')?.(); },
+    focus(focused) { events.get(focused ? 'focus' : 'blur')?.(); },
     advance(ms) {
       const end = now + ms;
       for (;;) {
@@ -76,6 +83,26 @@ function load(clock) {
     },
     overlay,
   };
+}
+
+for (const mode of ['node', 'browser']) {
+  test(`${mode}宿主失焦和切后台不汇报暂停、不关闭连接，返回不显示重连`, async () => {
+    const app = load(undefined, mode);
+    app.socket.emit('open');
+    app.focus(false);
+    app.visibility(true);
+    app.advance(60_000);
+    await Promise.resolve();
+    assert.equal(app.socket.closed, undefined);
+    app.visibility(false);
+    app.focus(true);
+    app.advance(5_000);
+    await Promise.resolve();
+    assert.equal(app.socket.closed, undefined, '返回前台不得主动关闭游戏连接');
+    assert.deepEqual(app.fetches, [], '不发送页面可见性心跳或暂停请求');
+    assert.deepEqual(app.visibilityCalls, [], '静态宿主同样不能因隐藏或恢复暂停牌桌');
+    assert.equal(app.banner(), null);
+  });
 }
 
 test('Node计时侧带被宿主吞掉，Unity只收到原二进制；断线冻结镜像', () => {

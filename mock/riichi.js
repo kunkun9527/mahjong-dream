@@ -14061,7 +14061,6 @@
   var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   var WIND_NAME = { 1: "\u4E1C", 2: "\u5357", 3: "\u897F", 4: "\u5317" };
   var SERVER_REDUNDANT_TIMEOUT = 3;
-  var FIRST_START_REDUNDANT_TIMEOUT = 8;
   var kindOf2 = (id) => {
     const d = decodeId(id);
     return d.suit * 10 + d.rank;
@@ -14111,7 +14110,6 @@
       this._pending = null;
       this._humanClock = null;
       this._windowId = 0;
-      this._usedFirstStartGrace = false;
       this._processing = false;
       this._expectedDraw = null;
       this._expectedClaim = null;
@@ -14154,7 +14152,7 @@
       if (this.onReplayDone) this.onReplayDone(!next);
       return null;
     }
-    /** Hosts supply the conjunction of visibility, connection and completed synchronization. */
+    /** Hosts gate only real disconnection and unfinished recovery, never page visibility. */
     setHumanPresent(present) {
       present = !!present;
       if (this.humanPresent === present) return;
@@ -14186,19 +14184,16 @@
       this.note("clock", JSON.stringify({ event: present ? "resume" : "pause", ...this.humanTime() }));
     }
     _openHumanClock(kind) {
-      const bonus = kind === "draw" && this.handIndex === 0 && !this._usedFirstStartGrace ? FIRST_START_REDUNDANT_TIMEOUT : 0;
-      if (bonus) this._usedFirstStartGrace = true;
       this._humanClock = {
         id: ++this._windowId,
         kind,
         base: this.baseTime,
-        bonus,
         bank: Number.isFinite(this.players[0].timeBank) ? this.players[0].timeBank : this.extraTime,
         elapsedMs: 0,
         runningSince: this.humanPresent ? Date.now() : null
       };
       this._publishHumanClock();
-      this.note("clock", JSON.stringify({ event: "open", ...this.humanTime(), bonus }));
+      this.note("clock", JSON.stringify({ event: "open", ...this.humanTime() }));
     }
     _freezeHumanClock() {
       const clock = this._humanClock;
@@ -14214,7 +14209,7 @@
       if (!clock) return null;
       const time = this.humanTime(now);
       const baseMs = Math.max(0, clock.base * 1e3 - time.elapsedMs);
-      const totalMs = Math.max(0, (clock.base + clock.bonus + clock.bank) * 1e3 - time.elapsedMs);
+      const totalMs = Math.max(0, (clock.base + clock.bank) * 1e3 - time.elapsedMs);
       return { id: clock.id, baseMs, extraMs: totalMs - baseMs, running: clock.runningSince != null };
     }
     _publishHumanClock() {
@@ -14227,16 +14222,15 @@
       const elapsedMs = c.elapsedMs + (c.runningSince == null ? 0 : Math.max(0, now - c.runningSince));
       const elapsed = elapsedMs / 1e3;
       const baseLeft = Math.max(0, c.base - elapsed);
-      const bonusLeft = Math.max(0, c.bonus - Math.max(0, elapsed - c.base));
-      const bankLeft = Math.max(0, c.bank - Math.max(0, elapsed - c.base - c.bonus));
+      const bankLeft = Math.max(0, c.bank - Math.max(0, elapsed - c.base));
       return {
         id: c.id,
         kind: c.kind,
         elapsedMs,
         bankLeft,
         defaultMinTimeout: Math.ceil(baseLeft),
-        leftTimer: Math.ceil(bonusLeft + bankLeft),
-        timeoutMs: Math.max(0, (c.base + c.bonus + c.bank + SERVER_REDUNDANT_TIMEOUT) * 1e3 - elapsedMs)
+        leftTimer: Math.ceil(bankLeft),
+        timeoutMs: Math.max(0, (c.base + c.bank + SERVER_REDUNDANT_TIMEOUT) * 1e3 - elapsedMs)
       };
     }
     uidOf(seat) {

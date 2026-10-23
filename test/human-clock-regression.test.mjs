@@ -20,9 +20,9 @@ function drawWindow(t, opts = {}) {
 test('宿主投影发布开窗、精确冻结、续时和清理，不包含网络宽限', async (t) => {
   const states = [];
   const engine = drawWindow(t, { onHumanClock: (state) => states.push(state) });
-  assert.deepEqual(states.at(-1), { id: 1, baseMs: 5000, extraMs: 28000, running: true });
+  assert.deepEqual(states.at(-1), { id: 1, baseMs: 5000, extraMs: 20000, running: true });
   const turn = engine.waitHuman('draw');
-  t.mock.timers.tick(15001);
+  t.mock.timers.tick(7001);
   engine.setHumanPresent(false);
   assert.deepEqual(states.at(-1), { id: 1, baseMs: 0, extraMs: 17999, running: false });
   t.mock.timers.tick(600000);
@@ -36,24 +36,24 @@ test('宿主投影发布开窗、精确冻结、续时和清理，不包含网�
   assert.equal(engine.humanClockState(), null);
 });
 
-test('首手入场补偿只公告一次，10秒内操作不扣备用；重演也消费同一补偿', async (t) => {
+test('开局只有基础5秒加备用20秒，10秒操作扣5秒备用，重演不补时间', async (t) => {
   const engine = drawWindow(t);
-  assert.equal(engine.humanTime().leftTimer, 28);
+  assert.equal(engine.humanTime().leftTimer, 20);
   const first = engine.waitHuman('draw');
   t.mock.timers.tick(10_000);
   assert.equal(engine.submitDraw({ action: PlayAction.Normal, card: 111 }), Result.Succ);
   await first;
-  assert.equal(engine.players[0].timeBank, 20);
-  // 拔北、暗杠后的下一次等待，即使尚未弃牌也不再补8秒。
+  assert.equal(engine.players[0].timeBank, 15);
+  // 拔北、暗杠后的下一次等待只重置基础段，备用仍是本小局共享余量。
   engine.expectDraw(0, true, [PlayAction.Normal]);
-  assert.equal(engine.humanTime().leftTimer, 20);
+  assert.equal(engine.humanTime().leftTimer, 15);
   const record = engine.matchRecord();
   const restored = new GameEngine({ players: 3, speed: 0, replayLog: record });
   restored.players = engine.players;
   restored.expectDraw(0, true, [PlayAction.Normal]);
   await restored.waitHuman('draw');
   restored.expectDraw(0, true, [PlayAction.Normal]);
-  assert.equal(restored.humanTime().leftTimer, 20);
+  assert.equal(restored.humanTime().leftTimer, 15);
 });
 
 test('坐庄的GameStart与实际窗口公告一致，首手仍保留基础5秒', async (t) => {
@@ -66,15 +66,15 @@ test('坐庄的GameStart与实际窗口公告一致，首手仍保留基础5秒'
   await flush();
   const start = frames.find(([id]) => id === RiichiMsg.ENtfGameStart)[1];
   assert.equal(start.defaultMinTimeout, 5);
-  assert.equal(start.leftTimer, 28);
+  assert.equal(start.leftTimer, 20);
   assert.equal(engine.humanTime().leftTimer, start.leftTimer);
 });
 
 for (const elapsed of [2_000, 10_000, 15_000]) {
-  test(`已计时${elapsed}ms后反复冻结：快照不扣后台时间，恢复不补基础或备用`, async (t) => {
+  test(`已计时${elapsed}ms后反复冻结：快照不扣断线时间，恢复不补基础或备用`, async (t) => {
     const engine = drawWindow(t);
     engine.handIndex = 1;
-    // 本例不测试入场补偿，打开普通等待。
+    // 打开一个新的普通等待。
     engine.cancelPending();
     engine.expectDraw(0, true, [PlayAction.Normal]);
     const turn = engine.waitHuman('draw');
@@ -116,7 +116,7 @@ test('通知到waitHuman之间的时间也属于同一窗口；早到请求只�
   assert.equal(engine.players[0].timeBank, 18);
 });
 
-test('后台客户端的超时上行不能推进冻结窗口，恢复同步后才接受动作', async (t) => {
+test('断线客户端的超时上行不能推进冻结窗口，恢复同步后才接受动作', async (t) => {
   const engine = drawWindow(t);
   const turn = engine.waitHuman('draw');
   t.mock.timers.tick(2_000);

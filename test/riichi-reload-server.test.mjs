@@ -8,7 +8,8 @@ await import('../mock/userdata.js');
 await import('../mockjs/browser_entry.mjs');
 await import('../mock/server.js');
 const { decodeMsg } = await import('../mockjs/pb.mjs');
-const { RiichiMsg } = await import('../mockjs/proto_enum.mjs');
+const { RiichiMsg, PlayAction } = await import('../mockjs/proto_enum.mjs');
+const { GameEngine } = await import('../mockjs/engine.mjs');
 
 const P = globalThis.__mj.proto;
 const mock = globalThis.__mj.server;
@@ -62,8 +63,8 @@ test('立直同进程重连：20163.f100 携带当前局面快照，客户端不
   const ws2 = socket();
   session.resume(ws2);
   assert.equal(engine.humanPresent, false, "接上 WebSocket 仍须冻结");
-  session.setPageVisible(true);
-  assert.equal(engine.humanPresent, false, "前台心跳不能越过同步门禁");
+  session.updateHumanPresence();
+  assert.equal(engine.humanPresent, false, "连接存在也不能越过同步门禁");
   const reply = mock.dispatch(session, P.W().v(2, 20162).v(11, 3).s(3, new Uint8Array()).bytes()).map((bytes) => P.dict(bytes));
   const body = P.dict(reply[0][3]);
   assert.ok(body[4], '仍带牌桌');
@@ -83,7 +84,7 @@ test('立直同进程重连：20163.f100 携带当前局面快照，客户端不
   assert.equal(engine.humanPresent, false);
   assert.equal(session.ackClientSync({ id: marker.id, counter: marker.counter }, ws2), true);
   assert.equal(session.ackClientSync({ id: marker.id, counter: marker.counter }, ws2), false, '确认不可重用');
-  assert.equal(engine.humanPresent, true, "同步完成且可见才续走余量");
+  assert.equal(engine.humanPresent, true, "同步完成才续走余量");
   assert.equal(clocks.at(-1).running, true);
   assert.equal(clocks.at(-1).id, frozenClock.id);
   assert.ok(clocks.at(-1).baseMs <= frozenClock.baseMs, "Node侧带同步后不得补回基础时间");
@@ -119,7 +120,7 @@ test('立直同进程重连：20163.f100 携带当前局面快照，客户端不
   assert.equal(engine.humanPresent, true);
 });
 
-test('页面可见性、断线与重同步是相互独立的计时门禁', (t) => {
+test('只有真实断线和未完成同步能冻结计时，正常连接不依赖页面心跳', (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const session = mock.createSession();
   const engine = { humanPresent: true, setHumanPresent(value) { this.humanPresent = value; } };
@@ -127,20 +128,48 @@ test('页面可见性、断线与重同步是相互独立的计时门禁', (t) =
   session.riichi = { engine, matchOver: false, stop() {} };
   t.after(() => session.destroy());
   session.socket = socket();
-  session.setPageVisible(false);
-  assert.equal(engine.humanPresent, false);
-  assert.equal(session.setPageVisible(true), true, '未断开的前台返回也要求同步画面');
-  assert.equal(engine.humanPresent, false);
+  session.updateHumanPresence();
+  t.mock.timers.tick(60_000);
+  assert.equal(engine.humanPresent, true, '没有页面心跳也继续，不能误判断线');
+  assert.equal(session._needsResync, false);
   session.suspend();
-  session.setPageVisible(true);
-  assert.equal(engine.humanPresent, false, '无连接心跳不能解冻');
+  session.updateHumanPresence();
+  assert.equal(engine.humanPresent, false, '真实断线仍须冻结');
   let closes = 0;
   session.resume({ ...socket(), close() { closes++; } });
-  session.setPageVisible(true);
+  session.updateHumanPresence();
   assert.equal(engine.humanPresent, false);
   t.mock.timers.tick(10_000);
   assert.equal(closes, 1, '无20162时重新连接，不允许带着陈旧画面恢复计时');
   assert.equal(engine.humanPresent, false);
+});
+
+test('连接保持时无页面心跳也按25秒耗尽时限并触发超时，不进入恢复', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
+  const session = mock.createSession();
+  const engine = new GameEngine({ players: 3, speed: 0 });
+  engine.players = [0, 1, 2].map((seat) => ({ seat, isHuman: seat === 0, timeBank: 20,
+    hand: seat === 0 ? [111] : [], drawnTile: seat === 0 ? 111 : null }));
+  session.tableId = 123;
+  session.socket = socket();
+  session.riichi = { engine, matchOver: false, stop() { engine.finished = true; engine.cancelPending(); } };
+  t.after(() => session.destroy());
+  engine.expectDraw(0, true, [PlayAction.Normal]);
+  const turn = engine.waitHuman('draw');
+  t.mock.timers.tick(10_000);
+  session.updateHumanPresence();
+  assert.deepEqual(engine.humanClockState(), { id: 1, baseMs: 0, extraMs: 15000, running: true });
+  assert.equal(session._needsResync, false);
+  t.mock.timers.tick(15_000);
+  assert.equal(engine.humanClockState().extraMs, 0);
+  t.mock.timers.tick(3_000); // Server-only transport grace, never part of the visible countdown.
+  const action = await turn;
+  assert.deepEqual(action, { action: PlayAction.Normal, card: 111 });
+  assert.equal(engine._timedOut.kind, 'draw');
+  assert.deepEqual(engine._timedOut.payload, action);
+  assert.equal(engine.players[0].timeBank, 0);
+  assert.equal(session._clientSync, undefined);
+  assert.equal(engine.humanPresent, true);
 });
 
 test('恢复确认超时仅重连，不因等待时间到期而解冻', (t) => {
@@ -185,14 +214,13 @@ test('静态宿主的虚拟WebSocket断开也冻结同一个真人时钟', (t) =
   session.tableId = 123;
   session.riichi = { engine, matchOver: false, stop() {} };
   t.after(() => session.destroy());
-  session.setPageVisible(false);
-  assert.equal(engine.humanPresent, false);
-  assert.equal(session.setPageVisible(true), true);
+  session.updateHumanPresence();
+  assert.equal(engine.humanPresent, true);
   ws.close();
   assert.equal(engine.humanPresent, false);
   const resumed = new mock.FakeWebSocket('ws://local/ws');
   assert.equal(resumed._session, session);
   t.mock.timers.tick(1);
-  session.setPageVisible(true);
+  session.updateHumanPresence();
   assert.equal(engine.humanPresent, false);
 });

@@ -258,7 +258,6 @@
     this.tableId = 0;
     this.seat = -1;
     this.socket = null;         // The bound FakeWebSocket, used when the server pushes actively
-    this.pageVisible = true;
     this._needsResync = false;
     this.lastSeq = 0;           // seq of the most recent request, reused for active pushes
     this.riichi = null;         // Riichi mahjong match session (created lazily)
@@ -308,16 +307,10 @@
     return !!(this.tableId && this.riichi && !this.riichi.matchOver);
   };
 
-  /** The only host-level clock gate: visible AND connected AND synchronized. */
+  /** Only transport loss or unfinished recovery freezes the human clock. */
   Session.prototype.updateHumanPresence = function () {
-    var present = this.pageVisible && this.socket && this.socket.readyState === OPEN && !this.replaying && !this._needsResync;
+    var present = this.socket && this.socket.readyState === OPEN && !this.replaying && !this._needsResync;
     if (this.riichi && this.riichi.engine) this.riichi.engine.setHumanPresent(!!present);
-  };
-  Session.prototype.setPageVisible = function (visible) {
-    this.pageVisible = !!visible;
-    if (!visible && this.liveMatch()) this._needsResync = true;
-    this.updateHumanPresence();
-    return !!(visible && this.liveMatch() && this._needsResync && !this.replaying);
   };
   /** Pause the session (keep the engine for reuse after reconnect). */
   Session.prototype.suspend = function () {
@@ -815,7 +808,7 @@
       maxHands: sess.table && sess.table.oneRound ? 1 : undefined,
       matchLength: sess.table ? sess.table.matchLength : CONFIG.matchLength,
       replayLog: restore ? restore.log : null,
-      humanPresent: restore ? restore.present : !!(sess.pageVisible && sess.socket && sess.socket.readyState === OPEN && !sess._needsResync),
+      humanPresent: restore ? restore.present : !!(sess.socket && sess.socket.readyState === OPEN && !sess._needsResync),
       onHumanClock: function (clock) {
         if (typeof sess.onHumanClock === 'function') sess.onHumanClock(clock);
       },
@@ -976,7 +969,7 @@
   Session.prototype.ackClientSync = function (ack, socket) {
     var sync = this._clientSync;
     if (!sync || sync.socket !== socket || this.socket !== socket || socket.readyState !== OPEN ||
-        !this.pageVisible || !sync.end || !ack || ack.id !== sync.id || ack.counter !== sync.counter) return false;
+        !sync.end || !ack || ack.id !== sync.id || ack.counter !== sync.counter) return false;
     if (sync.frames !== this.handFrames || sync.index !== this.handFrames.length) {
       var from = sync.frames === this.handFrames ? sync.index : 0;
       this.beginClientSync(false);
@@ -1002,7 +995,7 @@
     if (!sess.socket || sess.socket.readyState !== OPEN || sess.replaying) return;
     sess._needsResync = false;
     sess.updateHumanPresence();
-    stampLog("[resync] 同步门禁解除：" + JSON.stringify({ visible: sess.pageVisible, present: !!sess.riichi?.engine?.humanPresent }));
+    stampLog("[resync] 同步门禁解除：" + JSON.stringify({ present: !!sess.riichi?.engine?.humanPresent }));
   }
 
   function replayHand(sess, from) {

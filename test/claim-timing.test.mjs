@@ -38,18 +38,18 @@ for (const bank of [0, 20]) {
   });
 }
 
-test('页面切到后台：计时暂停、不自动过牌也不扣备用时间，回到前台重新计时', async (t) => {
+test('真实断线：计时暂停、不自动过牌也不扣备用时间，恢复同步后续时', async (t) => {
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
   const { engine, done, nextDraws } = claimWindow(20);
   await Promise.resolve();
   engine.setHumanPresent(false);
-  assert.equal(engine._pending.timer, null, '后台时真人计时器必须暂停');
+  assert.equal(engine._pending.timer, null, '断线时真人计时器必须暂停');
   t.mock.timers.tick(10 * 60_000);
-  assert.ok(engine._pending, '后台期间保留等待，不能被当成超时');
+  assert.ok(engine._pending, '断线期间保留等待，不能被当成超时');
   assert.equal(nextDraws(), 0);
-  assert.equal(engine.players[0].timeBank, 20, '后台期间不扣备用时间');
+  assert.equal(engine.players[0].timeBank, 20, '断线期间不扣备用时间');
   engine.setHumanPresent(true);
-  assert.ok(engine._pending.timer, '回到前台重新开始倒计时');
+  assert.ok(engine._pending.timer, '同步恢复后继续剩余倒计时');
   assert.equal(engine.submitClaim({ action: PlayAction.Peng, otherCards: [451, 452] }), Result.Succ);
   await done;
 });
