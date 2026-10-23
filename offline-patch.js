@@ -46,8 +46,93 @@
     url: LOCAL_WS,
     inproc: false,
     server: null,
+    // Manual trigger for the reconnect banner: __mjmock.reconnect.show('...') / .hide()
+    reconnect: { show: function (t) { rcShow(t || '断线重连中…'); rc.stage = 'sync'; rc.openedAt = Date.now(); }, hide: rcHide, root: function () { return rc.root; } },
     dump: function (n) { return stats.frames.slice(-(n || 20)); }
   };
+
+  // ---------------- Reconnect banner ----------------
+  // After a drop the client blocks its own UI while it re-syncs the match, so the player just sees dead clicks;
+  // this banner says what is happening and for how long. It never takes pointer events, so it cannot block the game.
+  var rc = { stage: 'idle', openedAt: 0, lastMsg: 0, burst: 0, hideTimer: null, clockTimer: null, root: null, textEl: null, secEl: null, since: 0 };
+  function rcBuild() {
+    if (rc.root) return rc.root;
+    var css = document.createElement('style');
+    css.textContent = '@keyframes mj-reconnect-spin{to{transform:rotate(360deg)}}';
+    (document.head || document.documentElement).appendChild(css);
+    var root = document.createElement('div');
+    root.id = 'mj-reconnect';
+    root.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;display:none;align-items:center;justify-content:center;'
+      + 'background:rgba(0,0,0,.42);z-index:2147483000;pointer-events:none;color:#fff;'
+      + 'font:16px/1.6 system-ui,"Microsoft YaHei",sans-serif';
+    var box = document.createElement('div');
+    box.style.cssText = 'background:rgba(20,20,26,.92);border:1px solid rgba(255,255,255,.18);border-radius:12px;'
+      + 'padding:18px 28px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.5);min-width:250px';
+    var spin = document.createElement('div');
+    spin.style.cssText = 'width:20px;height:20px;margin:0 auto 10px;border:2px solid rgba(255,255,255,.25);'
+      + 'border-top-color:#7cc4ff;border-radius:50%;animation:mj-reconnect-spin .8s linear infinite';
+    rc.textEl = document.createElement('div');
+    rc.secEl = document.createElement('div');
+    rc.secEl.style.cssText = 'opacity:.6;font-size:13px;margin-top:4px';
+    box.appendChild(spin);
+    box.appendChild(rc.textEl);
+    box.appendChild(rc.secEl);
+    root.appendChild(box);
+    (document.body || document.documentElement).appendChild(root);
+    rc.root = root;
+    return root;
+  }
+  function rcShow(text) {
+    rcBuild();
+    rc.root.style.display = 'flex';
+    rc.textEl.textContent = text;
+    rc.since = Date.now();
+    if (!rc.clockTimer) {
+      rc.clockTimer = setInterval(function () {
+        var s = Math.round((Date.now() - rc.since) / 1000);
+        rc.secEl.textContent = s >= 1 ? '已等待 ' + s + ' 秒' : '';
+      }, 500);
+    }
+  }
+  function rcHide() {
+    if (rc.hideTimer) { clearTimeout(rc.hideTimer); rc.hideTimer = null; }
+    if (rc.clockTimer) { clearInterval(rc.clockTimer); rc.clockTimer = null; }
+    rc.stage = 'idle'; rc.burst = 0;
+    if (rc.root) rc.root.style.display = 'none';
+  }
+  function rcLater(ms) {
+    if (rc.hideTimer) clearTimeout(rc.hideTimer);
+    rc.hideTimer = setTimeout(rcHide, ms);
+  }
+  // One banner per game socket: close -> "reconnecting", open -> "restoring", the replay burst ending -> hide.
+  function watchGameSocket(ws) {
+    var opened = false;
+    ws.addEventListener('open', function () {
+      if (opened) return;
+      opened = true;
+      if (rc.stage !== 'down') return;
+      rc.stage = 'sync'; rc.openedAt = Date.now(); rc.lastMsg = 0; rc.burst = 0;
+      rcShow('已重新连接，正在恢复牌局…');
+      rcLater(4000);   // no replay frames at all (the hand already ended): hide once the handshake has surely passed
+    });
+    ws.addEventListener('close', function () {
+      if (!opened) return;
+      opened = false;
+      rc.stage = 'down';
+      rcShow('连接中断，正在重连…');
+      rcLater(20000);  // still not back after 20s: keep it up and say so rather than looking frozen
+    });
+    ws.addEventListener('message', function () {
+      if (rc.stage !== 'sync') return;
+      var now = Date.now();
+      if (now - rc.openedAt > 12000) { rcHide(); return; }
+      if (now - rc.lastMsg > 400) rc.burst = 0;
+      rc.lastMsg = now;
+      rc.burst++;
+      // The resync replays this hand's frames back to back (a few ms apart); once that burst ends the table is rebuilt.
+      if (rc.burst >= 3) rcLater(900);
+    });
+  }
 
   // ---------------- WebSocket hijack ----------------
   var NativeWS = window.WebSocket;
@@ -73,6 +158,7 @@
     });
     ws.addEventListener('open', function () { console.log('[offline] WS 已连接', url); });
     ws.addEventListener('error', function (e) { console.warn('[offline] WS 错误', e); });
+    if (isGame) watchGameSocket(ws);
     return ws;
   }
   PatchedWS.prototype = NativeWS.prototype;

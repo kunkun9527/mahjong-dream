@@ -14059,6 +14059,7 @@
 
   // mockjs/engine.mjs
   var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  var WIND_NAME = { 1: "\u4E1C", 2: "\u5357", 3: "\u897F", 4: "\u5317" };
   var kindOf2 = (id) => {
     const d = decodeId(id);
     return d.suit * 10 + d.rank;
@@ -14078,6 +14079,7 @@
       this.startScore = startScore;
       this.emit = emit || (() => {
       });
+      this.log = opts.log || null;
       this.autoHuman = !!opts.autoHuman;
       this.selfLoveLevel = Number(opts.selfLoveLevel) || 0;
       const levels = Array.isArray(opts.aiLevels) ? opts.aiLevels : [];
@@ -14226,6 +14228,21 @@
       return { think: 550, claim: 350, step: 250, hand: 2500 };
     }
     // ================= Entry =================
+    // ================= Diagnostics =================
+    /** One line per game event; the host decides the sink (console plus the launcher's log file), tests stay silent. */
+    note(tag, text) {
+      if (this.log) this.log(`[${tag}] ${this.handLabel ? this.handLabel + " " : ""}${text}`);
+    }
+    cardName(card) {
+      return card ? tileName(card) : "-";
+    }
+    claimName(action) {
+      if (action === PlayAction.Guo) return "\u8FC7";
+      return action === PlayAction.Hu ? "\u8363\u548C" : action === PlayAction.MingGang ? "\u660E\u6760" : action === PlayAction.Peng ? "\u78B0" : action === PlayAction.Chi ? "\u5403" : "\u52A8\u4F5C" + action;
+    }
+    winText(win) {
+      return win ? `${win.han || 0}\u756A${win.fu || 0}\u7B26${win.name ? " " + win.name : ""}` : "?";
+    }
     async start() {
       await this._d(400);
       while (!this.finished) {
@@ -14290,6 +14307,8 @@
       }
       this.players = players;
       for (const p of players) this.updateWaits(p);
+      this.handLabel = `${WIND_NAME[this.roundWind]}${this.juNum + 1}-${this.honba}`;
+      this.note("hand", `\u5F00\u5C40 \u5E84\u5BB6P${this.dealerSeat} \u5206\u6570[${players.map((p) => p.score).join(",")}] \u7ACB\u76F4\u68D2${this.riichiSticks} \u5B9D\u724C${this.cardName(this.doraIndicators[0])} \u724C\u5C71${this.remain}`);
       const emptyInfos = players.map(() => ({}));
       this.emit(RiichiMsg.ENtfToPrepare, {
         userInfos: players.map((p) => ({ seat: p.seat, userID: this.uidOf(p.seat) }))
@@ -14369,6 +14388,7 @@
       p.drawnTile = tile;
       p.rinshan = false;
       this.xunNum++;
+      this.note("draw", `P${seat} \u6478${this.cardName(tile)} \u724C\u5C71${this.remain}`);
       await this.awaitTurn(seat, true);
     }
     // Rinshan draw (after a kan)
@@ -14386,6 +14406,7 @@
       p.drawnTile = tile;
       p.rinshan = true;
       this.xunNum++;
+      this.note("draw", `P${seat} \u6760\u540E\u8865${this.cardName(tile)} \u724C\u5C71${this.remain}`);
       return true;
     }
     async doBaBei(seat, tile) {
@@ -14398,6 +14419,8 @@
       this.emit(RiichiMsg.ENtfPlayCard, this.buildPlayCard(seat, tile, PlayAction.BaBei, false, canQiang));
       await this._d(this.T.claim);
       if (await this.resolveKanRob(seat, tile, canQiang, {})) return;
+      this.emit(RiichiMsg.ENtfQiangCardEnd, this.buildQiangEnd(null, PlayAction.Guo, [], []));
+      await this._d(this.T.claim);
       p.hand.splice(p.hand.indexOf(tile), 1);
       p.melds.push({ type: "babei", tiles: [tile] });
       for (const player of this.players) player.ippatsu = false;
@@ -14454,6 +14477,7 @@
       this._processing = false;
       if (this._timedOut?.kind === "claim") this._timedOut = null;
       this._expectedClaim = { seat, discarderSeat, card, actions: actions.slice() };
+      this.note("claim", `\u6253\u5F00\u9E23\u724C\u7A97\u53E3 P${seat} \u53EF\u9E23[${actions.map((act) => this.claimName(act)).join("/")}] \u6765\u81EAP${discarderSeat}\u7684${this.cardName(card)}`);
     }
     validateClaimPayload(payload, expected = this._expectedClaim) {
       if (!expected || !this.players?.[expected.seat]) return Result.Fail_InvalidSequence;
@@ -14836,6 +14860,7 @@
         p.ippatsu = true;
         p.score -= 1e3;
         this.riichiSticks += 1;
+        this.note("riichi", `P${seat} \u7ACB\u76F4${p.doubleRiichi ? "(\u53CC\u7ACB\u76F4)" : ""} \u6253${this.cardName(card)} \u5206\u6570${p.score}`);
       }
       const idx = p.hand.lastIndexOf(card);
       p.hand.splice(idx, 1);
@@ -14859,6 +14884,8 @@
       p.rinshan = false;
       this.flushDeferredKanDora();
       const canQiang = this.players.map((q) => q.seat === seat ? [] : this.claimActions(q.seat, seat, card));
+      const canText = canQiang.map((acts, s) => acts.filter((act) => act !== PlayAction.Guo).length ? `P${s}:${acts.filter((act) => act !== PlayAction.Guo).map((act) => this.claimName(act)).join("/")}` : null).filter(Boolean).join(" ") || "\u65E0";
+      this.note("discard", `P${seat} \u6253${this.cardName(card)}${isMoQie ? "(\u6478\u5207)" : ""}${action === PlayAction.Riichi ? "(\u7ACB\u76F4)" : ""} \u724C\u5C71${this.remain} \u53EF\u9E23 ${canText}`);
       this.expectClaim(0, seat, card, canQiang[0] || []);
       this.emit(RiichiMsg.ENtfPlayCard, this.buildPlayCard(seat, card, action, isMoQie, canQiang));
       await this._d(this.T.claim);
@@ -14949,6 +14976,8 @@
         humanHandled = true;
         if (payload?.action != null && payload.action !== PlayAction.Guo) {
           all.push({ seat: 0, action: payload.action, otherCards: payload.otherCards || [] });
+        } else {
+          this.emit(RiichiMsg.ENtfQiangCard, this.buildQiang(0, PlayAction.Guo, []));
         }
       } else {
         this._expectedClaim = null;
@@ -14959,6 +14988,7 @@
         const claim2 = this.aiClaim(seat, discarderSeat, card, canQiang[seat]);
         if (claim2) all.push({ seat, ...claim2 });
       }
+      this.note("claim", `P${discarderSeat}\u6253${this.cardName(card)} \u5019\u9009 ${all.map((c) => `P${c.seat}:${this.claimName(c.action)}`).join(" ") || "\u65E0"}`);
       for (const p of this.players) {
         if (p.seat !== discarderSeat && (canQiang[p.seat]?.includes(PlayAction.Hu) || p.waits?.includes(kindOf2(card))) && !all.some((claim2) => claim2.seat === p.seat && claim2.action === PlayAction.Hu)) this.markPassedRon(p);
       }
@@ -14968,23 +14998,15 @@
         return;
       }
       if (!all.length) {
-        this.confirmRiichiDeclaration(this.players[discarderSeat]);
-        if (this.playersN === 4 && this.players.every((player) => player.riichi)) {
-          await this.abortiveDraw(LiuJuType.SiJiaLiZhi, discarderSeat);
-          return;
-        }
-        if (this.checkSiFengLianDa()) {
-          await this.abortiveDraw(LiuJuType.SiFengLianDa, discarderSeat);
-          return;
-        }
-        const next = this.nextSeat(discarderSeat);
-        if (next === this.dealerSeat) this.firstGoAround = false;
-        await this.turnDraw(next);
+        await this.continueAfterNoClaim(discarderSeat);
         return;
       }
       const priority = (claim2) => claim2.action === PlayAction.Hu ? 4 : claim2.action === PlayAction.MingGang ? 3 : claim2.action === PlayAction.Peng ? 2 : 1;
       const distance = (seat) => (seat - discarderSeat + this.playersN) % this.playersN;
       all.sort((left, right) => priority(right) - priority(left) || distance(left.seat) - distance(right.seat));
+      if (humanHandled && humanCanClaim && all[0].seat !== 0) {
+        this.emit(RiichiMsg.ENtfQiangCard, this.buildQiang(0, PlayAction.Guo, []));
+      }
       const ronClaims = all.filter((claim2) => claim2.action === PlayAction.Hu);
       if (ronClaims.length) {
         await this.winRons(ronClaims.map((claim2) => claim2.seat), discarderSeat, card);
@@ -14992,7 +15014,31 @@
       }
       this.confirmRiichiDeclaration(this.players[discarderSeat]);
       const claim = all[0];
-      await this.executeClaim(claim.seat, claim.action, card, discarderSeat, claim.otherCards || []);
+      const applied = await this.executeClaim(claim.seat, claim.action, card, discarderSeat, claim.otherCards || []);
+      if (applied === Result.Succ) return;
+      if (claim.seat === 0) this.emit(RiichiMsg.ENtfQiangCard, this.buildQiang(0, PlayAction.Guo, []));
+      await this.continueAfterNoClaim(discarderSeat);
+    }
+    /**
+     * Ends a claim window nobody won. The window has to be closed on the wire (the client leaves its claim
+     * phase only on NtfQiangCardEnd), then the turn passes to the next seat.
+     */
+    async continueAfterNoClaim(discarderSeat) {
+      this.note("claim", "\u65E0\u4EBA\u9E23\u724C\uFF0C\u7A97\u53E3\u6536\u5C3E\u5E76\u8F6E\u5230\u4E0B\u4E00\u5BB6");
+      this.emit(RiichiMsg.ENtfQiangCardEnd, this.buildQiangEnd(null, PlayAction.Guo, [], []));
+      await this._d(this.T.claim);
+      this.confirmRiichiDeclaration(this.players[discarderSeat]);
+      if (this.playersN === 4 && this.players.every((player) => player.riichi)) {
+        await this.abortiveDraw(LiuJuType.SiJiaLiZhi, discarderSeat);
+        return;
+      }
+      if (this.checkSiFengLianDa()) {
+        await this.abortiveDraw(LiuJuType.SiFengLianDa, discarderSeat);
+        return;
+      }
+      const next = this.nextSeat(discarderSeat);
+      if (next === this.dealerSeat) this.firstGoAround = false;
+      await this.turnDraw(next);
     }
     recordPao(player, discarderSeat) {
       player.pao || (player.pao = {});
@@ -15027,6 +15073,7 @@
       this._processing = true;
       this._bufferedDraw = null;
       this._bufferedClaim = null;
+      this.note("meld", `P${seat} ${this.claimName(action)} P${discarderSeat}\u7684${this.cardName(card)} \u624B\u724C[${otherCards.map((tile) => this.cardName(tile)).join(" ")}]`);
       const donor = this.players[discarderSeat];
       if (action === PlayAction.Hu) {
         await this.winRon(seat, discarderSeat, card);
@@ -15094,6 +15141,7 @@
         const payload = await this.waitHuman("claim");
         humanHandled = true;
         if (payload?.action === PlayAction.Hu) claims.push({ seat: 0 });
+        else this.emit(RiichiMsg.ENtfQiangCard, this.buildQiang(0, PlayAction.Guo, []));
       } else {
         this._expectedClaim = null;
       }
@@ -15107,6 +15155,9 @@
       if (!claims.length) return false;
       const distance = (seat) => (seat - kanSeat + this.playersN) % this.playersN;
       claims.sort((left, right) => distance(left.seat) - distance(right.seat));
+      if (humanHandled && humanCanClaim && claims[0].seat !== 0) {
+        this.emit(RiichiMsg.ENtfQiangCard, this.buildQiang(0, PlayAction.Guo, []));
+      }
       await this.winRons(claims.map((claim) => claim.seat), kanSeat, tile, winExtra, { robbed: true });
       return true;
     }
@@ -15119,6 +15170,8 @@
       this.emit(RiichiMsg.ENtfPlayCard, this.buildPlayCard(seat, card, action, false, canQiang));
       await this._d(this.T.claim);
       if (await this.resolveKanRob(seat, card, canQiang)) return;
+      this.emit(RiichiMsg.ENtfQiangCardEnd, this.buildQiangEnd(null, PlayAction.Guo, [], []));
+      await this._d(this.T.claim);
       if (kind === "ankan") {
         const tiles = this.takeTilesByKind(p, kindOf2(card), 4);
         p.melds.push({ type: "ankan", tiles });
@@ -15131,6 +15184,7 @@
       this.kanCount++;
       for (const player of this.players) player.ippatsu = false;
       this.firstGoAround = false;
+      this.note("kan", `P${seat} ${kind === "ankan" ? "\u6697\u6760" : "\u52A0\u6760"}${this.cardName(card)} \u6760\u6570${this.kanCount + 1}`);
       if (kind === "ankan") this.revealKanDora();
       else this._deferredKanDora++;
       if (!await this.drawReplacement(seat)) return;
@@ -15178,20 +15232,21 @@
     }
     // otherCards = the "tiles this seat contributes from its own hand" sent to the client (excluding the called tile)
     // meldTiles = the full meld (including the called tile), used internally only for computing swap-call forbidden tiles
+    // seat === null closes a claim window nobody won: seats=[], action=Guo, no caller actions for anybody.
     buildQiangEnd(seat, action, otherCards, meldTiles) {
-      const p = this.players[seat];
+      const p = seat == null ? null : this.players[seat];
       return {
-        seats: [seat],
+        seats: p ? [seat] : [],
         action,
         otherCards: otherCards || [],
         userInfos: this.players.map((q) => ({
           seat: q.seat,
-          tingInfos: q.seat === seat ? this.buildTingInfos(p) : [],
+          tingInfos: p && q.seat === seat ? this.buildTingInfos(p) : [],
           // Real-machine NtfQiangCardEnd canPlayActions can only be [] (others) or [0] (the caller,
           // i.e. "discard only"), never 6/7/8/9/10. The full set of options is sent by the NtfSendCard that immediately follows.
-          canPlayActions: q.seat === seat ? [PlayAction.Normal] : [],
+          canPlayActions: p && q.seat === seat ? [PlayAction.Normal] : [],
           isZhenTing: this.isFuriten(q),
-          cantPlays: q.seat === seat ? this.cantPlays(p, action, meldTiles || otherCards || []) : [],
+          cantPlays: p && q.seat === seat ? this.cantPlays(p, action, meldTiles || otherCards || []) : [],
           leftTimer: q.isHuman ? Math.ceil(q.timeBank) : 0,
           xunNum: this.xunNum,
           zhenTingTypes: this.furitenTypes(q)
@@ -15220,6 +15275,7 @@
     async winTsumo(seat) {
       const p = this.players[seat];
       const w = calcWin(p.hand, p.melds, this.akaSet, this.winOpts(p, false));
+      this.note("win", `P${seat} \u81EA\u6478${this.cardName(p.drawnTile)} ${this.winText(w)}`);
       await this.endHand({ type: "tsumo", winner: seat, loser: null, card: p.drawnTile, win: w });
     }
     async winRon(seat, loser, card, extra = {}) {
@@ -15247,6 +15303,10 @@
         donor.drawnTile = null;
         this.updateWaits(donor);
       }
+      this.note("win", `P${seats.join("/")} \u8363\u548C P${loser}\u7684${this.cardName(card)}${robbed ? "(\u62A2\u6760)" : ""} ${[...wins].map(([seat, win]) => `P${seat}:${this.winText(win)}`).join(" ")}`);
+      for (const seat of seats) this.emit(RiichiMsg.ENtfQiangCard, this.buildQiang(seat, PlayAction.Hu, []));
+      this.emit(RiichiMsg.ENtfQiangCardEnd, { ...this.buildQiangEnd(null, PlayAction.Hu, [], []), seats: seats.slice() });
+      await this._d(this.T.claim);
       await this.endHand({ type: "ron", winners: seats.slice(), loser, card, wins });
     }
     async exhaustiveDraw() {
@@ -15255,9 +15315,11 @@
         return suit === 4 || rank === 1 || rank === 9;
       })).map((player) => player.seat);
       const tenpai = this.players.map((player) => this.isTenpai(player));
+      this.note("draw", `\u8352\u724C\u6D41\u5C40 \u542C\u724C[${tenpai.map((t, s) => t ? `P${s}` : null).filter(Boolean).join(" ") || "\u65E0"}] \u724C\u5C71${this.remain}`);
       await this.endHand({ type: "draw", liuJuType: LiuJuType.HuangPai, tenpai, nagashiWinners });
     }
     async abortiveDraw(liuJuType, seat) {
+      this.note("draw", `\u9014\u4E2D\u6D41\u5C40 type=${liuJuType} P${seat}`);
       await this.endHand({
         type: "draw",
         liuJuType,
@@ -15611,6 +15673,7 @@
           this.roundWind += 1;
         }
       }
+      this.note("hand", `\u7ED3\u675F \u5206\u6570[${scores.join(",")}]${gameOver ? " \u5BF9\u5C40\u7ED3\u675F" : ""} \u4E0B\u4E00\u5C40${WIND_NAME[this.roundWind]}${this.juNum + 1}-${this.honba} \u5E84\u5BB6P${this.dealerSeat}`);
       if (gameOver) {
         this.matchOver = true;
         this.finished = true;
@@ -15651,8 +15714,14 @@
       }
       if (can.includes(PlayAction.Riichi)) {
         const decision = riichiPolicy(this, seat, this.formalTenpaiDiscards(p), level, budget);
-        if (decision?.action === "riichi") return { action: PlayAction.Riichi, card: decision.card };
-        if (decision?.action === "dama") return { action: PlayAction.Normal, card: decision.card };
+        if (decision?.action === "riichi") {
+          this.note("ai", `P${seat} \u7ACB\u76F4 \u6253${this.cardName(decision.card)}`);
+          return { action: PlayAction.Riichi, card: decision.card };
+        }
+        if (decision?.action === "dama") {
+          this.note("ai", `P${seat} \u9ED8\u542C \u6253${this.cardName(decision.card)}`);
+          return { action: PlayAction.Normal, card: decision.card };
+        }
       }
       const kanOk = (can.includes(PlayAction.AnGang) || can.includes(PlayAction.PengGang)) && this.aiWantsKan(p, danger) && !shouldFoldHand(this, seat, level, budget);
       if (kanOk && can.includes(PlayAction.AnGang)) {
@@ -15663,9 +15732,12 @@
       }
       const forbiddenKinds = new Set(cantPlays.map((value) => Math.floor(value / 10)));
       if (p.riichi && p.riichiTurn !== this.xunNum) {
-        return { action: PlayAction.Normal, card: this.bestDiscard(p, { forbiddenKinds, forced: p.drawnTile }).discardId };
+        const forced = this.bestDiscard(p, { forbiddenKinds, forced: p.drawnTile }).discardId;
+        this.note("ai", `P${seat} \u7ACB\u76F4\u6478\u5207 ${this.cardName(forced)}`);
+        return { action: PlayAction.Normal, card: forced };
       }
       const best = chooseDiscardByPolicy(this, seat, { forbiddenKinds, level, budget });
+      this.note("ai", `P${seat} \u6253${this.cardName(best.discardId)} ${this.currentShanten(p)}\u5411\u542C->${best.shanten}\u5411\u542C \u8FDB\u5F20${best.ukeire} EV${best.ev >= 0 ? "+" : ""}${best.ev.toFixed(1)}${best.fold ? " \u8F6C\u5B88" : ""}` + (best.searched ? ` \u641C\u7D22${best.searched} \u8BA1\u7B97${best.budget?.calcUsed || 0}` : "") + (best.budget?.exhausted ? " \u9884\u7B97\u7528\u5C3D" : ""));
       return { action: PlayAction.Normal, card: best.discardId };
     }
     dangerKinds(seat) {
@@ -15745,6 +15817,11 @@
         }
       }
       const choice = claimPolicy(this, seat, card, options, level, createDecisionBudget());
+      if (!choice) {
+        this.note("ai", `P${seat} \u770B\u5230${this.cardName(card)} \u4E0D\u9E23\uFF08\u53EF\u9009${options.length}\u79CD\uFF09`);
+      } else {
+        this.note("ai", `P${seat} ${this.claimName(choice.action)} ${this.cardName(card)}` + (choice.used?.length ? ` \u7528${choice.used.map((tile) => this.cardName(tile)).join("")}` : ""));
+      }
       return choice ? { action: choice.action, otherCards: choice.used } : null;
     }
     currentShanten(p) {
@@ -15883,6 +15960,9 @@
       this._pending = null;
       const applied = {};
       for (const key of ["action", "card", "otherCards"]) if (payload?.[key] != null) applied[key] = payload[key];
+      const act = pending.kind === "claim" ? applied.action === PlayAction.Guo ? "\u8FC7\u724C" : this.claimName(applied.action) : "\u51FA\u724C";
+      const cards = [applied.card, ...applied.otherCards || []].filter((value) => value != null).map((value) => this.cardName(value)).join(" ");
+      this.note("human", `${act}${cards ? " " + cards : ""} \u7528\u65F6${elapsed.toFixed(1)}s \u5907\u7528${Math.round(player.timeBank * 10) / 10}s`);
       this._record([pending.kind === "draw" ? "d" : "c", applied, player.timeBank]);
       pending.resolve(payload || {});
     }
@@ -15891,6 +15971,7 @@
       const timeoutMs = Math.max(0, this.baseTime + player.timeBank) * 1e3;
       pending.timer = setTimeout(() => {
         const payload = this.timeoutHumanAction(pending.kind);
+        this.note("timeout", `${pending.kind === "claim" ? "\u9E23\u724C\u7A97\u53E3" : "\u51FA\u724C"}\u8D85\u65F6\uFF0C\u670D\u52A1\u7AEF\u81EA\u52A8${pending.kind === "claim" ? "\u8FC7\u724C" : "\u6253\u51FA"}\uFF08\u5BA2\u6237\u7AEF\u6B64\u540E\u624D\u5230\u7684\u7A97\u53E3\u5185\u8BF7\u6C42\u4ECD\u4F1A\u56E0\u7A97\u53E3\u5173\u95ED\u800C\u5931\u8D25\uFF09`);
         this.resolveHumanPending(pending, payload);
         this._timedOut = { kind: pending.kind, payload };
       }, timeoutMs);
@@ -15908,6 +15989,7 @@
         const pending = { kind, resolve, startedAt: Date.now(), timer: null };
         this._pending = pending;
         const buffered = kind === "draw" ? this._bufferedDraw : this._bufferedClaim;
+        this.note("wait", `\u7B49\u771F\u4EBA\u51B3\u7B56 ${kind}${buffered != null ? "\uFF08\u5DF2\u6709\u7F13\u5B58\u8BF7\u6C42\uFF0C\u76F4\u63A5\u6D88\u8D39\uFF09" : ""}`);
         if (buffered != null) {
           if (kind === "draw") this._bufferedDraw = null;
           else this._bufferedClaim = null;
@@ -15963,7 +16045,10 @@
     submitClaim(payload) {
       if (this.ackTimedOut("claim", payload)) return Result.Succ;
       const result = this.validateClaimPayload(payload);
-      if (result !== Result.Succ) return result;
+      if (result !== Result.Succ) {
+        if (!this._expectedClaim && !this.handEnded && !this.matchOver) this.resyncClaimWindow();
+        return result;
+      }
       this._expectedClaim = null;
       this._processing = true;
       if (this._pending && this._pending.kind === "claim") {
@@ -15972,6 +16057,11 @@
         this._bufferedClaim = payload || {};
       }
       return Result.Succ;
+    }
+    /** Tell the human's client that no claim window is open: it hides the buttons only on its own pass notice. */
+    resyncClaimWindow() {
+      this.emit(RiichiMsg.ENtfQiangCard, this.buildQiang(0, PlayAction.Guo, []));
+      this.emit(RiichiMsg.ENtfQiangCardEnd, this.buildQiangEnd(null, PlayAction.Guo, [], []));
     }
     cancelPending() {
       this._expectedDraw = null;
@@ -19757,6 +19847,8 @@
   }
 
   // mockjs/browser_entry.mjs
+  var CLAIM_NAME = { 1: "\u8FC7", 2: "\u5403", 3: "\u78B0", 4: "\u660E\u6760", 8: "\u8363\u548C" };
+  var claimText = (action) => CLAIM_NAME[action] || action;
   var MSG_NAME = {
     1: "ReqPrepare",
     2: "RspPrepare",
@@ -19842,6 +19934,15 @@
         return;
       }
       let bytes;
+      if (ev === RiichiMsg.ENtfQiangCard) {
+        this.log(`[claim] -> NtfQiangCard seat=${payload?.seat} action=${claimText(payload?.action)} other=${JSON.stringify(payload?.otherCards || [])}`);
+      } else if (ev === RiichiMsg.ENtfQiangCardEnd) {
+        this.log(`[claim] -> NtfQiangCardEnd seats=${JSON.stringify(payload?.seats || [])} action=${claimText(payload?.action)}`);
+      } else if (ev === RiichiMsg.ENtfGameStart) {
+        this.log(`[game] -> GameStart ju=${payload?.juNum} zhuang=${payload?.zhuangSeat} benChang=${payload?.benChangNum} bao=${payload?.baoPreCard} remain=${payload?.remainDuiCardNum}`);
+      } else if (ev === RiichiMsg.ENtfGameStop) {
+        this.log(`[game] -> GameStop type=${payload?.stopType} hu=${JSON.stringify(payload?.huSeats || [])} liuJu=${payload?.liuJuType} final=${payload?.isFinal ? 1 : 0} scores=${JSON.stringify((payload?.userInfos || []).map((u) => u.score))}`);
+      }
       try {
         bytes = encodeMsg(name, payload);
       } catch (e) {
@@ -19926,6 +20027,7 @@
         case RiichiMsg.EReqPrepare: {
           const e = this.ensureEngine();
           if (!e) return;
+          this.log("[client] <- ReqPrepare");
           this.send(RiichiMsg.ERspPrepare, { result: 0 });
           e.submitPrepare();
           break;
@@ -19934,13 +20036,19 @@
           const e = this.ensureEngine();
           if (!e) return;
           const result = e.submitDraw(payload);
+          this.log(`[client] <- ReqPlayCard action=${payload?.action} card=${payload?.card ? tileName(payload.card) : "-"} -> ${result}`);
           this.send(RiichiMsg.ERspPlayCard, { result });
           break;
         }
         case RiichiMsg.EReqQiangCard: {
           const e = this.ensureEngine();
           if (!e) return;
+          const open = e._expectedClaim;
+          const pending = e._pending;
+          const elapsed = pending?.kind === "claim" ? Date.now() - pending.startedAt : null;
           const result = e.submitClaim(payload);
+          const windowText = open ? `seat${open.seat}<from${open.discarderSeat} card${open.card} can[${open.actions.map(claimText).join("/")}]` : "closed";
+          this.log(`[claim] <- ReqQiangCard action=${claimText(payload?.action)} other=${JSON.stringify(payload?.otherCards || [])} timeout=${payload?.isTimeout ? 1 : 0} at=${elapsed == null ? "-" : elapsed + "ms"} -> ${result} window=${windowText}`);
           this.send(RiichiMsg.ERspQiangCard, { result });
           break;
         }
@@ -19949,6 +20057,7 @@
           this.opts.internalState = { ...this.opts.internalState, ...values };
           this.clientInternalState = { ...this.clientInternalState, ...values };
           if (this.engine) this.engine.setInternalState(values);
+          this.log(`[client] <- ReqSetInternalState ${JSON.stringify(values)}`);
           this.onSettingsChange({ ...this.opts.internalState });
           this.send(RiichiMsg.ERspSetInternalState, { result: 0 });
           break;
@@ -19968,6 +20077,7 @@
       if (!this.engine || this.matchOver) return null;
       try {
         const scene = buildRiichiReloadScene(frames, this.engine, 0);
+        this.log(`[reload] \u5FEB\u7167\u6784\u9020${scene ? "\u6210\u529F" : "\u653E\u5F03\uFF0C\u6539\u7528\u6574\u624B\u91CD\u653E"} frames=${frames.length}`);
         return scene ? encodeMsg("Offline2OnlineGameScene", scene) : null;
       } catch (e) {
         this.log("[riichi] \u91CD\u8FDE\u5FEB\u7167\u6784\u9020\u5931\u8D25\uFF0C\u6539\u7528\u6574\u624B\u91CD\u653E: " + (e && e.message || e));
@@ -19977,6 +20087,7 @@
     /** Connection dropped: let the engine stop naturally and stop pushing */
     stop() {
       this.stopped = true;
+      this.log("[riichi] \u4F1A\u8BDD\u505C\u6B62\uFF08\u8FDE\u63A5\u65AD\u5F00\u6216\u91CD\u65B0\u5339\u914D\uFF09");
       const eng = this.engine;
       this.engine = null;
       if (!eng) return;

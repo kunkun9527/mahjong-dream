@@ -6,6 +6,7 @@ import { Result, RiichiMsg, PlayAction, ManType, YiType, LiuJuType } from './pro
 import { mapYaku, manTypeFromResult } from './yaku_map.mjs';
 
 var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+var WIND_NAME = { 1: "东", 2: "南", 3: "西", 4: "北" };
 var kindOf2 = (id) => {
   const d = decodeId(id);
   return d.suit * 10 + d.rank;
@@ -25,6 +26,8 @@ var GameEngine = class {
     this.startScore = startScore;
     this.emit = emit || (() => {
     });
+    // Diagnostic sink: the host passes one (console + log file); without it every note() is a no-op.
+    this.log = opts.log || null;
     this.autoHuman = !!opts.autoHuman;
     this.selfLoveLevel = Number(opts.selfLoveLevel) || 0;
     // Shared policy with progressively reduced analysis: basic / intermediate / advanced.
@@ -179,6 +182,21 @@ var GameEngine = class {
     return { think: 550, claim: 350, step: 250, hand: 2500 };
   }
   // ================= Entry =================
+  // ================= Diagnostics =================
+  /** One line per game event; the host decides the sink (console plus the launcher's log file), tests stay silent. */
+  note(tag, text) {
+    if (this.log) this.log(`[${tag}] ${this.handLabel ? this.handLabel + " " : ""}${text}`);
+  }
+  cardName(card) {
+    return card ? tileName(card) : "-";
+  }
+  claimName(action) {
+    if (action === PlayAction.Guo) return "过";
+    return action === PlayAction.Hu ? "荣和" : action === PlayAction.MingGang ? "明杠" : action === PlayAction.Peng ? "碰" : action === PlayAction.Chi ? "吃" : "动作" + action;
+  }
+  winText(win) {
+    return win ? `${win.han || 0}番${win.fu || 0}符${win.name ? " " + win.name : ""}` : "?";
+  }
   async start() {
     await this._d(400);
     while (!this.finished) {
@@ -246,6 +264,8 @@ var GameEngine = class {
     }
     this.players = players;
     for (const p of players) this.updateWaits(p);
+    this.handLabel = `${WIND_NAME[this.roundWind]}${this.juNum + 1}-${this.honba}`;
+    this.note("hand", `开局 庄家P${this.dealerSeat} 分数[${players.map((p) => p.score).join(",")}] 立直棒${this.riichiSticks} 宝牌${this.cardName(this.doraIndicators[0])} 牌山${this.remain}`);
     const emptyInfos = players.map(() => ({}));
     this.emit(RiichiMsg.ENtfToPrepare, {
       userInfos: players.map((p) => ({ seat: p.seat, userID: this.uidOf(p.seat) }))
@@ -325,6 +345,7 @@ var GameEngine = class {
     p.drawnTile = tile;
     p.rinshan = false;
     this.xunNum++;
+    this.note("draw", `P${seat} 摸${this.cardName(tile)} 牌山${this.remain}`);
     await this.awaitTurn(seat, true);
   }
   // Rinshan draw (after a kan)
@@ -342,6 +363,7 @@ var GameEngine = class {
     p.drawnTile = tile;
     p.rinshan = true;
     this.xunNum++;
+    this.note("draw", `P${seat} 杠后补${this.cardName(tile)} 牌山${this.remain}`);
     return true;
   }
   async doBaBei(seat, tile) {
@@ -354,6 +376,9 @@ var GameEngine = class {
     this.emit(RiichiMsg.ENtfPlayCard, this.buildPlayCard(seat, tile, PlayAction.BaBei, false, canQiang));
     await this._d(this.T.claim);
     if (await this.resolveKanRob(seat, tile, canQiang, {})) return;
+    // Nobody robbed the North: close the claim window like any other quiet window.
+    this.emit(RiichiMsg.ENtfQiangCardEnd, this.buildQiangEnd(null, PlayAction.Guo, [], []));
+    await this._d(this.T.claim);
 
     p.hand.splice(p.hand.indexOf(tile), 1);
     p.melds.push({ type: "babei", tiles: [tile] });
@@ -413,6 +438,7 @@ var GameEngine = class {
     this._processing = false;
     if (this._timedOut?.kind === "claim") this._timedOut = null;
     this._expectedClaim = { seat, discarderSeat, card, actions: actions.slice() };
+    this.note("claim", `打开鸣牌窗口 P${seat} 可鸣[${actions.map((act) => this.claimName(act)).join("/")}] 来自P${discarderSeat}的${this.cardName(card)}`);
   }
   validateClaimPayload(payload, expected = this._expectedClaim) {
     if (!expected || !this.players?.[expected.seat]) return Result.Fail_InvalidSequence;
@@ -801,6 +827,7 @@ var GameEngine = class {
       p.ippatsu = true;
       p.score -= 1e3;
       this.riichiSticks += 1;
+      this.note("riichi", `P${seat} 立直${p.doubleRiichi ? "(双立直)" : ""} 打${this.cardName(card)} 分数${p.score}`);
     }
     const idx = p.hand.lastIndexOf(card);
     p.hand.splice(idx, 1);
@@ -824,6 +851,8 @@ var GameEngine = class {
     p.rinshan = false;
     this.flushDeferredKanDora();
     const canQiang = this.players.map((q) => q.seat === seat ? [] : this.claimActions(q.seat, seat, card));
+    const canText = canQiang.map((acts, s) => acts.filter((act) => act !== PlayAction.Guo).length ? `P${s}:${acts.filter((act) => act !== PlayAction.Guo).map((act) => this.claimName(act)).join("/")}` : null).filter(Boolean).join(" ") || "无";
+    this.note("discard", `P${seat} 打${this.cardName(card)}${isMoQie ? "(摸切)" : ""}${action === PlayAction.Riichi ? "(立直)" : ""} 牌山${this.remain} 可鸣 ${canText}`);
     this.expectClaim(0, seat, card, canQiang[0] || []);
     this.emit(RiichiMsg.ENtfPlayCard, this.buildPlayCard(seat, card, action, isMoQie, canQiang));
     await this._d(this.T.claim);
@@ -914,6 +943,11 @@ var GameEngine = class {
       humanHandled = true;
       if (payload?.action != null && payload.action !== PlayAction.Guo) {
         all.push({ seat: 0, action: payload.action, otherCards: payload.otherCards || [] });
+      } else {
+        // The client only closes its own claim buttons on NtfQiangCard{seat: me, action: Guo|Hu}.
+        // A window that ends silently leaves them on screen until something else closes them, so a
+        // pass (explicit or by timeout) has to be announced.
+        this.emit(RiichiMsg.ENtfQiangCard, this.buildQiang(0, PlayAction.Guo, []));
       }
     } else {
       this._expectedClaim = null;
@@ -924,6 +958,7 @@ var GameEngine = class {
       const claim = this.aiClaim(seat, discarderSeat, card, canQiang[seat]);
       if (claim) all.push({ seat, ...claim });
     }
+    this.note("claim", `P${discarderSeat}打${this.cardName(card)} 候选 ${all.map((c) => `P${c.seat}:${this.claimName(c.action)}`).join(" ") || "无"}`);
     // Missed-win furiten is judged by whether the hand forms a complete shape, not by whether a ron button with yaku was sent (no-yaku low-han hands count too).
     for (const p of this.players) {
       if (p.seat !== discarderSeat && (canQiang[p.seat]?.includes(PlayAction.Hu) || p.waits?.includes(kindOf2(card)))
@@ -937,23 +972,17 @@ var GameEngine = class {
       return;
     }
     if (!all.length) {
-      this.confirmRiichiDeclaration(this.players[discarderSeat]);
-      if (this.playersN === 4 && this.players.every((player) => player.riichi)) {
-        await this.abortiveDraw(LiuJuType.SiJiaLiZhi, discarderSeat);
-        return;
-      }
-      if (this.checkSiFengLianDa()) {
-        await this.abortiveDraw(LiuJuType.SiFengLianDa, discarderSeat);
-        return;
-      }
-      const next = this.nextSeat(discarderSeat);
-      if (next === this.dealerSeat) this.firstGoAround = false;
-      await this.turnDraw(next);
+      await this.continueAfterNoClaim(discarderSeat);
       return;
     }
     const priority = (claim) => claim.action === PlayAction.Hu ? 4 : claim.action === PlayAction.MingGang ? 3 : claim.action === PlayAction.Peng ? 2 : 1;
     const distance = (seat) => (seat - discarderSeat + this.playersN) % this.playersN;
     all.sort((left, right) => priority(right) - priority(left) || distance(left.seat) - distance(right.seat));
+    // A human who offered a claim but lost it (a ron, or a nearer/higher claim) still needs the pass
+    // announcement: their client closes its own buttons only on NtfQiangCard{seat: me, action: Guo}.
+    if (humanHandled && humanCanClaim && all[0].seat !== 0) {
+      this.emit(RiichiMsg.ENtfQiangCard, this.buildQiang(0, PlayAction.Guo, []));
+    }
     const ronClaims = all.filter((claim) => claim.action === PlayAction.Hu);
     if (ronClaims.length) {
       await this.winRons(ronClaims.map((claim) => claim.seat), discarderSeat, card);
@@ -961,7 +990,34 @@ var GameEngine = class {
     }
     this.confirmRiichiDeclaration(this.players[discarderSeat]);
     const claim = all[0];
-    await this.executeClaim(claim.seat, claim.action, card, discarderSeat, claim.otherCards || []);
+    const applied = await this.executeClaim(claim.seat, claim.action, card, discarderSeat, claim.otherCards || []);
+    if (applied === Result.Succ) return;
+    // The winner's own payload failed its second check: close the window instead of leaving the table
+    // without a turn. A stalled hand looks exactly like "my claim was ignored".
+    if (claim.seat === 0) this.emit(RiichiMsg.ENtfQiangCard, this.buildQiang(0, PlayAction.Guo, []));
+    await this.continueAfterNoClaim(discarderSeat);
+  }
+
+  /**
+   * Ends a claim window nobody won. The window has to be closed on the wire (the client leaves its claim
+   * phase only on NtfQiangCardEnd), then the turn passes to the next seat.
+   */
+  async continueAfterNoClaim(discarderSeat) {
+    this.note("claim", "无人鸣牌，窗口收尾并轮到下一家");
+    this.emit(RiichiMsg.ENtfQiangCardEnd, this.buildQiangEnd(null, PlayAction.Guo, [], []));
+    await this._d(this.T.claim);
+    this.confirmRiichiDeclaration(this.players[discarderSeat]);
+    if (this.playersN === 4 && this.players.every((player) => player.riichi)) {
+      await this.abortiveDraw(LiuJuType.SiJiaLiZhi, discarderSeat);
+      return;
+    }
+    if (this.checkSiFengLianDa()) {
+      await this.abortiveDraw(LiuJuType.SiFengLianDa, discarderSeat);
+      return;
+    }
+    const next = this.nextSeat(discarderSeat);
+    if (next === this.dealerSeat) this.firstGoAround = false;
+    await this.turnDraw(next);
   }
   recordPao(player, discarderSeat) {
     player.pao ||= {};
@@ -997,6 +1053,7 @@ var GameEngine = class {
     if (validation !== Result.Succ) return validation;
     this._processing = true; // During a call: packets arriving in this window are treated as duplicates and dropped
     this._bufferedDraw = null; this._bufferedClaim = null; // Clear the leftover buffer of the previous action (prevents duplicate-packet replay)
+    this.note("meld", `P${seat} ${this.claimName(action)} P${discarderSeat}的${this.cardName(card)} 手牌[${otherCards.map((tile) => this.cardName(tile)).join(" ")}]`);
     const donor = this.players[discarderSeat];
     if (action === PlayAction.Hu) {
       await this.winRon(seat, discarderSeat, card);
@@ -1064,6 +1121,7 @@ var GameEngine = class {
       const payload = await this.waitHuman("claim");
       humanHandled = true;
       if (payload?.action === PlayAction.Hu) claims.push({ seat: 0 });
+      else this.emit(RiichiMsg.ENtfQiangCard, this.buildQiang(0, PlayAction.Guo, []));
     } else {
       this._expectedClaim = null;
     }
@@ -1080,6 +1138,10 @@ var GameEngine = class {
     if (!claims.length) return false;
     const distance = (seat) => (seat - kanSeat + this.playersN) % this.playersN;
     claims.sort((left, right) => distance(left.seat) - distance(right.seat));
+    // Same as a lost ron on a discard: tell the human their window is over so the client drops its buttons.
+    if (humanHandled && humanCanClaim && claims[0].seat !== 0) {
+      this.emit(RiichiMsg.ENtfQiangCard, this.buildQiang(0, PlayAction.Guo, []));
+    }
     await this.winRons(claims.map((claim) => claim.seat), kanSeat, tile, winExtra, { robbed: true });
     return true;
   }
@@ -1092,6 +1154,9 @@ var GameEngine = class {
     this.emit(RiichiMsg.ENtfPlayCard, this.buildPlayCard(seat, card, action, false, canQiang));
     await this._d(this.T.claim);
     if (await this.resolveKanRob(seat, card, canQiang)) return;
+    // Same as a quiet discard: nobody robbed the kan, so close the window before the replacement draw.
+    this.emit(RiichiMsg.ENtfQiangCardEnd, this.buildQiangEnd(null, PlayAction.Guo, [], []));
+    await this._d(this.T.claim);
 
     if (kind === "ankan") {
       const tiles = this.takeTilesByKind(p, kindOf2(card), 4);
@@ -1105,6 +1170,7 @@ var GameEngine = class {
     this.kanCount++;
     for (const player of this.players) player.ippatsu = false;
     this.firstGoAround = false;
+    this.note("kan", `P${seat} ${kind === "ankan" ? "暗杠" : "加杠"}${this.cardName(card)} 杠数${this.kanCount + 1}`);
     if (kind === "ankan") this.revealKanDora();
     else this._deferredKanDora++;
     if (!await this.drawReplacement(seat)) return;
@@ -1153,20 +1219,21 @@ var GameEngine = class {
   }
   // otherCards = the "tiles this seat contributes from its own hand" sent to the client (excluding the called tile)
   // meldTiles = the full meld (including the called tile), used internally only for computing swap-call forbidden tiles
+  // seat === null closes a claim window nobody won: seats=[], action=Guo, no caller actions for anybody.
   buildQiangEnd(seat, action, otherCards, meldTiles) {
-    const p = this.players[seat];
+    const p = seat == null ? null : this.players[seat];
     return {
-      seats: [seat],
+      seats: p ? [seat] : [],
       action,
       otherCards: otherCards || [],
       userInfos: this.players.map((q) => ({
         seat: q.seat,
-        tingInfos: q.seat === seat ? this.buildTingInfos(p) : [],
+        tingInfos: p && q.seat === seat ? this.buildTingInfos(p) : [],
         // Real-machine NtfQiangCardEnd canPlayActions can only be [] (others) or [0] (the caller,
         // i.e. "discard only"), never 6/7/8/9/10. The full set of options is sent by the NtfSendCard that immediately follows.
-        canPlayActions: q.seat === seat ? [PlayAction.Normal] : [],
+        canPlayActions: p && q.seat === seat ? [PlayAction.Normal] : [],
         isZhenTing: this.isFuriten(q),
-        cantPlays: q.seat === seat ? this.cantPlays(p, action, meldTiles || otherCards || []) : [],
+        cantPlays: p && q.seat === seat ? this.cantPlays(p, action, meldTiles || otherCards || []) : [],
         leftTimer: q.isHuman ? Math.ceil(q.timeBank) : 0,
         xunNum: this.xunNum,
         zhenTingTypes: this.furitenTypes(q)
@@ -1197,6 +1264,7 @@ var GameEngine = class {
   async winTsumo(seat) {
     const p = this.players[seat];
     const w = calcWin(p.hand, p.melds, this.akaSet, this.winOpts(p, false));
+    this.note("win", `P${seat} 自摸${this.cardName(p.drawnTile)} ${this.winText(w)}`);
     await this.endHand({ type: "tsumo", winner: seat, loser: null, card: p.drawnTile, win: w });
   }
   async winRon(seat, loser, card, extra = {}) {
@@ -1225,6 +1293,13 @@ var GameEngine = class {
       donor.drawnTile = null;
       this.updateWaits(donor);
     }
+    this.note("win", `P${seats.join("/")} 荣和 P${loser}的${this.cardName(card)}${robbed ? "(抢杠)" : ""} ${[...wins].map(([seat, win]) => `P${seat}:${this.winText(win)}`).join(" ")}`);
+    // A ron is a claim too, and the client starts the win sequence from the Hu claim notice and leaves the claim
+    // phase only on NtfQiangCardEnd (it hides its own buttons only on its own Hu notice). Announcing just the final
+    // NtfGameStop leaves the hand frozen on screen with no win animation.
+    for (const seat of seats) this.emit(RiichiMsg.ENtfQiangCard, this.buildQiang(seat, PlayAction.Hu, []));
+    this.emit(RiichiMsg.ENtfQiangCardEnd, { ...this.buildQiangEnd(null, PlayAction.Hu, [], []), seats: seats.slice() });
+    await this._d(this.T.claim);
     await this.endHand({ type: "ron", winners: seats.slice(), loser, card, wins });
   }
   async exhaustiveDraw() {
@@ -1235,9 +1310,11 @@ var GameEngine = class {
       }))
       .map((player) => player.seat);
     const tenpai = this.players.map((player) => this.isTenpai(player));
+    this.note("draw", `荒牌流局 听牌[${tenpai.map((t, s) => t ? `P${s}` : null).filter(Boolean).join(" ") || "无"}] 牌山${this.remain}`);
     await this.endHand({ type: "draw", liuJuType: LiuJuType.HuangPai, tenpai, nagashiWinners });
   }
   async abortiveDraw(liuJuType, seat) {
+    this.note("draw", `途中流局 type=${liuJuType} P${seat}`);
     await this.endHand({
       type: "draw",
       liuJuType,
@@ -1600,6 +1677,7 @@ var GameEngine = class {
         this.roundWind += 1;
       }
     }
+    this.note("hand", `结束 分数[${scores.join(",")}]${gameOver ? " 对局结束" : ""} 下一局${WIND_NAME[this.roundWind]}${this.juNum + 1}-${this.honba} 庄家P${this.dealerSeat}`);
     if (gameOver) {
       this.matchOver = true;
       this.finished = true;
@@ -1643,8 +1721,14 @@ var GameEngine = class {
     }
     if (can.includes(PlayAction.Riichi)) {
       const decision = riichiPolicy(this, seat, this.formalTenpaiDiscards(p), level, budget);
-      if (decision?.action === "riichi") return { action: PlayAction.Riichi, card: decision.card };
-      if (decision?.action === "dama") return { action: PlayAction.Normal, card: decision.card };
+      if (decision?.action === "riichi") {
+        this.note("ai", `P${seat} 立直 打${this.cardName(decision.card)}`);
+        return { action: PlayAction.Riichi, card: decision.card };
+      }
+      if (decision?.action === "dama") {
+        this.note("ai", `P${seat} 默听 打${this.cardName(decision.card)}`);
+        return { action: PlayAction.Normal, card: decision.card };
+      }
     }
     const kanOk = (can.includes(PlayAction.AnGang) || can.includes(PlayAction.PengGang))
       && this.aiWantsKan(p, danger) && !shouldFoldHand(this, seat, level, budget);
@@ -1656,9 +1740,15 @@ var GameEngine = class {
     }
     const forbiddenKinds = new Set(cantPlays.map((value) => Math.floor(value / 10)));
     if (p.riichi && p.riichiTurn !== this.xunNum) {
-      return { action: PlayAction.Normal, card: this.bestDiscard(p, { forbiddenKinds, forced: p.drawnTile }).discardId };
+      const forced = this.bestDiscard(p, { forbiddenKinds, forced: p.drawnTile }).discardId;
+      this.note("ai", `P${seat} 立直摸切 ${this.cardName(forced)}`);
+      return { action: PlayAction.Normal, card: forced };
     }
     const best = chooseDiscardByPolicy(this, seat, { forbiddenKinds, level, budget });
+    this.note("ai", `P${seat} 打${this.cardName(best.discardId)} ${this.currentShanten(p)}向听->${best.shanten}向听` +
+      ` 进张${best.ukeire} EV${best.ev >= 0 ? "+" : ""}${best.ev.toFixed(1)}${best.fold ? " 转守" : ""}` +
+      (best.searched ? ` 搜索${best.searched} 计算${best.budget?.calcUsed || 0}` : "") +
+      (best.budget?.exhausted ? " 预算用尽" : ""));
     return { action: PlayAction.Normal, card: best.discardId };
   }
   dangerKinds(seat) {
@@ -1742,6 +1832,12 @@ var GameEngine = class {
       }
     }
     const choice = claimPolicy(this, seat, card, options, level, createDecisionBudget());
+    if (!choice) {
+      this.note("ai", `P${seat} 看到${this.cardName(card)} 不鸣（可选${options.length}种）`);
+    } else {
+      this.note("ai", `P${seat} ${this.claimName(choice.action)} ${this.cardName(card)}` +
+        (choice.used?.length ? ` 用${choice.used.map((tile) => this.cardName(tile)).join("")}` : ""));
+    }
     return choice ? { action: choice.action, otherCards: choice.used } : null;
   }
   currentShanten(p) {
@@ -1884,6 +1980,9 @@ var GameEngine = class {
     this._pending = null;
     const applied = {};
     for (const key of ["action", "card", "otherCards"]) if (payload?.[key] != null) applied[key] = payload[key];
+    const act = pending.kind === "claim" ? (applied.action === PlayAction.Guo ? "过牌" : this.claimName(applied.action)) : "出牌";
+    const cards = [applied.card, ...(applied.otherCards || [])].filter((value) => value != null).map((value) => this.cardName(value)).join(" ");
+    this.note("human", `${act}${cards ? " " + cards : ""} 用时${elapsed.toFixed(1)}s 备用${Math.round(player.timeBank * 10) / 10}s`);
     this._record([pending.kind === "draw" ? "d" : "c", applied, player.timeBank]);
     pending.resolve(payload || {});
   }
@@ -1892,6 +1991,7 @@ var GameEngine = class {
     const timeoutMs = Math.max(0, this.baseTime + player.timeBank) * 1_000;
     pending.timer = setTimeout(() => {
       const payload = this.timeoutHumanAction(pending.kind);
+      this.note("timeout", `${pending.kind === "claim" ? "鸣牌窗口" : "出牌"}超时，服务端自动${pending.kind === "claim" ? "过牌" : "打出"}（客户端此后才到的窗口内请求仍会因窗口关闭而失败）`);
       this.resolveHumanPending(pending, payload);
       this._timedOut = { kind: pending.kind, payload };
     }, timeoutMs);
@@ -1909,6 +2009,7 @@ var GameEngine = class {
       const pending = { kind, resolve, startedAt: Date.now(), timer: null };
       this._pending = pending;
       const buffered = kind === "draw" ? this._bufferedDraw : this._bufferedClaim;
+      this.note("wait", `等真人决策 ${kind}${buffered != null ? "（已有缓存请求，直接消费）" : ""}`);
       if (buffered != null) {
         if (kind === "draw") this._bufferedDraw = null;
         else this._bufferedClaim = null;
@@ -1968,7 +2069,12 @@ var GameEngine = class {
   submitClaim(payload) {
     if (this.ackTimedOut("claim", payload)) return Result.Succ;
     const result = this.validateClaimPayload(payload);
-    if (result !== Result.Succ) return result;
+    if (result !== Result.Succ) {
+      // A claim arriving with no window open means the client still believes it is choosing: its button presses would
+      // keep being swallowed there. Push the authoritative close (pass + empty end) so it drops them and resumes.
+      if (!this._expectedClaim && !this.handEnded && !this.matchOver) this.resyncClaimWindow();
+      return result;
+    }
     this._expectedClaim = null;
     this._processing = true;
     if (this._pending && this._pending.kind === "claim") {
@@ -1977,6 +2083,11 @@ var GameEngine = class {
       this._bufferedClaim = payload || {};
     }
     return Result.Succ;
+  }
+  /** Tell the human's client that no claim window is open: it hides the buttons only on its own pass notice. */
+  resyncClaimWindow() {
+    this.emit(RiichiMsg.ENtfQiangCard, this.buildQiang(0, PlayAction.Guo, []));
+    this.emit(RiichiMsg.ENtfQiangCardEnd, this.buildQiangEnd(null, PlayAction.Guo, [], []));
   }
   cancelPending() {
     this._expectedDraw = null;

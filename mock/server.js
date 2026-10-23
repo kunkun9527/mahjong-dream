@@ -310,6 +310,9 @@
     this.replaying = false;
     this._replayStarted = false;
     if (this._resyncTimer) { clearTimeout(this._resyncTimer); this._resyncTimer = null; }
+    // Timing marks for the reconnect chain: WS back -> login/userdata -> 20162 -> replay done. They show where the wait comes from.
+    this._reconnectAt = nowMs();
+    if (this.liveMatch()) log('[mock] 重连：会话已接管，下推暂停，等待客户端 20162');
 
     // After reconnecting, the client must first log in and pull user data before it sends 20162 to ask "am I still in a match?";
     // in the captures this gap is about 4 seconds. During this time the engine keeps running, and if pushes went live, the client would
@@ -795,6 +798,13 @@
       aiStyles: styles,
       selfLoveLevel: sess.table && sess.table.self ? sess.table.self.loveLevel || 0 : 0,
       internalState: sess.internalState || {},
+      // Engine/hand logs (claim windows, frame pushes) go to the launcher's console and log file; without this the
+      // session swallows them and a stuck hand leaves no trace to read afterwards.
+      log: function (line) {
+        var d = new Date();
+        var pad = function (v, n) { return String(v).padStart(n, '0'); };
+        console.log('[' + pad(d.getHours(), 2) + ':' + pad(d.getMinutes(), 2) + ':' + pad(d.getSeconds(), 2) + '.' + pad(d.getMilliseconds(), 3) + '] ' + line);
+      },
       onSettingsChange: function (state) {
         sess.internalState = state;
         if (typeof sess.onSettingsChange === 'function') sess.onSettingsChange(state);
@@ -865,6 +875,8 @@
       return [];
     }
     var live = !!(sess.table && sess.liveMatch());
+    log('  [resync] 收到 20162，距 WS 恢复 %dms，进行中=%s',
+      sess._reconnectAt == null ? -1 : nowMs() - sess._reconnectAt, live ? 1 : 0);
 
     var w = P.W();
     w.v(1, sess.uid);
@@ -935,7 +947,8 @@
       if (frames[k][0] === RIICHI_NTF_GAME_START) { skipToPrepare = true; break; }
     }
 
-    log('  [resync] 开始重放（已开牌=%s）', skipToPrepare);
+    log('  [resync] 开始重放（已开牌=%s 起点=%d/%d 帧）', skipToPrepare, from, frames.length);
+    var replayStart = nowMs();
     // Batch push: send BATCH frames per batch with BATCH_GAP ms between batches. The client queues consumption in the main-thread Update,
     // handling only a few frames per tick so it does not time out again (Bye!); batching also cuts the whole hand's replay time
     // from "8 ms per frame" to close to the real server (the real server sends the position snapshot f100 in 20163, almost instantly).
@@ -955,7 +968,7 @@
       }
       if (i >= sess.handFrames.length) {
         sess.replaying = false; sess._replayStarted = false;
-        log('  [resync] 重放完成，共 %d 帧，恢复实时下推', i);
+        log('  [resync] 重放完成，共 %d 帧，耗时 %dms，恢复实时下推', i, nowMs() - replayStart);
         playerBack(sess);
         return;
       }

@@ -272,3 +272,57 @@ for (const [players, action, label] of [
     assert.equal(f.engine.players[0].timeBank, 0);
   });
 }
+
+test('无人鸣牌时也下发 NtfQiangCardEnd 关闭窗口，客户端不会卡在鸣牌阶段', async (t) => {
+  const f = setup(t, 4);
+  const done = f.discard();
+  await flush();
+  // 电脑家手牌为空，没人能鸣牌；真人明确过牌后窗口必须收尾。
+  f.submit({ action: PlayAction.Guo });
+  await done;
+  const idx = f.frames.findIndex((frame) => frame.type === RiichiMsg.ENtfQiangCardEnd);
+  assert.ok(idx > 0, '无人鸣牌也必须下发 NtfQiangCardEnd');
+  const end = f.frames[idx].payload;
+  assert.deepEqual(end.seats, []);
+  assert.equal(end.action, PlayAction.Guo);
+  assert.deepEqual(end.otherCards, []);
+  assert.ok(f.frames.findIndex((frame) => frame.type === RiichiMsg.ENtfPlayCard) < idx);
+  // 客户端只在收到本人 seat 的 Guo/Hu 时才收起鸣牌按钮，过牌必须通知。
+  const pass = f.frames.findIndex((frame) => frame.type === RiichiMsg.ENtfQiangCard);
+  assert.ok(pass > 0 && pass < idx, '过牌要在窗口关闭前下发 NtfQiangCard');
+  assert.equal(f.frames[pass].payload.seat, 0);
+  assert.equal(f.frames[pass].payload.action, PlayAction.Guo);
+  assert.deepEqual(f.frames[pass].payload.otherCards, []);
+  assert.deepEqual(f.nextDraws, [0], '关闭窗口后才轮到下家摸牌');
+  assert.equal(f.frames.filter((frame) => frame.type === RiichiMsg.ENtfQiangCardEnd).length, 1);
+});
+
+test('鸣牌窗口超时自动过牌后同样下发 NtfQiangCardEnd', async (t) => {
+  const f = setup(t, 3);
+  const done = f.discard();
+  await flush();
+  t.mock.timers.tick(25_000);
+  await done;
+  const ends = f.frames.filter((frame) => frame.type === RiichiMsg.ENtfQiangCardEnd);
+  assert.equal(ends.length, 1);
+  assert.deepEqual(ends[0].payload.seats, []);
+  assert.equal(ends[0].payload.action, PlayAction.Guo);
+  assert.deepEqual(f.nextDraws, [0]);
+});
+
+test('荣和也要按鸣牌窗口收尾：先发 Hu 鸣牌通知与 NtfQiangCardEnd，最后才是 NtfGameStop', async (t) => {
+  const f = setup(t, 4);
+  const eng = f.engine;
+  eng.players[1].hand = [111, 112, 113, 121, 122, 123, 131, 132, 133, 451, 452, 453, 211];
+  const ends = [];
+  t.mock.method(eng, 'endHand', async () => { ends.push(f.frames.map((frame) => frame.type)); });
+  f.frames.length = 0;
+  await eng.winRons([1], 3, 212);
+  assert.equal(ends.length, 1, '荣和必须进入结算');
+  assert.deepEqual(f.frames.map((frame) => frame.type),
+    [RiichiMsg.ENtfQiangCard, RiichiMsg.ENtfQiangCardEnd]);
+  assert.equal(f.frames[0].payload.seat, 1);
+  assert.equal(f.frames[0].payload.action, PlayAction.Hu);
+  assert.deepEqual(f.frames[1].payload.seats, [1]);
+  assert.equal(f.frames[1].payload.action, PlayAction.Hu);
+});

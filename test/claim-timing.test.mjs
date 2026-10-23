@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GameEngine } from '../mockjs/engine.mjs';
-import { PlayAction, Result } from '../mockjs/proto_enum.mjs';
+import { PlayAction, Result, RiichiMsg } from '../mockjs/proto_enum.mjs';
 
 function claimWindow(timeBank) {
   const engine = new GameEngine({ players: 3, speed: 0 });
@@ -42,7 +42,7 @@ test('延长时间耗尽后，基础时间最后一毫秒仍能提交碰牌', as
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
   const { engine, done, nextDraws } = claimWindow(0);
   let claim;
-  engine.executeClaim = async (...args) => { claim = args; };
+  engine.executeClaim = async (...args) => { claim = args; return Result.Succ; };
   t.mock.timers.tick(4_999);
   assert.equal(engine.submitClaim({ action: PlayAction.Peng, otherCards: [451, 452] }), Result.Succ);
   await done;
@@ -50,6 +50,20 @@ test('延长时间耗尽后，基础时间最后一毫秒仍能提交碰牌', as
   t.mock.timers.tick(30_000);
   assert.equal(nextDraws(), 0);
   assert.equal(engine.players[0].timeBank, 0);
+});
+
+test('鸣牌者二次校验没通过时：不卡住牌桌，按空窗口收尾并轮到下一家', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
+  const { engine, done, nextDraws } = claimWindow(0);
+  const frames = [];
+  engine.emit = (ev, payload) => { frames.push({ ev, payload }); };
+  // Stands in for a payload that passed submitClaim but fails executeClaim's own re-check.
+  engine.executeClaim = async () => Result.Fail_InvalidSequence;
+  assert.equal(engine.submitClaim({ action: PlayAction.Peng, otherCards: [451, 452] }), Result.Succ);
+  await done;
+  assert.equal(nextDraws(), 1, '鸣牌没落地时必须把牌局交给下一家');
+  assert.equal(frames.filter((frame) => frame.ev === RiichiMsg.ENtfQiangCardEnd).at(-1).payload.seats.length, 0);
+  assert.deepEqual(frames.filter((frame) => frame.ev === RiichiMsg.ENtfQiangCard).at(-1).payload.seat, 0);
 });
 
 test('鸣牌基础时间内手动过不扣延长时间，且不会残留超时任务', async (t) => {
@@ -119,4 +133,16 @@ test('服务端超时摸切后，迟到的同一张摸切只回成功，打别�
   assert.equal(engine.submitDraw({ action: PlayAction.Normal, card: 451 }), Result.Fail_InvalidSequence);
   assert.equal(engine.humanLog.length, logged);
   assert.equal(engine._bufferedDraw, null);
+});
+
+test('窗口已关闭时才到达的鸣牌请求：回失败，并补发过牌与结束通知，客户端不会卡在鸣牌态', async () => {
+  const engine = new GameEngine({ players: 3, speed: 0 });
+  engine.players = [0, 1, 2].map((seat) => ({ seat, isHuman: seat === 0, timeBank: 0, hand: [451, 452, 411] }));
+  const frames = [];
+  engine.emit = (ev, payload) => { frames.push({ ev, payload }); };
+  assert.notEqual(engine.submitClaim({ action: PlayAction.Peng, otherCards: [451, 452] }), Result.Succ);
+  assert.deepEqual(frames.map((frame) => frame.ev), [RiichiMsg.ENtfQiangCard, RiichiMsg.ENtfQiangCardEnd]);
+  assert.equal(frames[0].payload.seat, 0);
+  assert.equal(frames[0].payload.action, PlayAction.Guo);
+  assert.equal(frames[1].payload.seats.length, 0);
 });

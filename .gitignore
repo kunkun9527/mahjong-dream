@@ -2,3 +2,4 @@ node_modules/
 userdata/
 .tmp-*
 .codeindex/
+logs/

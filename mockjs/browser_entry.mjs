@@ -9,6 +9,10 @@ import { createProfileHost } from './profile_host.mjs';
 import { createDefaultProfile, normalizeProfile } from './profile.mjs';
 import * as npc from './npc_roster.mjs';
 
+// Claim actions as they read in the log ([claim] lines); numeric codes alone make a stuck window hard to spot.
+var CLAIM_NAME = { 1: "过", 2: "吃", 3: "碰", 4: "明杠", 8: "荣和" };
+var claimText = (action) => CLAIM_NAME[action] || action;
+
 var MSG_NAME = {
   1: "ReqPrepare",
   2: "RspPrepare",
@@ -95,6 +99,15 @@ var RiichiSession = class {
       return;
     }
     let bytes;
+    if (ev === RiichiMsg.ENtfQiangCard) {
+      this.log(`[claim] -> NtfQiangCard seat=${payload?.seat} action=${claimText(payload?.action)} other=${JSON.stringify(payload?.otherCards || [])}`);
+    } else if (ev === RiichiMsg.ENtfQiangCardEnd) {
+      this.log(`[claim] -> NtfQiangCardEnd seats=${JSON.stringify(payload?.seats || [])} action=${claimText(payload?.action)}`);
+    } else if (ev === RiichiMsg.ENtfGameStart) {
+      this.log(`[game] -> GameStart ju=${payload?.juNum} zhuang=${payload?.zhuangSeat} benChang=${payload?.benChangNum} bao=${payload?.baoPreCard} remain=${payload?.remainDuiCardNum}`);
+    } else if (ev === RiichiMsg.ENtfGameStop) {
+      this.log(`[game] -> GameStop type=${payload?.stopType} hu=${JSON.stringify(payload?.huSeats || [])} liuJu=${payload?.liuJuType} final=${payload?.isFinal ? 1 : 0} scores=${JSON.stringify((payload?.userInfos || []).map((u) => u.score))}`);
+    }
     try {
       bytes = encodeMsg(name, payload);
     } catch (e) {
@@ -179,6 +192,7 @@ var RiichiSession = class {
       case RiichiMsg.EReqPrepare: {
         const e = this.ensureEngine();
         if (!e) return;
+        this.log("[client] <- ReqPrepare");
         this.send(RiichiMsg.ERspPrepare, { result: 0 });
         e.submitPrepare();
         break;
@@ -187,13 +201,22 @@ var RiichiSession = class {
         const e = this.ensureEngine();
         if (!e) return;
         const result = e.submitDraw(payload);
+        this.log(`[client] <- ReqPlayCard action=${payload?.action} card=${payload?.card ? tileName(payload.card) : "-"} -> ${result}`);
         this.send(RiichiMsg.ERspPlayCard, { result });
         break;
       }
       case RiichiMsg.EReqQiangCard: {
         const e = this.ensureEngine();
         if (!e) return;
+        const open = e._expectedClaim;
+        const pending = e._pending;
+        const elapsed = pending?.kind === "claim" ? Date.now() - pending.startedAt : null;
         const result = e.submitClaim(payload);
+        const windowText = open
+          ? `seat${open.seat}<from${open.discarderSeat} card${open.card} can[${open.actions.map(claimText).join("/")}]`
+          : "closed";
+        this.log(`[claim] <- ReqQiangCard action=${claimText(payload?.action)} other=${JSON.stringify(payload?.otherCards || [])}`
+          + ` timeout=${payload?.isTimeout ? 1 : 0} at=${elapsed == null ? "-" : elapsed + "ms"} -> ${result} window=${windowText}`);
         this.send(RiichiMsg.ERspQiangCard, { result });
         break;
       }
@@ -202,6 +225,7 @@ var RiichiSession = class {
         this.opts.internalState = { ...this.opts.internalState, ...values };
         this.clientInternalState = { ...this.clientInternalState, ...values };
         if (this.engine) this.engine.setInternalState(values);
+        this.log(`[client] <- ReqSetInternalState ${JSON.stringify(values)}`);
         this.onSettingsChange({ ...this.opts.internalState });
         this.send(RiichiMsg.ERspSetInternalState, { result: 0 });
         break;
@@ -221,6 +245,7 @@ var RiichiSession = class {
     if (!this.engine || this.matchOver) return null;
     try {
       const scene = buildRiichiReloadScene(frames, this.engine, 0);
+      this.log(`[reload] 快照构造${scene ? "成功" : "放弃，改用整手重放"} frames=${frames.length}`);
       return scene ? encodeMsg("Offline2OnlineGameScene", scene) : null;
     } catch (e) {
       this.log("[riichi] 重连快照构造失败，改用整手重放: " + (e && e.message || e));
@@ -230,6 +255,7 @@ var RiichiSession = class {
   /** Connection dropped: let the engine stop naturally and stop pushing */
   stop() {
     this.stopped = true;
+    this.log("[riichi] 会话停止（连接断开或重新匹配）");
     const eng = this.engine;
     this.engine = null;
     if (!eng) return;
