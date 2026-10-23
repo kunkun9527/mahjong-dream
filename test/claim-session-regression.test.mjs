@@ -283,8 +283,9 @@ test('出牌与鸣牌共用备用时间，仅下一小局恢复到 20 秒', asyn
   f.submit({ action: PlayAction.Guo });
   await done;
   assert.equal(p.timeBank, 14);
+  const nextHand = f.engine.runHand();
   f.engine.submitPrepare();
-  await f.engine.runHand();
+  await nextHand;
   assert.equal(f.engine.players[0].timeBank, 20);
   const start = f.frames.find((frame) => frame.type === RiichiMsg.ENtfGameStart).payload;
   // 公告保持玩家可见的基础 5 秒；服务端冗余只在服务端计时上加，不通过公告暴露（否则客户端会在基础段末尾多等一个冗余）。

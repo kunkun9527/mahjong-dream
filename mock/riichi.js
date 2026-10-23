@@ -14119,7 +14119,6 @@
       this._bufferedClaim = null;
       this._timedOut = null;
       this._prepareWaiter = null;
-      this._prepared = false;
       this.matchOver = false;
       this.finished = false;
       this.onFinish = opts.onFinish || null;
@@ -14165,12 +14164,6 @@
           clearTimeout(pending.timer);
           pending.timer = null;
         }
-        const prepare = this._prepareWaiter;
-        if (prepare?.timer) {
-          clearTimeout(prepare.timer);
-          prepare.timer = null;
-          prepare.timeoutMs = Math.max(0, prepare.timeoutMs - (Date.now() - prepare.startedAt));
-        }
       } else {
         if (this._humanClock && this._humanClock.runningSince == null && !this._bufferedDraw && !this._bufferedClaim) {
           this._humanClock.runningSince = Date.now();
@@ -14179,16 +14172,15 @@
           this._armHumanTimer(pending);
           this._queueAutomatic(pending);
         }
-        if (this._prepareWaiter && !this._prepareWaiter.timer) this._armPrepareTimer(this._prepareWaiter);
       }
       this._publishHumanClock();
       this.note("clock", JSON.stringify({ event: present ? "resume" : "pause", ...this.humanTime() }));
     }
-    _openHumanClock(kind) {
+    _openHumanClock(kind, base2 = this.baseTime) {
       this._humanClock = {
         id: ++this._windowId,
         kind,
-        base: this.baseTime,
+        base: base2,
         bank: Number.isFinite(this.players[0].timeBank) ? this.players[0].timeBank : this.extraTime,
         elapsedMs: 0,
         runningSince: this.humanPresent ? Date.now() : null
@@ -14237,53 +14229,36 @@
     uidOf(seat) {
       return this.uids[seat];
     }
-    /** Client uplink ReqPrepare: resolves the wait inside runHand */
+    /** ReqPrepare only releases this hand's active wait; duplicates never authorize a future hand. */
     submitPrepare() {
-      this._prepared = true;
-      const w = this._prepareWaiter;
-      this._prepareWaiter = null;
-      if (w) w();
+      if (this._prepareWaiter) this._prepareWaiter();
     }
     /** Wait for the client to press "ready". Capture pattern (dongfeng1 full packets):
      *  Between hands (including renchan, isFinal=false) the server first sends NtfToPrepare/NtfPrepare (bots); the client sends
      *  ReqPrepare, then the server sends NtfPrepare (self)/NtfGameStart: one ReqPrepare wait per hand.
      *  After the final hand (isFinal=true) the engine simply stops; there is no two-step "continue and wait for ReqPrepare again" handshake;
      *  a new match is a newly matched room with a new engine (see finishHand).
-     *  autoHuman (self-test, no client) skips directly; human mode keeps a fallback timeout to prevent a hang. */
-    waitPrepare(timeoutMs = 15e3) {
+     *  Install the wait before emitting NtfToPrepare so an immediate reply cannot be lost.
+     *  autoHuman (self-test or takeover) skips directly; human mode never starts before the client is ready. */
+    async waitPrepare() {
+      if (this.replaying) await Promise.resolve();
+      if (this.finished) return;
       if (this._replayNext("p")) {
         this._record(["p"]);
         return Promise.resolve();
       }
       if (this.autoHuman) return Promise.resolve();
-      if (this._prepared) {
-        this._prepared = false;
-        this._record(["p"]);
-        return Promise.resolve();
-      }
       return new Promise((resolve) => {
         let done = false;
         const fin = () => {
           if (done) return;
           done = true;
-          if (fin.timer) clearTimeout(fin.timer);
           if (this._prepareWaiter === fin) this._prepareWaiter = null;
-          this._prepared = false;
           if (!this.finished) this._record(["p"]);
           resolve();
         };
-        fin.timeoutMs = timeoutMs;
         this._prepareWaiter = fin;
-        if (this.humanPresent) this._armPrepareTimer(fin);
       });
-    }
-    _armPrepareTimer(fin) {
-      fin.startedAt = Date.now();
-      fin.timer = setTimeout(() => {
-        fin.timer = null;
-        this.log && this.log("[riichi] \u7B49 ReqPrepare \u8D85\u65F6\uFF0C\u81EA\u884C\u5F00\u5C40");
-        fin();
-      }, fin.timeoutMs);
     }
     _d(ms) {
       return this.speed > 0 ? sleep(ms * this.speed) : Promise.resolve();
@@ -14375,16 +14350,17 @@
       this.players = players;
       for (const p of players) this.updateWaits(p);
       this.handLabel = `${WIND_NAME[this.roundWind]}${this.juNum + 1}-${this.honba}`;
-      this.note("hand", `\u5F00\u5C40 \u5E84\u5BB6P${this.dealerSeat} \u5206\u6570[${players.map((p) => p.score).join(",")}] \u7ACB\u76F4\u68D2${this.riichiSticks} \u5B9D\u724C${this.cardName(this.doraIndicators[0])} \u724C\u5C71${this.remain}`);
       const emptyInfos = players.map(() => ({}));
+      const prepared = this.waitPrepare();
       this.emit(RiichiMsg.ENtfToPrepare, {
         userInfos: players.map((p) => ({ seat: p.seat, userID: this.uidOf(p.seat) }))
       });
       for (let s = 1; s < this.playersN; s++) {
         this.emit(RiichiMsg.ENtfPrepare, { seat: s, userInfos: emptyInfos });
       }
-      await this.waitPrepare();
+      await prepared;
       if (this.finished) return;
+      this.note("hand", `\u5F00\u5C40 \u5E84\u5BB6P${this.dealerSeat} \u5206\u6570[${players.map((p) => p.score).join(",")}] \u7ACB\u76F4\u68D2${this.riichiSticks} \u5B9D\u724C${this.cardName(this.doraIndicators[0])} \u724C\u5C71${this.remain}`);
       this.emit(RiichiMsg.ENtfPrepare, { seat: 0, userInfos: emptyInfos });
       await this._d(this.T.step);
       const dealer = players[this.dealerSeat];
@@ -14395,7 +14371,7 @@
       dealer.rinshan = false;
       this.xunNum = 1;
       const dealerActions = this.turnActions(this.dealerSeat, true);
-      this.expectDraw(this.dealerSeat, true, dealerActions, []);
+      this.expectDraw(this.dealerSeat, true, dealerActions, [], this.baseTime + 3);
       this.emit(RiichiMsg.ENtfGameStart, {
         changWind: this.roundWind - 1,
         juNum: this.juNum + 1,
@@ -14496,7 +14472,7 @@
       if (!await this.drawReplacement(seat)) return;
       await this.awaitTurn(seat, true);
     }
-    expectDraw(seat, drew, actions, cantPlays = []) {
+    expectDraw(seat, drew, actions, cantPlays = [], base2 = this.baseTime) {
       if (this.autoHuman || !this.players[seat]?.isHuman) {
         this._expectedDraw = null;
         return;
@@ -14504,7 +14480,7 @@
       this._processing = false;
       if (this._timedOut?.kind === "draw") this._timedOut = null;
       this._expectedDraw = { seat, drew, actions: actions.slice(), cantPlays: cantPlays.slice() };
-      this._openHumanClock("draw");
+      this._openHumanClock("draw", base2);
     }
     validateTurnPayload(payload, expected = this._expectedDraw) {
       if (!expected || !this.players?.[expected.seat]) return Result.Fail_InvalidSequence;

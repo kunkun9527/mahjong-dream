@@ -77,7 +77,6 @@ var GameEngine = class {
     // Receipt of the last human window the server closed by timeout: { kind, payload }. See ackTimedOut().
     this._timedOut = null;
     this._prepareWaiter = null;
-    this._prepared = false;
     this.matchOver = false;
     this.finished = false;
     this.onFinish = opts.onFinish || null;
@@ -87,7 +86,7 @@ var GameEngine = class {
     this.uids = opts.uids && opts.uids.length >= players ? opts.uids.slice(0, players) : Array.from({ length: players }, (_, s) => 1e4 + s);
     // Match record for crash/reload recovery: every resolved human wait, in order. Together with the seed and the table settings
     // it reproduces the whole match, because AI decisions and the wall depend only on the seed and the position.
-    //   ['p']                    ready for the next hand (ReqPrepare or its timeout)
+    //   ['p']                    ready for the next hand (ReqPrepare or takeover)
     //   ['d'|'c', payload, bank] turn / claim decision as finally applied (client, auto setting or timeout) and the time bank after it
     this.humanLog = [];
     this.onRecord = opts.onRecord || null;
@@ -126,11 +125,6 @@ var GameEngine = class {
     if (!present) {
       this._freezeHumanClock();
       if (pending?.timer) { clearTimeout(pending.timer); pending.timer = null; }
-      const prepare = this._prepareWaiter;
-      if (prepare?.timer) {
-        clearTimeout(prepare.timer); prepare.timer = null;
-        prepare.timeoutMs = Math.max(0, prepare.timeoutMs - (Date.now() - prepare.startedAt));
-      }
     } else {
       if (this._humanClock && this._humanClock.runningSince == null && !this._bufferedDraw && !this._bufferedClaim) {
         this._humanClock.runningSince = Date.now();
@@ -139,14 +133,13 @@ var GameEngine = class {
         this._armHumanTimer(pending);
         this._queueAutomatic(pending);
       }
-      if (this._prepareWaiter && !this._prepareWaiter.timer) this._armPrepareTimer(this._prepareWaiter);
     }
     this._publishHumanClock();
     this.note("clock", JSON.stringify({ event: present ? "resume" : "pause", ...this.humanTime() }));
   }
-  _openHumanClock(kind) {
+  _openHumanClock(kind, base = this.baseTime) {
     this._humanClock = {
-      id: ++this._windowId, kind, base: this.baseTime,
+      id: ++this._windowId, kind, base,
       bank: Number.isFinite(this.players[0].timeBank) ? this.players[0].timeBank : this.extraTime,
       elapsedMs: 0, runningSince: this.humanPresent ? Date.now() : null,
     };
@@ -188,54 +181,39 @@ var GameEngine = class {
   uidOf(seat) {
     return this.uids[seat];
   }
-  /** Client uplink ReqPrepare: resolves the wait inside runHand */
+  /** ReqPrepare only releases this hand's active wait; duplicates never authorize a future hand. */
   submitPrepare() {
-    this._prepared = true;
-    const w = this._prepareWaiter;
-    this._prepareWaiter = null;
-    if (w) w();
+    if (this._prepareWaiter) this._prepareWaiter();
   }
   /** Wait for the client to press "ready". Capture pattern (dongfeng1 full packets):
    *  Between hands (including renchan, isFinal=false) the server first sends NtfToPrepare/NtfPrepare (bots); the client sends
    *  ReqPrepare, then the server sends NtfPrepare (self)/NtfGameStart: one ReqPrepare wait per hand.
    *  After the final hand (isFinal=true) the engine simply stops; there is no two-step "continue and wait for ReqPrepare again" handshake;
    *  a new match is a newly matched room with a new engine (see finishHand).
-   *  autoHuman (self-test, no client) skips directly; human mode keeps a fallback timeout to prevent a hang. */
-  waitPrepare(timeoutMs = 15e3) {
+   *  Install the wait before emitting NtfToPrepare so an immediate reply cannot be lost.
+   *  autoHuman (self-test or takeover) skips directly; human mode never starts before the client is ready. */
+  async waitPrepare() {
+    // Keep prepare notices in the historical trace before declaring replay caught up.
+    // Live waits are installed synchronously, before the client can reply to NtfToPrepare.
+    if (this.replaying) await Promise.resolve();
+    if (this.finished) return;
     if (this._replayNext("p")) {
       this._record(["p"]);
       return Promise.resolve();
     }
     if (this.autoHuman) return Promise.resolve();
-    if (this._prepared) {
-      this._prepared = false;
-      this._record(["p"]);
-      return Promise.resolve();
-    }
     return new Promise((resolve) => {
       let done = false;
       const fin = () => {
         if (done) return;
         done = true;
-        if (fin.timer) clearTimeout(fin.timer);
         if (this._prepareWaiter === fin) this._prepareWaiter = null;
-        this._prepared = false;
         // A stopped engine (session ended) releases its waiter without the player being ready.
         if (!this.finished) this._record(["p"]);
         resolve();
       };
-      fin.timeoutMs = timeoutMs;
       this._prepareWaiter = fin;
-      if (this.humanPresent) this._armPrepareTimer(fin);
     });
-  }
-  _armPrepareTimer(fin) {
-    fin.startedAt = Date.now();
-    fin.timer = setTimeout(() => {
-      fin.timer = null;
-      this.log && this.log("[riichi] \u7B49 ReqPrepare \u8D85\u65F6\uFF0C\u81EA\u884C\u5F00\u5C40");
-      fin();
-    }, fin.timeoutMs);
   }
   _d(ms) {
     return this.speed > 0 ? sleep(ms * this.speed) : Promise.resolve();
@@ -330,16 +308,17 @@ var GameEngine = class {
     this.players = players;
     for (const p of players) this.updateWaits(p);
     this.handLabel = `${WIND_NAME[this.roundWind]}${this.juNum + 1}-${this.honba}`;
-    this.note("hand", `开局 庄家P${this.dealerSeat} 分数[${players.map((p) => p.score).join(",")}] 立直棒${this.riichiSticks} 宝牌${this.cardName(this.doraIndicators[0])} 牌山${this.remain}`);
     const emptyInfos = players.map(() => ({}));
+    const prepared = this.waitPrepare();
     this.emit(RiichiMsg.ENtfToPrepare, {
       userInfos: players.map((p) => ({ seat: p.seat, userID: this.uidOf(p.seat) }))
     });
     for (let s = 1; s < this.playersN; s++) {
       this.emit(RiichiMsg.ENtfPrepare, { seat: s, userInfos: emptyInfos });
     }
-    await this.waitPrepare();
+    await prepared;
     if (this.finished) return;
+    this.note("hand", `开局 庄家P${this.dealerSeat} 分数[${players.map((p) => p.score).join(",")}] 立直棒${this.riichiSticks} 宝牌${this.cardName(this.doraIndicators[0])} 牌山${this.remain}`);
     this.emit(RiichiMsg.ENtfPrepare, { seat: 0, userInfos: emptyInfos });
     await this._d(this.T.step);
     const dealer = players[this.dealerSeat];
@@ -350,7 +329,9 @@ var GameEngine = class {
     dealer.rinshan = false;
     this.xunNum = 1;
     const dealerActions = this.turnActions(this.dealerSeat, true);
-    this.expectDraw(this.dealerSeat, true, dealerActions, []);
+    // Every hand (including renchan): dealer's opening decision has 8 base seconds.
+    // Keep the normal per-decision default at 5; the bridge/reload read this window's base.
+    this.expectDraw(this.dealerSeat, true, dealerActions, [], this.baseTime + 3);
     this.emit(RiichiMsg.ENtfGameStart, {
       changWind: this.roundWind - 1,
       juNum: this.juNum + 1,
@@ -453,7 +434,7 @@ var GameEngine = class {
     if (!await this.drawReplacement(seat)) return;
     await this.awaitTurn(seat, true);
   }
-  expectDraw(seat, drew, actions, cantPlays = []) {
+  expectDraw(seat, drew, actions, cantPlays = [], base = this.baseTime) {
     if (this.autoHuman || !this.players[seat]?.isHuman) {
       this._expectedDraw = null;
       return;
@@ -461,7 +442,7 @@ var GameEngine = class {
     this._processing = false;
     if (this._timedOut?.kind === "draw") this._timedOut = null;
     this._expectedDraw = { seat, drew, actions: actions.slice(), cantPlays: cantPlays.slice() };
-    this._openHumanClock("draw");
+    this._openHumanClock("draw", base);
   }
   validateTurnPayload(payload, expected = this._expectedDraw) {
     if (!expected || !this.players?.[expected.seat]) return Result.Fail_InvalidSequence;

@@ -83,6 +83,23 @@ test('静态宿主直接读取当前引擎；WASM三次读取使用同一毫秒�
   assert.equal(app.bridge.status().ready, true);
 });
 
+for (const mode of ['node', 'browser']) {
+  test(`${mode}庄家首手8+20、后续5+剩余；备用耗尽时基础和总截止相同，不显示+0`, async () => {
+    const app = page(mode);
+    const { imports } = await app.load();
+    const publish = (state) => mode === 'browser' ? app.engine(state) : app.bridge.accept(state);
+    for (const [id, baseMs, extraMs, base, total] of [
+      [1, 8000, 20000, 8, 28], [2, 5000, 18000, 5, 23],
+      [3, 5000, 0, 5, 5], [3, 2999, 0, 3, 3],
+    ]) {
+      publish({ id, baseMs, extraMs, running: true });
+      assert.equal(imports.mj.clock(0), 1);
+      assert.equal(imports.mj.clock(1), base);
+      assert.equal(imports.mj.clock(2), total);
+    }
+  });
+}
+
 test('拒绝未知构建、损坏派生文件和无效时钟投影，不静默降级原客户端', async () => {
   const app = page();
   app.manifest.sourceHash = '0'.repeat(64);
