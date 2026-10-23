@@ -153,7 +153,7 @@ export function buildRiichiReloadScene(frames, engine, mySeat = 0, now = Date.no
       internalState: own ? internalState : {},
       initScore: folded.initScore,
       canAnGangNoNumCardsAfterRiichi: engine.riichiFutureAnkanKinds(p),
-      // Same convention as NtfGameStart: the seat's base time is announced inclusive of the server's redundant allowance.
+      // Same convention as NtfGameStart: the client's clock is DefaultMinTimeout (base phase) + leftTimer (bank).
       DefaultMinTimeout: own && pending ? Math.ceil(baseLeft) : state.defaultMinTimeout,
       ServerRedundantTimeOut: state.redundant,
       zhenTingTypes: engine.furitenTypes(p),

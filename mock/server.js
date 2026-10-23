@@ -829,7 +829,9 @@
         clearMatchRecord(sess);
         if (typeof sess.onMatchFinish === 'function') sess.onMatchFinish(scores, engine);
       },
-      log: function (s) { log(s); },
+      // Single `log` key on purpose: RiichiSession hands this same callback to the engine (browser_entry sets
+      // `eng.log = this.log`), so a second key here silently replaced the engine's logger and every hand/claim line
+      // vanished from the log file.
       onFrame: function (ev, bytes) {
         log('  => 20018 %s %dB', riichiName(ev), bytes.length);
         // Rsp* (even msgType and <1000) are responses to the client's Req*; they must echo the request seq;

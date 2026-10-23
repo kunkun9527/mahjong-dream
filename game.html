@@ -193,6 +193,26 @@
           });
       };
 
+      // Heartbeats tell the local host the tab is still in front; when they stop (hidden tab or throttled timers) it pauses the
+      // table instead of counting the player as gone and letting the AI take the seat.
+      (function () {
+        var timer = null;
+        var beat = function () {
+          fetch('/api/page-visibility?visible=1', { method: 'POST', cache: 'no-store' }).catch(function () { });
+        };
+        var sync = function () {
+          if (document.hidden) {
+            if (timer) clearInterval(timer);
+            timer = null;
+            return;
+          }
+          beat();
+          if (!timer) timer = setInterval(beat, 2000);
+        };
+        document.addEventListener('visibilitychange', sync);
+        sync();
+      })();
+
       var time = setInterval(() => {
         // Progress bar slowly increasing
         if(currentProgress >= 45 && currentProgress < 100){

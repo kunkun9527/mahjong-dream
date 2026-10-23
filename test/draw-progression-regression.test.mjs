@@ -148,3 +148,22 @@ test('听牌提示在别人行动时也带着自己的听牌信息（13 张手�
   assert.deepEqual(playCard.userInfos[0].tingInfos.map((i) => i.ting), [220, 250], '别人打牌时不下发听牌信息，客户端右侧提示会被清空');
   assert.equal(playCard.userInfos[1].tingInfos.length, 0, '不下发他人的暗手信息');
 });
+
+test('比赛第一手把入场演出的 8 秒也公告给客户端（leftTimer），之后恢复备用余量', async () => {
+  const engine = drawEngine();
+  const frames = [];
+  engine.emit = (ev, payload) => frames.push({ ev, payload });
+  engine.players[0].isHuman = true;
+  engine.players[0].timeBank = 20;
+  engine.players[0].hand = [111, 112, 113];
+  engine.wall = [191, 192, 193, 194, 195];
+  engine.remain = engine.wall.length;
+  engine.waitHuman = () => new Promise(() => {});
+  void engine.turnDraw(0);
+  const frame = (items) => items.find((item) => item.payload?.userInfos);
+  assert.equal(frame(frames).payload.userInfos[0].leftTimer, 28, '第一手：备用 20 + 入场 8');
+  engine.handIndex = 1;
+  frames.length = 0;
+  void engine.turnDraw(0);
+  assert.equal(frame(frames).payload.userInfos[0].leftTimer, 20, '之后只公告备用余量');
+});

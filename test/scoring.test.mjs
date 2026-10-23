@@ -186,6 +186,34 @@ test('大三元包牌在自摸时由责任者包付', async () => {
   assert.deepEqual(engine.scores, [25_000, 57_000, 25_000, -7_000]);
 });
 
+test('荣和完成第三副三元牌时记下放铳者为责任者，包牌标记随结算下发', async () => {
+  const { engine, frames } = scoringEngine([25_000, 25_000, 25_000, 25_000]);
+  engine.honba = 0;
+  engine.riichiSticks = 0;
+  engine.recordPaoOnRon(engine.players[1], 2, daisangen());
+  assert.equal(engine.players[1].pao.daisangen, 2);
+  await engine.endHand({
+    type: 'ron', winners: [1], loser: 2, card: tileId(4, 1, 1),
+    wins: new Map([[1, daisangen()]]),
+  });
+  // 责任者就是放铳者本人，金额与普通荣和一致，不分摊
+  assert.deepEqual(engine.scores, [25_000, 57_000, -7_000, 25_000]);
+  const stop = frames.filter((frame) => frame.event === RiichiMsg.ENtfGameStop).at(-1).payload;
+  assert.equal(stop.userInfos[1].isBaoPai, true);
+  assert.equal(stop.userInfos[2].isBaoPai, false);
+});
+
+test('自摸包牌也在结算里标记 isBaoPai', async () => {
+  const { engine, frames } = scoringEngine([25_000, 25_000, 25_000, 25_000]);
+  engine.honba = 0;
+  engine.riichiSticks = 0;
+  engine.players[1].pao = { daisangen: 3 };
+  await engine.endHand({ type: 'tsumo', winner: 1, win: daisangen() });
+  const stop = frames.filter((frame) => frame.event === RiichiMsg.ENtfGameStop).at(-1).payload;
+  assert.equal(stop.userInfos[1].isBaoPai, true);
+  assert.equal(stop.userInfos[0].isBaoPai, false);
+});
+
 test('第三副三元牌和第四副风牌副露会记录包牌责任者', () => {
   const { engine } = scoringEngine([25_000, 25_000, 25_000, 25_000]);
   const player = engine.players[1];

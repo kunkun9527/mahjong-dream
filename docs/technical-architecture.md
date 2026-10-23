@@ -395,6 +395,10 @@ sequenceDiagram
 真人每次出牌或鸣牌决策有基础 5 秒，超出部分才扣本小局共用的 20 秒备用时间；只有下一小局补满。切换自动操作或重连不补时。取消不鸣时，尚未执行的自动过牌微任务必须重新检查当前设置，并继续等待原截止时间。
 服务端截止 = 公告基础 + 剩余备用 + 服务端冗余 3 秒（引擎内常量 `SERVER_REDUNDANT_TIMEOUT`），第一小局第一次出牌再额外加 8 秒（`FIRST_START_REDUNDANT_TIMEOUT`，配牌/入场演出）。冗余只在服务端计时上加，**不通过公告暴露**：`NtfGameStart.ServerRedundantTimeOut` 与 `FirstGameStartRedundantTimeOut` 都写 0，`defaultMinTimeout` 写真实基础 5 秒。客户端 `InitCountDown(base, bank)` 把 `352 = now + base`、`360 = now + min(base, 备用余量)`、`368 = now + base + bank` 做成三个绝对截止点，`UpdateTimeText` 在 `now < 352` 时显示 `max(360 − now, 0)`（基础段），到点后改显示 `368 − now`（备用段）。因此基础段长度由**公告值**决定、显示数字是它减去 `ServerRedundantTimeOut`：公告 8 秒时数字 5 但基础段 8 秒，第 5 秒后会有 3 秒不倒数（实测卡顿），公告 5 秒时数字与基础段都是 5 秒、备用段紧接着开始。两者都远小于服务端截止（多 3 秒），玩家在倒计时内点下去一定来得及；冗余只是往返容差，不计入扣时（扣时按玩家可见的基础 + 备用封顶）。
 
+页面可见性单独走一条通道，避免把"切到后台"当成断线：`game.html` 在页面可见时每 2 秒向后端 `POST /api/page-visibility?visible=1` 打心跳，`local/server.mjs` 收到心跳就 `engine.setHumanPresent(true)`；连续 4 秒没有心跳（标签页切到后台、定时器被饿死或页面关闭）就 `setHumanPresent(false)`，把这一巡的计时器摘掉。后台**不**触发 254 行那套冻结/5 分钟离开计时/AI 代打，也不走重连：回到前台时这一巡从基础时间重新开始，备用时间不扣。只有 WebSocket 断开才算离开。
+
+本巡的 `leftTimer`（`NtfSendCard` / `NtfPlayCard` / `NtfQiangCardEnd` / `Offline2OnlineUserInfo`）只带**备用余量**，客户端一巡的总时钟是 `defaultMinTimeout`（基础段长度）+ `leftTimer`（备用段）。把基础时间也写进 `leftTimer` 会让客户端多算一遍，服务端反而比客户端早几秒截断（表现为屏幕上还剩一两秒牌就被自动打出）。服务端截止 = 基础 + 备用 + 冗余 3 秒，因此始终比玩家看到的时钟晚 3 秒。唯一例外是第一手：客户端时钟从收到帧就开始走，而入场演出要十几秒，所以第一手的 `leftTimer` 额外加 `FIRST_START_REDUNDANT_TIMEOUT`（8 秒），与服务端第一手的 33 秒窗口对齐。
+
 ### 10.0 听牌提示（右侧感叹号面板）
 
 客户端右侧的听牌提示（听哪几张、剩几枚）由 `UserInfo.tingInfos` 驱动，而且**每收到一份 userInfos 就整块替换**：`NtfSendCard`（自己摸牌）、`NtfPlayCard`（任何人打牌）、`NtfQiangCard` / `NtfQiangCardEnd` 都要带上本人那一份。14 张手牌时给「打哪张 → 听哪些张」，13 张手牌（刚打完、或等其他人行动）给出已经成立的听牌、`play` 写刚打出的那张；非本人座位一律空。`tingInfos.play` / `ting` 用牌种编码（copy 位固定 0，如 3s=380、1p=210），其他字段仍用带副露位的实体 ID。少给一份就会被客户端当成「没有听牌」而收起面板，表现为听牌/立直后提示时有时无。

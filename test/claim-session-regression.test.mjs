@@ -55,6 +55,18 @@ function setup(t, players, action = PlayAction.Peng, bank = 20) {
   return { session, engine, frames, card, used, discard, submit, setting, saved, nextDraws, claimTurns };
 }
 
+test('引擎日志通过会话日志回调输出（避免再被静默吞掉）', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
+  t.mock.method(GameEngine.prototype, 'start', async () => {});
+  const lines = [];
+  const session = new RiichiSession({ players: 4, speed: 0, log: (line) => lines.push(line), onFrame: () => {} });
+  const engine = session.ensureEngine();
+  engine.note('hand', '东1-0 测试');
+  assert.ok(lines.some((line) => line.includes('[riichi] 新对局')), '会话级日志要落到回调');
+  assert.ok(lines.some((line) => line.includes('[hand] 东1-0 测试')), '引擎级日志要走同一个回调');
+  session.stop();
+});
+
 for (const [players, action, label] of [
   [3, PlayAction.Peng, '三麻碰'], [3, PlayAction.MingGang, '三麻明杠'],
   [4, PlayAction.Chi, '四麻吃'], [4, PlayAction.Peng, '四麻碰'], [4, PlayAction.MingGang, '四麻明杠'],
@@ -65,7 +77,7 @@ for (const [players, action, label] of [
     await flush();
     const notice = f.frames.find((frame) => frame.type === RiichiMsg.ENtfPlayCard).payload;
     assert.ok(notice.userInfos[0].canQiangActions.includes(action));
-    assert.equal(notice.userInfos[0].leftTimer, 20);
+    assert.equal(notice.userInfos[0].leftTimer, 20, 'leftTimer 只带备用余量；客户端时钟是 defaultMinTimeout(5) + leftTimer(20)');
     assert.equal(f.nextDraws.length, 0, '尚未选择，不得进入下一家');
     assert.ok(f.engine._pending, '必须保留鸣牌等待窗口');
     t.mock.timers.tick(24_000);

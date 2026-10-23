@@ -17,10 +17,16 @@ if (process.env.MJ_LOG_FILE) {
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
   const logStream = fs.createWriteStream(logPath, { flags: 'a' });
   logStream.on('error', (error) => console.error('[local] 日志写入失败：' + error.message));
+  // Engine lines carry their own stamp; [local] lines do not, and timing questions need a clock reading.
+  const stamp = () => {
+    const now = new Date();
+    return `[${now.toTimeString().slice(0, 8)}.${String(now.getMilliseconds()).padStart(3, '0')}] `;
+  };
   for (const name of ['log', 'warn', 'error']) {
     const original = console[name].bind(console);
     console[name] = (...args) => {
-      logStream.write(format(...args) + '\n');
+      const line = format(...args);
+      logStream.write((line.startsWith('[local]') ? stamp() + line : line) + '\n');
       original(...args);
     };
   }
@@ -199,8 +205,36 @@ async function handleProfileApi(request, response) {
   catch (error) { send(400, { ok: false, error: error.message }); }
 }
 
+// A hidden tab is not a disconnected player: pause the human clock instead of freezing the table or letting the AI take over.
+let pageVisible = true;
+let visibilityTimer = null;
+const VISIBILITY_GRACE_MS = 4_000;
+function notePageVisibility(visible) {
+  clearTimeout(visibilityTimer);
+  visibilityTimer = null;
+  const engine = session.riichi?.engine;
+  const live = engine && !session.riichi.matchOver;
+  if (visible) {
+    if (!pageVisible) console.log('[local] 页面回到前台，你这一巡的倒计时继续');
+    pageVisible = true;
+    // Heartbeats stop when the tab is hidden or its timers are throttled; silence means "in the background".
+    visibilityTimer = setTimeout(() => notePageVisibility(false), VISIBILITY_GRACE_MS);
+    if (live) engine.setHumanPresent(true);
+    return;
+  }
+  if (pageVisible) console.log('[local] 页面切到后台，牌桌暂停等你回来（不按离开处理，也不会 AI 代打）');
+  pageVisible = false;
+  if (live) engine.setHumanPresent(false);
+}
+
 const server = http.createServer((request, response) => {
   const pathname = new URL(request.url, 'http://127.0.0.1').pathname;
+  if (pathname === '/api/page-visibility') {
+    if (request.method !== 'POST') { response.writeHead(405, { Allow: 'POST' }).end(); return; }
+    notePageVisibility(new URL(request.url, 'http://127.0.0.1').searchParams.get('visible') !== '0');
+    response.writeHead(204, { 'Cache-Control': 'no-store' }).end();
+    return;
+  }
   if (pathname === '/api/profile') {
     void handleProfileApi(request, response).catch((error) => {
       console.error('[local] 存档接口错误:', error);
@@ -276,6 +310,9 @@ websocketServer.on('connection', (websocket) => {
   session.resume(adapter);
   clearTimeout(awayTimer);
   awayTimer = null;
+  pageVisible = true;
+  clearTimeout(visibilityTimer);
+  visibilityTimer = null;
   // The frozen turn resumes its clock once the client has re-synced the table (mock/server.js playerBack).
   profileHost.touch();
   console.log('[local] 游戏页面已连接');
@@ -313,6 +350,9 @@ websocketServer.on('connection', (websocket) => {
     }
     session.suspend();
     profileHost.touch();
+    clearTimeout(visibilityTimer);
+    visibilityTimer = null;
+    pageVisible = false;
     if (session.riichi?.engine && !session.riichi.matchOver) {
       session.riichi.engine.setHumanPresent(false);
       armAwayTimer(AWAY_LIMIT_MS);
@@ -338,7 +378,7 @@ server.once('error', (error) => {
 server.listen(port, host, () => {
   const actualPort = server.address().port;
   const url = `http://${host}:${actualPort}/`;
-  console.log(`[local] 激情麻将已启动：${url}`);
+  console.log(`[local] 激情麻将已启动：${url}（pid ${process.pid}；日志里没有这行说明你看的是别的进程）`);
   if (process.send) process.send({ type: 'ready', url });
 });
 

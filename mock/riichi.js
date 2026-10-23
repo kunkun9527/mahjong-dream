@@ -14288,6 +14288,8 @@
           score,
           scoreAtStart: score,
           timeBank: s === 0 ? this.extraTime : 0,
+          pao: null,
+          baoPaiWin: false,
           hand: wall.splice(0, 13).sort((a, b) => a - b),
           melds: [],
           discards: [],
@@ -14353,8 +14355,8 @@
           };
         }),
         leftTimer: this.extraTime,
-        // The player's own clock stays exactly base + bank: the client subtracts ServerRedundantTimeOut from the announced base
-        // only to render the number, so any allowance announced here shows up as a stall before the bank countdown starts.
+        // The client's clock for a turn is `defaultMinTimeout + leftTimer` (base phase, then the shared bank), so leftTimer
+        // carries the bank only; adding the base here would count it twice and the server would cut the turn off early.
         defaultMinTimeout: this.baseTime,
         riichiBangNum: this.riichiSticks,
         isAllLast: this.isAllLast(),
@@ -14532,7 +14534,7 @@
             card: q.seat === seat && (q.isHuman || this.autoHuman) ? p.drawnTile : 0,
             tingInfos: q.seat === seat ? this.buildTingInfos(p) : q.isHuman ? this.buildTingInfos(q) : [],
             canPlayActions: q.seat === seat ? can : [],
-            leftTimer: q.isHuman ? Math.ceil(q.timeBank) : 0,
+            leftTimer: q.isHuman ? Math.ceil(q.timeBank + this._firstStartBonus(q)) : 0,
             isZhenTing: this.isFuriten(q),
             xunNum: this.xunNum,
             zhenTingTypes: this.furitenTypes(q)
@@ -15075,6 +15077,14 @@
         player.pao.daisuushi = discarderSeat;
       }
     }
+    // A ron that completes the set: the discarder of the winning tile is the liability. Money is unchanged on purpose
+    // (the ron branch only splits when the liability is somebody other than the discarder), but the 包 marker must be right.
+    recordPaoOnRon(player, discarderSeat, win) {
+      const names = Object.keys(win.yaku || {});
+      player.pao || (player.pao = {});
+      if (player.pao.daisangen == null && names.some((name) => name.includes("\u5927\u4E09\u5143"))) player.pao.daisangen = discarderSeat;
+      if (player.pao.daisuushi == null && names.some((name) => name.includes("\u5927\u56DB\u559C"))) player.pao.daisuushi = discarderSeat;
+    }
     paoYakumanUnits(player, win) {
       const yaku = win.yaku || {};
       let units = 0;
@@ -15324,6 +15334,7 @@
           { ...this.winOpts(p, true, card), ...extra }
         );
         if (!win.isAgari || !win.hasYaku) throw new Error(`\u975E\u6CD5\u8363\u548C seat=${seat}`);
+        this.recordPaoOnRon(p, loser, win);
         wins.set(seat, win);
       }
       this.rollbackRiichiDeclaration(donor);
@@ -15436,6 +15447,7 @@
         const rawWin = res.type === "tsumo" ? res.win : res.wins.get(winner);
         const paoSeat = this.paoSeatFor(winP, rawWin);
         const paoUnits = this.paoYakumanUnits(winP, rawWin);
+        if (paoSeat != null) winP.baoPaiWin = true;
         const paoTotal = paoUnits * (isDealerWin ? 48e3 : 32e3);
         const win = this.applyExtraFan(rawWin, extraFan, isDealerWin);
         if (res.type === "tsumo") {
@@ -15652,7 +15664,7 @@
           jingSuanScore: jing,
           jieBi: Math.round(jing * 100),
           changePT: rankResult?.change || 0,
-          isBaoPai: false,
+          isBaoPai: p.baoPaiWin === true,
           matchingScore: 0,
           isMatchingAward: false,
           lianZhuang: this.honba,
@@ -16013,6 +16025,11 @@
         this._timedOut = { kind: pending.kind, payload };
       }, timeoutMs);
     }
+    /** Hand 0 / draw 0 also covers the deal animation. The extra seconds are announced in `leftTimer` too: the client starts
+     *  its clock on the frame, so a server-only allowance would still let its own countdown run out during the entrance. */
+    _firstStartBonus(q) {
+      return q.isHuman && this.handIndex === 0 && q.discards.length === 0 ? FIRST_START_REDUNDANT_TIMEOUT : 0;
+    }
     waitHuman(kind) {
       const replayed = this._replayNext(kind === "draw" ? "d" : "c");
       if (replayed) {
@@ -16032,7 +16049,8 @@
         this._pending = pending;
         const buffered = kind === "draw" ? this._bufferedDraw : this._bufferedClaim;
         const total = this.baseTime + this.players[0].timeBank + grace;
-        this.note("wait", `\u7B49\u771F\u4EBA\u51B3\u7B56 ${kind}\uFF08\u73A9\u5BB6\u770B\u5230${this.baseTime + this.players[0].timeBank}s\uFF0C\u670D\u52A1\u7AEF\u7B49${total}s\uFF09` + (buffered != null ? "\uFF0C\u5DF2\u6709\u7F13\u5B58\u8BF7\u6C42\u76F4\u63A5\u6D88\u8D39" : ""));
+        const shown = this.baseTime + this.players[0].timeBank + (grace - SERVER_REDUNDANT_TIMEOUT);
+        this.note("wait", `\u7B49\u771F\u4EBA\u51B3\u7B56 ${kind}\uFF08\u73A9\u5BB6\u770B\u5230${shown}s\uFF0C\u670D\u52A1\u7AEF\u7B49${total}s\uFF09` + (buffered != null ? "\uFF0C\u5DF2\u6709\u7F13\u5B58\u8BF7\u6C42\u76F4\u63A5\u6D88\u8D39" : ""));
         if (buffered != null) {
           if (kind === "draw") this._bufferedDraw = null;
           else this._bufferedClaim = null;
@@ -19344,7 +19362,7 @@
         internalState: own ? internalState : {},
         initScore: folded.initScore,
         canAnGangNoNumCardsAfterRiichi: engine.riichiFutureAnkanKinds(p),
-        // Same convention as NtfGameStart: the seat's base time is announced inclusive of the server's redundant allowance.
+        // Same convention as NtfGameStart: the client's clock is DefaultMinTimeout (base phase) + leftTimer (bank).
         DefaultMinTimeout: own && pending ? Math.ceil(baseLeft) : state.defaultMinTimeout,
         ServerRedundantTimeOut: state.redundant,
         zhenTingTypes: engine.furitenTypes(p),
