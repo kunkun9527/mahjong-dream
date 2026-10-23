@@ -150,6 +150,7 @@
   }
 
   // ---------------- WebSocket hijack ----------------
+  var clientInstance = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
   var NativeWS = window.WebSocket;
   var gameSocket = null;
   function PatchedWS(url, protocols) {
@@ -187,7 +188,10 @@
       stats.recv++;
       recordFrame({ dir: 'recv', len: e.data && e.data.byteLength || 0, t: Date.now() });
     });
-    ws.addEventListener('open', function () { console.log('[offline] WS 已连接', url); });
+    ws.addEventListener('open', function () {
+      if (isGame) ws.send(JSON.stringify({ mjClientId: clientInstance }));
+      console.log('[offline] WS 已连接', url);
+    });
     ws.addEventListener('error', function (e) { console.warn('[offline] WS 错误', e.message || 'transport-error'); });
     ws.addEventListener('close', function (e) {
       if (window.__mjClock) window.__mjClock.disconnect(ws);

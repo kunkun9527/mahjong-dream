@@ -328,6 +328,7 @@
       this.riichi.resetClientSettings();
     }
     this.socket = socket;
+    this._canReload = false; this._clientIdentified = false;
     this.replaying = false;
     this._replayStarted = false;
     if (this._resyncTimer) { clearTimeout(this._resyncTimer); this._resyncTimer = null; }
@@ -357,6 +358,25 @@
       // The engine's emit must be able to push to the new WS. The riichi engine uses an emit callback, so the engine has to be rebuilt
       // Only keep the riichi reference here; Server.prototype.push then sends through the socket.
     }
+  };
+
+  /** Host-only messages are connection-scoped; they never enter the game's binary dispatcher. */
+  Session.prototype.clientControl = function (control, socket) {
+    if (!control || socket !== this.socket || socket.readyState !== OPEN) return false;
+    if (typeof control.mjClientId === 'string' && /^[a-z0-9-]{1,128}$/.test(control.mjClientId)) {
+      if (this._clientIdentified) return this._clientId === control.mjClientId;
+      this._canReload = this._tableClientId === control.mjClientId;
+      this._clientId = control.mjClientId; this._clientIdentified = true;
+      return true;
+    }
+    if (Number.isSafeInteger(control.mjClockReady)) {
+      var engine = this.riichi && this.riichi.engine;
+      if (!engine || this.replaying || this._needsResync || engine.humanClockState()?.id !== control.mjClockReady) return false;
+      var started = engine.markHumanReady(control.mjClockReady);
+      this._tableClientId = this._clientId;
+      return started;
+    }
+    return this.ackClientSync(control.mjSyncAck, socket);
   };
 
   /** Pack one downstream frame. extra: extra wrapper fields { fn: value } */
@@ -808,6 +828,7 @@
       matchLength: sess.table ? sess.table.matchLength : CONFIG.matchLength,
       replayLog: restore ? restore.log : null,
       humanPresent: restore ? restore.present : !!(sess.socket && sess.socket.readyState === OPEN && !sess._needsResync),
+      deferHumanClock: true,
       onHumanClock: function (clock) {
         if (typeof sess.onHumanClock === 'function') sess.onHumanClock(clock);
       },
@@ -915,7 +936,7 @@
     // Riichi: when a snapshot can be safely restored at the current cut point, put the position snapshot in f100 per the original protocol so the client takes the Reload path,
     // and then only the new frames after the cut point are sent; cut points such as the prepare phase, 0 tiles left, or the robbing-kan window still use a full-hand replay.
     var cut = -1;
-    if (live && !sess._replayStarted && sess.riichi && sess.riichi.reloadScene) {
+    if (live && sess._canReload && !sess._replayStarted && sess.riichi && sess.riichi.reloadScene) {
       var scene = sess.riichi.reloadScene(sess.handFrames);
       if (scene) {
         w.s(100, scene);
@@ -925,7 +946,8 @@
 
     if (live && !sess._replayStarted) {
       sess._replayStarted = true;
-      sess.beginClientSync(cut >= 0);
+      var pendingSync = sess.beginClientSync(cut >= 0);
+      pendingSync.waitingTable = !sess._canReload;
       stampLog('  [resync] 有进行中对局，回 TableInfo，' + (cut >= 0
         ? '附局面快照，只补发其后的新帧' : '准备重放本局 ' + sess.handFrames.length + ' 帧'));
       // After 20163 the official server actively pushes NtfPrepare/NtfGameStart to resync the match.
@@ -940,7 +962,20 @@
       if (sess._resyncTimer) { clearTimeout(sess._resyncTimer); sess._resyncTimer = null; }
       var cutFrames = sess.handFrames, syncSocket = sess.socket;
       setTimeout(function () {
-        if (sess.socket === syncSocket) replayHand(sess, sess.handFrames === cutFrames ? cut : 0);
+        if (sess.socket !== syncSocket || sess._clientSync !== pendingSync) return;
+        if (pendingSync.waitingTable) {
+          // A new Unity page is still in the lobby. Reuse the real table-entry handshake;
+          // never send GameStart/history until its own ReqPrepare proves the table loaded.
+          sess.push(20408, P.W().s(2, encTableInfo(sess, false)).bytes(), 1, null);
+          for (var seat = 0; seat < sess.table.robots.length; seat++) {
+            var robot = sess.table.robots[seat];
+            sess.push(20164, P.W().v(1, robot.uid).bytes(), 1, null);
+            sess.push(20014, P.W().s(1, encTableUser(seat + 1, robot, true)).v(2, sess.table.roomType || 7).bytes(), 1, null);
+          }
+          var prepareFrame = sess.handFrames.find(function (frame) { return frame[0] === RIICHI_NTF_TO_PREPARE; });
+          if (prepareFrame) sess.push(20018, encodeKRiichi(prepareFrame[0], prepareFrame[1]), 1, null);
+          stampLog('[resync] 新页面等待牌桌准备，再重放本局');
+        } else replayHand(sess, sess.handFrames === cutFrames ? cut : 0);
       }, 150);
     } else if (!live) {
       stampLog('  [resync] 无进行中对局');
@@ -976,6 +1011,7 @@
       return false;
     }
     this.cancelClientSync();
+    this._tableClientId = this._clientId;
     this.replaying = false; this._replayStarted = false;
     playerBack(this);
     if (socket._sync) socket._sync({ phase: 'complete', id: sync.id });
@@ -1043,7 +1079,7 @@
       }
       if (i >= sess.handFrames.length) {
         sync.index = i; sync.frames = sess.handFrames; sync.caught = true;
-        stampLog('  [resync] 重放已排队，共 ' + i + ' 帧，耗时 ' + (nowMs() - replayStart) + 'ms，计时仍冻结');
+        stampLog('  [resync] 重放已排队，历史进度 ' + i + '/' + sess.handFrames.length + ' 帧，耗时 ' + (nowMs() - replayStart) + 'ms，计时仍冻结');
         finishDelivery();
         return;
       }
@@ -1433,6 +1469,11 @@
     // Record this request's seq so the Rsp* frames the engine pushes synchronously can echo it (e.g. ReqPrepare -> RspPrepare)
     sess._reqSeq = seq || 0;
     r.handleClient(msgType, inner);
+    var sync = sess._clientSync;
+    if (msgType === 1 && sync && sync.waitingTable) {
+      sync.waitingTable = false;
+      replayHand(sess, 0);
+    }
     return [];
   };
 
@@ -1605,7 +1646,7 @@
       if (payload.length <= 1024) {
         try {
           var control = JSON.parse(payload);
-          if (control && control.mjSyncAck) { this._session.ackClientSync(control.mjSyncAck, this); return; }
+          if (control && (control.mjSyncAck || control.mjClientId || control.mjClockReady)) { this._session.clientControl(control, this); return; }
         } catch (e) { /* Non-control strings follow the original dispatch path. */ }
       }
       bytes = P.utf8(payload);

@@ -11,6 +11,7 @@
   var mode = window.__mjHostMode === 'node' ? 'node' : 'browser';
   var debug = new URLSearchParams(location.search).get('mjDebug') === '1';
   var diagnosticLines = [], pendingLines = [], diagnosticTimer = null;
+  var particleWarnings = new Set();
   var diagnosticFetch = window.fetch && window.fetch.bind(window);
   var diagnosticKey = 'mahjong-dream/diagnostics';
   try {
@@ -38,6 +39,13 @@
       // Unity/SDK progress stays in DevTools, not the diagnostic file. Unknown warnings/errors stay visible.
       if (!debug && ((name === 'log' && !/^\[(?:riichi|hand|discard|meld|kan|win|draw|clock|human|timeout|client|claim|clock-request|reload|resync|request|mock|local|offline|clock-bridge|web-host)\]/.test(first))
         || /^warning: \d+ FS\.syncfs operations in flight at once, probably just doing extra work$/.test(first))) return;
+      // Preserve the first asset warning, not one copy per particle emitter or reconnect.
+      var meshWarning = name === 'warn' && /^No mesh data available for mesh ([^\n]+) on particle system [^\n]+\. Make sure Read\/Write Enabled is set in the importer to work on the particle system renderer\s*$/.exec(first);
+      if (!debug && meshWarning) {
+        if (particleWarnings.has(meshWarning[1])) return;
+        if (particleWarnings.size >= 64) particleWarnings.delete(particleWarnings.values().next().value);
+        particleWarnings.add(meshWarning[1]);
+      }
       // Do not serialize arbitrary objects (which may contain whole saves or network payloads).
       var line = (new Date().toISOString() + ' [' + name + '] ' + args.map(function (arg) {
         return arg && arg.stack ? arg.stack : String(arg);
@@ -152,6 +160,7 @@
       };
       mj.server.onSessionCreated = function (session) {
         currentSession = session;
+        session.onHumanClock = function (clock) { if (window.__mjClock) window.__mjClock.accept(clock); };
         host.attach(session);
         if (!resumePending) return;
         resumePending = false;

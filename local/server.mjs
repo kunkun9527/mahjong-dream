@@ -335,7 +335,7 @@ websocketServer.on('connection', (websocket) => {
   websocket.on('message', (data, isBinary) => {
     if (!isBinary) {
       if (data.length <= 1024) {
-        try { session.ackClientSync(JSON.parse(data.toString()).mjSyncAck, adapter); }
+        try { session.clientControl(JSON.parse(data.toString()), adapter); }
         catch { /* Invalid control messages never enter the binary dispatcher. */ }
       }
       return;

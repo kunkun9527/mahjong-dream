@@ -79,6 +79,20 @@ test('默认不写 Unity/SDK 普通输出，关键链路及未知警告错误仍
   assert.doesNotMatch(context.__mjHost.diagnosticText(), /Unloading|PhysX|FS.syncfs/);
 });
 
+test('粒子缺网格警告每种网格保留首次，不重复淹没恢复日志；未知警告和错误不去重', async (t) => {
+  const { context } = page(t);
+  await context.__mjHost.ready;
+  const warning = (mesh, n) => 'No mesh data available for mesh ' + mesh + ' on particle system Particle System (' + n + '). Make sure Read/Write Enabled is set in the importer to work on the particle system renderer';
+  for (let i = 0; i < 100; i++) context.console.warn(warning('Cylinder002', i));
+  context.console.warn(warning('differentMesh', 1));
+  for (let i = 0; i < 3; i++) { context.console.warn('unknown warning'); context.console.error(warning('Cylinder002', 0)); }
+  const text = context.__mjHost.diagnosticText();
+  assert.equal(text.split('[warn]').length - 1, 5);
+  assert.equal(text.split('[error]').length - 1, 3);
+  assert.match(text, /Cylinder002/);
+  assert.match(text, /differentMesh/);
+});
+
 test('Node导出不重复附加已落盘的页面记录，尚未上传的异常仍可导出', async (t) => {
   const { context, requests } = page(t);
   await context.__mjHost.ready;

@@ -46,6 +46,7 @@ test('立直同进程重连：20163.f100 携带当前局面快照，客户端不
   });
   const ws = socket();
   session.resume(ws);
+  session.clientControl({ mjClientId: 'original-page' }, ws);
   const match = P.W().v(1, 4001).v(3, 7).v(4, 1).v(6, 1).bytes();
   mock.dispatch(session, P.W().v(2, 20403).v(11, 1).s(3, P.W().s(1, match).bytes()).bytes());
   await until(() => session.riichi?.engine);
@@ -54,7 +55,9 @@ test('立直同进程重连：20163.f100 携带当前局面快照，客户端不
   const engine = session.riichi.engine;
   await until(() => engine._pending && engine._expectedDraw);
 
-  assert.equal(clocks.at(-1).running, true, "宿主收到同一个引擎的活动窗口投影");
+  assert.equal(clocks.at(-1).running, false, "尚未拿到牌，不提前扣时");
+  assert.equal(session.clientControl({ mjClockReady: engine.humanClockState().id }, ws), true);
+  assert.equal(clocks.at(-1).running, true, "客户端确认可操作后才起表");
   ws.readyState = 3;
   session.suspend();
   const frozenClock = engine.humanClockState();
@@ -62,6 +65,8 @@ test('立直同进程重连：20163.f100 携带当前局面快照，客户端不
   assert.equal(frozenClock.running, false);
   const ws2 = socket();
   session.resume(ws2);
+  session.clientControl({ mjClientId: 'original-page' }, ws2);
+  assert.equal(session.clientControl({ mjClientId: 'stale-page' }, ws), false, '旧连接不能更改恢复上下文');
   assert.equal(engine.humanPresent, false, "接上 WebSocket 仍须冻结");
   session.updateHumanPresence();
   assert.equal(engine.humanPresent, false, "连接存在也不能越过同步门禁");
@@ -93,14 +98,20 @@ test('立直同进程重连：20163.f100 携带当前局面快照，客户端不
   assert.ok(!events.includes(RiichiMsg.ENtfGameStart) && !events.includes(RiichiMsg.ENtfToPrepare),
     `快照后不重放开局帧：${events}`);
 
-  // The unsupported-snapshot path must obey the same gate, including the async final push.
+  // A fresh page has no Unity table to reload. It must rebuild through the full-hand replay, even at a snapshot-capable cut.
   session.suspend(); ws2.readyState = 3;
-  session.riichi.reloadScene = () => null;
   const ws3 = socket(), presenceAtDelivery = [];
   const deliver = ws3._deliver;
   ws3._deliver = (bytes) => { presenceAtDelivery.push(engine.humanPresent); deliver(bytes); };
   session.resume(ws3);
-  mock.dispatch(session, P.W().v(2, 20162).v(11, 4).s(3, new Uint8Array()).bytes());
+  session.clientControl({ mjClientId: 'new-page' }, ws3);
+  const cold = mock.dispatch(session, P.W().v(2, 20162).v(11, 4).s(3, new Uint8Array()).bytes()).map(bytes => P.dict(bytes));
+  assert.equal(P.dict(cold[0][3])[100], undefined, '新页面不能走只适用于已加载牌桌的快照Reload');
+  await until(() => riichiEvents(ws3.frames).includes(RiichiMsg.ENtfToPrepare));
+  assert.ok(ws3.frames.some(frame => frame[2] === 20408), '新页面重新走已存在的进桌流程');
+  assert.ok(!riichiEvents(ws3.frames).includes(RiichiMsg.ENtfGameStart), '客户端还没进入牌桌时不能投递历史开牌帧');
+  assert.equal(engine.humanPresent, false);
+  mock.dispatch(session, P.W().v(2, 20018).v(11, 5).s(3, prepare).bytes());
   await until(() => ws3.controls.some((message) => message.phase === 'end'));
   assert.ok(presenceAtDelivery.length > 0);
   assert.ok(presenceAtDelivery.every((present) => !present), '重放末帧投递前后都不提前解冻');

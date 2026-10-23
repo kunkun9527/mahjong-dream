@@ -12,7 +12,7 @@ const bytes = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]);
 function page(mode = 'node') {
   let now = 0, engineState = null, imports;
   const listeners = new Map(), paints = [];
-  const manifest = { v: 2, sourceHash, wasmHash: hash(bytes), codeFile: 'mj-h5.clock-' + hash(bytes).slice(0, 16) + '.wasm.unityweb' };
+  const manifest = { v: 3, sourceHash, wasmHash: hash(bytes), codeFile: 'mj-h5.clock-' + hash(bytes).slice(0, 16) + '.wasm.unityweb' };
   const instantiate = async (_bytes, received) => { imports = received; return { instance: { exports: {} }, module: {} }; };
   const context = vm.createContext({
     console: { log() {}, error() {} }, performance: { now: () => now }, crypto: webcrypto,
@@ -76,7 +76,7 @@ test('静态宿主直接读取当前引擎；WASM三次读取使用同一毫秒�
   assert.equal(clock(1), 3);
   assert.equal(clock(2), 21, '总剩余向上取整一次，不能分段取整再相加');
   assert.equal(clock(0), 1);
-  assert.equal(clock(1), 5);
+  assert.equal(clock(1), 0, '无备用时走原生临时倒数分支');
   assert.equal(clock(2), 5);
   app.engine(null);
   assert.equal(clock(0), 0);
@@ -90,15 +90,74 @@ for (const mode of ['node', 'browser']) {
     const publish = (state) => mode === 'browser' ? app.engine(state) : app.bridge.accept(state);
     for (const [id, baseMs, extraMs, base, total] of [
       [1, 8000, 20000, 8, 28], [2, 5000, 18000, 5, 23],
-      [3, 5000, 0, 5, 5], [3, 2999, 0, 3, 3],
+      [3, 5000, 0, 0, 5], [3, 2999, 0, 0, 3],
     ]) {
       publish({ id, baseMs, extraMs, running: true });
       assert.equal(imports.mj.clock(0), 1);
       assert.equal(imports.mj.clock(1), base);
       assert.equal(imports.mj.clock(2), total);
+      assert.equal(app.bridge.current().baseMs, baseMs, '显示分支不得改动真实基础时间');
     }
   });
 }
+
+for (const mode of ['node', 'browser']) {
+  test(mode + '只在原生倒计时真正启用并绘制后确认可操作，重复、断线和旧窗回调无效', async () => {
+    const app = page(mode);
+    const { imports } = await app.load();
+    const sent = [], ws = { readyState: 1, send: (value) => sent.push(JSON.parse(value)) };
+    app.bridge.connect(ws);
+    const publish = state => mode === 'node' ? app.bridge.accept(state) : app.engine(state);
+    publish({ id: 1, baseMs: 8000, extraMs: 20000, running: false });
+    imports.mj.clock(0); app.paint(); app.paint();
+    assert.equal(sent.length, 0, '单纯每帧读取投影不是手牌就绪信号');
+    imports.mj.sync(7, 1234);
+    app.paint(); app.paint();
+    assert.equal(sent.length, 0, '手牌呈现队列未完成时不能起表');
+    imports.mj.sync(2, 1);
+    app.paint(); assert.equal(sent.length, 0);
+    app.paint(); assert.deepEqual(sent, [{ mjClockReady: 1 }]);
+    imports.mj.sync(7, 1234); app.paint(); app.paint();
+    assert.equal(sent.length, 1);
+    publish({ id: 2, baseMs: 5000, extraMs: 0, running: false });
+    imports.mj.sync(7, 1234);
+    publish({ id: 3, baseMs: 5000, extraMs: 0, running: false });
+    app.paint(); app.paint();
+    assert.equal(sent.length, 1, '旧窗口的绘制任务不得确认新窗口');
+    imports.mj.sync(7, 1234);
+    app.bridge.disconnect(ws); app.paint(); app.paint();
+    assert.equal(sent.length, 1, '旧连接的绘制任务失效');
+  });
+}
+
+for (const mode of ['node', 'browser']) {
+  test(mode + '后台新窗口不等待被冻结的动画帧；切后台也不让尚未起表窗口停住', async () => {
+    const app = page(mode); await app.load();
+    const sent = [], ws = { readyState: 1, send: value => sent.push(JSON.parse(value)) };
+    app.bridge.connect(ws);
+    const publish = state => { if (mode === 'browser') app.engine(state); app.bridge.accept(state); };
+    publish({ id: 1, baseMs: 8000, extraMs: 20000, running: false });
+    assert.equal(sent.length, 0);
+    app.hide();
+    assert.deepEqual(sent, [{ mjClockReady: 1 }], '后台不等待原生绘制或rAF');
+    publish({ id: 2, baseMs: 5000, extraMs: 17000, running: false });
+    assert.deepEqual(sent.at(-1), { mjClockReady: 2 });
+    publish({ id: 2, baseMs: 5000, extraMs: 17000, running: false });
+    assert.equal(sent.length, 2, '重复投影只确认一次');
+    app.bridge.disconnect(ws);
+    publish({ id: 3, baseMs: 5000, extraMs: 17000, running: false });
+    assert.equal(sent.length, 2, '真实断线仍然冻结');
+  });
+}
+
+test('备用耗尽的5秒保留服务端基础时限，但原生显示强制进入临时倒计时分支', async () => {
+  const app = page(); const { imports } = await app.load();
+  app.bridge.accept({ id: 1, baseMs: 5000, extraMs: 0, running: true });
+  assert.equal(imports.mj.clock(0), 1);
+  assert.equal(imports.mj.clock(1), 0, '不能继续走基础色分支');
+  assert.equal(imports.mj.clock(2), 5);
+  assert.equal(app.bridge.current().baseMs, 5000, '只改变原生显示分支，不扣除真正的基础时间');
+});
 
 test('拒绝未知构建、损坏派生文件和无效时钟投影，不静默降级原客户端', async () => {
   const app = page();
@@ -160,6 +219,23 @@ test('重放投递结束不代表Unity已消费：最后一帧、渲染队列和
   imports.mj.sync(2, 1);
   app.paint(); app.paint();
   assert.equal(sent.length, 1, '同一批次只确认一次');
+});
+
+test('恢复必须等真实手牌倒计时启用，不能在客户端仍处大厅时仅凭消费和空闲确认', async () => {
+  const app = page(); const { imports } = await app.load();
+  const sent = [], ws = { readyState: 1, send: value => sent.push(JSON.parse(value)) };
+  app.bridge.connect(ws);
+  app.bridge.accept({ id: 1, baseMs: 8000, extraMs: 20000, running: false });
+  app.bridge.synchronize({ phase: 'start', id: 'cold', reload: false }, ws);
+  app.bridge.synchronize({ phase: 'end', id: 'cold', counter: 42 }, ws);
+  imports.mj.sync(1, 42); imports.mj.sync(2, 1);
+  app.paint(); app.paint();
+  assert.equal(sent.length, 0, '大厅的包消费和空闲不是牌桌恢复完成');
+  imports.mj.sync(7, 1234); app.paint(); app.paint();
+  assert.deepEqual(sent, [{ mjSyncAck: { id: 'cold', counter: 42 } }]);
+  app.bridge.synchronize({ phase: 'complete', id: 'cold' }, ws);
+  app.paint(); app.paint();
+  assert.deepEqual(sent.at(-1), { mjClockReady: 1 });
 });
 
 test('快照必须等待原Unity退出Reload状态；后台和旧连接不能提交恢复确认', async () => {

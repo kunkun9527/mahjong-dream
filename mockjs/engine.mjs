@@ -91,6 +91,7 @@ var GameEngine = class {
     this.humanLog = [];
     this.onRecord = opts.onRecord || null;
     this.onHumanClock = opts.onHumanClock || null;
+    this.deferHumanClock = !!opts.deferHumanClock;
     // Replay: feed a saved log back at speed 0; when it runs out the engine goes live at the next human wait.
     this._replay = Array.isArray(opts.replayLog) && opts.replayLog.length ? opts.replayLog.slice() : null;
     this.replaying = !!opts.replayLog;
@@ -126,7 +127,7 @@ var GameEngine = class {
       this._freezeHumanClock();
       if (pending?.timer) { clearTimeout(pending.timer); pending.timer = null; }
     } else {
-      if (this._humanClock && this._humanClock.runningSince == null && !this._bufferedDraw && !this._bufferedClaim) {
+      if (this._humanClock?.ready && this._humanClock.runningSince == null && !this._bufferedDraw && !this._bufferedClaim) {
         this._humanClock.runningSince = Date.now();
       }
       if (pending && !pending.timer && !this.autoHuman) {
@@ -141,10 +142,22 @@ var GameEngine = class {
     this._humanClock = {
       id: ++this._windowId, kind, base,
       bank: Number.isFinite(this.players[0].timeBank) ? this.players[0].timeBank : this.extraTime,
-      elapsedMs: 0, runningSince: this.humanPresent ? Date.now() : null,
+      ready: !this.deferHumanClock || this.autoHuman,
+      elapsedMs: 0, runningSince: this.humanPresent && (!this.deferHumanClock || this.autoHuman) ? Date.now() : null,
     };
     this._publishHumanClock();
     this.note("clock", JSON.stringify({ event: "open", ...this.humanTime() }), true);
+  }
+  /** The native HUD, not the network announcement, defines when this decision is playable. */
+  markHumanReady(id) {
+    const clock = this._humanClock;
+    if (!clock || clock.id !== id || clock.ready || !this.humanPresent || this.finished || this.replaying) return false;
+    clock.ready = true;
+    clock.runningSince = Date.now();
+    this._publishHumanClock();
+    if (this._pending && !this._pending.timer) this._armHumanTimer(this._pending);
+    this.note("clock", JSON.stringify({ event: "playable", ...this.humanTime() }), true);
+    return true;
   }
   _freezeHumanClock() {
     const clock = this._humanClock;
@@ -2091,6 +2104,7 @@ var GameEngine = class {
     pending.resolve(payload || {});
   }
   _armHumanTimer(pending) {
+    if (!this._humanClock?.ready) return;
     const time = this.humanTime();
     this.note("clock", JSON.stringify({ event: "arm", ...time, deadline: Date.now() + time.timeoutMs }), true);
     pending.timer = setTimeout(() => {

@@ -19,6 +19,42 @@ function drawWindow(t, opts = {}) {
   return engine;
 }
 
+for (const honba of [0, 1]) {
+  test('庄家' + (honba ? '连庄' : '首局') + '发牌期间不扣时，客户端真正启用倒计时后才获得完整8+20', async (t) => {
+    t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
+    const engine = new GameEngine({ players: 4, speed: 0, seed: 777, deferHumanClock: true });
+    engine.honba = honba;
+    engine.awaitTurn = async () => {};
+    t.after(() => { engine.finished = true; engine.submitPrepare(); engine.cancelPending(); });
+    const hand = engine.runHand();
+    await flush(); engine.submitPrepare(); await hand;
+    const id = engine.humanClockState().id;
+    const turn = engine.waitHuman('draw');
+    t.mock.timers.tick(30_000);
+    assert.deepEqual(engine.humanClockState(), { id, baseMs: 8000, extraMs: 20000, running: false });
+    assert.equal(engine.markHumanReady(id + 1), false, '旧或未来窗口不能起表');
+    engine.setHumanPresent(false);
+    assert.equal(engine.markHumanReady(id), false, '真实断线时不能起表');
+    engine.setHumanPresent(true);
+    assert.equal(engine.humanClockState().running, false, '连接恢复不代替可操作确认');
+    assert.equal(engine.markHumanReady(id), true);
+    assert.deepEqual(engine.humanClockState(), { id, baseMs: 8000, extraMs: 20000, running: true });
+    t.mock.timers.tick(3000);
+    assert.equal(engine.markHumanReady(id), false, '重复确认不能重置计时');
+    assert.equal(engine.humanClockState().baseMs, 5000);
+    t.mock.timers.tick(5000);
+    assert.equal(engine.humanClockState().extraMs, 20000);
+    t.mock.timers.tick(20_000 + 3000);
+    await turn;
+    assert.equal(engine.players[0].timeBank, 0);
+    engine.expectDraw(0, true, [PlayAction.Normal]);
+    assert.equal(engine.humanClockState().baseMs, 5000);
+    assert.equal(engine.markHumanReady(id), false, '上一窗口的迟到确认不能启动下一巡');
+    assert.equal(engine.humanClockState().running, false);
+    assert.equal(engine.markHumanReady(engine.humanClockState().id), true);
+  });
+}
+
 test('宿主投影发布开窗、精确冻结、续时和清理，不包含网络宽限', async (t) => {
   const states = [];
   const engine = drawWindow(t, { onHumanClock: (state) => states.push(state) });

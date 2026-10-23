@@ -14129,6 +14129,7 @@
       this.humanLog = [];
       this.onRecord = opts.onRecord || null;
       this.onHumanClock = opts.onHumanClock || null;
+      this.deferHumanClock = !!opts.deferHumanClock;
       this._replay = Array.isArray(opts.replayLog) && opts.replayLog.length ? opts.replayLog.slice() : null;
       this.replaying = !!opts.replayLog;
       this._liveSpeed = this.speed;
@@ -14165,7 +14166,7 @@
           pending.timer = null;
         }
       } else {
-        if (this._humanClock && this._humanClock.runningSince == null && !this._bufferedDraw && !this._bufferedClaim) {
+        if (this._humanClock?.ready && this._humanClock.runningSince == null && !this._bufferedDraw && !this._bufferedClaim) {
           this._humanClock.runningSince = Date.now();
         }
         if (pending && !pending.timer && !this.autoHuman) {
@@ -14182,11 +14183,23 @@
         kind,
         base: base2,
         bank: Number.isFinite(this.players[0].timeBank) ? this.players[0].timeBank : this.extraTime,
+        ready: !this.deferHumanClock || this.autoHuman,
         elapsedMs: 0,
-        runningSince: this.humanPresent ? Date.now() : null
+        runningSince: this.humanPresent && (!this.deferHumanClock || this.autoHuman) ? Date.now() : null
       };
       this._publishHumanClock();
       this.note("clock", JSON.stringify({ event: "open", ...this.humanTime() }), true);
+    }
+    /** The native HUD, not the network announcement, defines when this decision is playable. */
+    markHumanReady(id) {
+      const clock = this._humanClock;
+      if (!clock || clock.id !== id || clock.ready || !this.humanPresent || this.finished || this.replaying) return false;
+      clock.ready = true;
+      clock.runningSince = Date.now();
+      this._publishHumanClock();
+      if (this._pending && !this._pending.timer) this._armHumanTimer(this._pending);
+      this.note("clock", JSON.stringify({ event: "playable", ...this.humanTime() }), true);
+      return true;
     }
     _freezeHumanClock() {
       const clock = this._humanClock;
@@ -16064,6 +16077,7 @@
       pending.resolve(payload || {});
     }
     _armHumanTimer(pending) {
+      if (!this._humanClock?.ready) return;
       const time = this.humanTime();
       this.note("clock", JSON.stringify({ event: "arm", ...time, deadline: Date.now() + time.timeoutMs }), true);
       pending.timer = setTimeout(() => {
@@ -20008,6 +20022,7 @@
         replayLog: opts.replayLog || null,
         humanPresent: opts.humanPresent !== false,
         onHumanClock: opts.onHumanClock || null,
+        deferHumanClock: !!opts.deferHumanClock,
         debug: !!opts.debug
       };
       this.onRecord = opts.onRecord || (() => {
@@ -20089,6 +20104,7 @@
         selfLoveLevel: o.selfLoveLevel,
         replayLog: o.replayLog,
         humanPresent: o.humanPresent,
+        deferHumanClock: o.deferHumanClock,
         onHumanClock: (clock) => {
           if (!eng.replaying && o.onHumanClock) o.onHumanClock(clock);
         },

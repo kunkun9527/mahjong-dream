@@ -43,6 +43,8 @@ try {
       patched = patched.replace('    (local $l3 i32)', '    (local $mj.packets i32) (local $l3 i32)')
         .replace('    global.get $g0\n', '    local.get $p1\n    local.set $mj.packets\n    global.get $g0\n');
     }
+    // Native InitCountDown is the real playable-hand boundary, not receipt of NtfGameStart.
+    if (id === 39470) patched = patched.replace('    global.set $g0)', '    global.set $g0\n    i32.const 7\n    local.get $p0\n    call $mj.sync)');
     // Reload dispatch uses HybridCLR: observe the real native state machine, not an unused AOT async clone.
     if (id === 35819) patched = patched.replace(needle + ')', needle + '\n    i32.const 6\n    i32.const 0\n    call $mj.sync)');
     if (id === 4571) {
@@ -173,7 +175,7 @@ try {
     throw new Error('Invalid Unity Brotli artifact');
   }
   fs.writeFileSync(path.join(root, 'Build_intl', codeFile), compressed);
-  const manifest = { v: 2, sourceHash: expected, wasmHash, compressedHash: hash(compressed), codeFile };
+  const manifest = { v: 3, sourceHash: expected, wasmHash, compressedHash: hash(compressed), codeFile };
   fs.writeFileSync(path.join(root, 'Build_intl/mj-h5.clock.json'), JSON.stringify(manifest, null, 2) + '\n');
   console.log(JSON.stringify(manifest, null, 2));
 } finally { fs.rmSync(temp, { recursive: true, force: true }); }

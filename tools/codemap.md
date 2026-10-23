@@ -5,7 +5,7 @@
 
 ## Key files
 - `extract_economy_config.py` — 段位 PT 表、四类商店、一局战奖励 → `mockjs/economy_catalog.mjs`。
-- `build_clock_client.mjs` + `compile_clock_wat.py` — `npm run build:clock`：校验原 `mj-h5.wasm.unityweb` 哈希，插入倒计时投影 `mj.clock` 与消费/渲染/Reload 状态 `mj.sync` 钩子，生成派生 WASM 与 v2 `mj-h5.clock.json`（ADR 0009）。原件哈希不符或钩子位置不唯一时直接失败。
+- `build_clock_client.mjs` + `compile_clock_wat.py` — `npm run build:clock`：核验原件哈希，插入 `mj.clock` 投影/可操作信号、原生单数字颜色分支及 `mj.sync` 消费/渲染/Reload 钩子，生成派生 WASM 和 v3 清单（ADR 0009）；原件或钩子不匹配直接失败。
 - `ai_benchmark.mjs` — 立直 AI 固定种子对战基准；三/四麻每种子 6 种均衡布局，按种子聚类并输出 JSON/CSV、分座位统计和慢决策上下文。`node tools/ai_benchmark.mjs advanced intermediate 40`；新旧对照用 `advanced old:advanced` 加 `--baseline=旧工作树`，入口和鸣牌 helper 同步分派。方法/复现见 ADR 0006，不是数据提取脚本。
 
 ## Flow

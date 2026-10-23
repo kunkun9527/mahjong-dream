@@ -63,6 +63,7 @@ var RiichiSession = class {
       replayLog: opts.replayLog || null,
       humanPresent: opts.humanPresent !== false,
       onHumanClock: opts.onHumanClock || null,
+      deferHumanClock: !!opts.deferHumanClock,
       debug: !!opts.debug
     };
     // Called with the full record after every human decision (and once when the engine starts)
@@ -145,6 +146,7 @@ var RiichiSession = class {
       selfLoveLevel: o.selfLoveLevel,
       replayLog: o.replayLog,
       humanPresent: o.humanPresent,
+      deferHumanClock: o.deferHumanClock,
       onHumanClock: (clock) => { if (!eng.replaying && o.onHumanClock) o.onHumanClock(clock); },
       // While replaying, the saved record is still the complete one; publish again only once the replay has caught up.
       onRecord: () => {

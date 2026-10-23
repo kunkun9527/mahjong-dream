@@ -8,7 +8,7 @@
 - `start-game.bat` / `local/launcher.mjs` — 启动服务并打开浏览器。
 - `local/server.mjs` — HTTP + WebSocket 服务，装载 `mock/` 兼容层。
 - `host-mode.js` + `web-host.js` — 宿主判定；浏览器内加载后端与 `localStorage` 存档，或转发 Node 的 `/api/profile`。`modifier.js` — 右侧 ⚙ 存档修改器。
-- `clock-bridge.js` — 校验并加载哈希固定的派生计时 WASM（`Build_intl/mj-h5.clock*.`），把引擎权威剩余时间交给原客户端倒计时，且在 Unity 消费/渲染/Reload 完成后确认当前连接的同步批次（ADR 0009）。
+- `clock-bridge.js` — 校验加载哈希固定的 v3 派生 WASM，投影权威时间、确认原生手牌可操作后起表，并在 Unity 消费/渲染/Reload 完成后确认当前连接的恢复批次（ADR 0009）。
 - `game.html` + `offline-patch.js` — Unity 入口与离线补丁（WebSocket 指向本机或页内 `FakeWebSocket`、拦截外网请求、资源按子路径解析）；始终加载 `Build_intl/`，启动前修复旧 PlayerPrefs 错误配额、默认同意条款，仅在未选语言时设为英文。
 - `mock/server.js` — 全部消息处理器。
 - `mockjs/engine.mjs` — 立直权威引擎。

@@ -217,12 +217,19 @@ test('页面重载：从记录重建对局，20162 等重演完成后回到同�
   await until(() => ws.frames.some((f) => f[2] === 20163));
   const reply = P.dict(ws.frames.find((f) => f[2] === 20163)[3]);
   assert.ok(reply[4], '20163 带牌桌');
+  assert.equal(reply[100], undefined, '新页面先进入牌桌，再整手重放');
+  await until(() => ws.frames.some(f => f[2] === 20408));
+  const prepare = P.W().v(1, RiichiMsg.EReqPrepare).v(3, Date.now()).s(100, new Uint8Array()).bytes();
+  mock.dispatch(restored, P.W().v(2, 20018).v(11, 4).s(3, prepare).bytes());
   await until(() => ws.controls.some((message) => message.phase === 'end'));
   assert.equal(restored.replaying, true, '发完恢复快照不是客户端已消费完成');
   assert.equal(engine2.humanPresent, false);
   assert.equal(restored.ackClientSync(ws.controls.find((message) => message.phase === 'end'), ws), true);
   assert.equal(restored.replaying, false);
-  assert.equal(engine2.humanPresent, true, '客户端同步后恢复计时');
+  assert.equal(engine2.humanPresent, true, '客户端同步后恢复在线');
+  assert.equal(engine2.humanClockState().running, false, '重建窗口仍等待手牌可操作信号');
+  assert.equal(restored.clientControl({ mjClockReady: engine2.humanClockState().id }, ws), true);
+  assert.equal(engine2.humanClockState().running, true);
   restored.destroy();
 });
 
