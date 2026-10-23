@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GameEngine } from '../mockjs/engine.mjs';
-import { PlayAction, Result, RiichiMsg } from '../mockjs/proto_enum.mjs';
+import { PlayAction, Result, RiichiMsg, LiuJuType } from '../mockjs/proto_enum.mjs';
 
 function claimWindow(timeBank) {
   const engine = new GameEngine({ players: 3, speed: 0 });
@@ -20,10 +20,10 @@ function claimWindow(timeBank) {
 }
 
 for (const bank of [0, 20]) {
-  test(`鸣牌延长时间剩余 ${bank} 秒时，仍完整等待基础 5 秒再自动过`, async (t) => {
+  test(`鸣牌延长时间剩余 ${bank} 秒时，完整等完基础 5 秒加 3 秒服务端宽限再自动过`, async (t) => {
     t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
     const { engine, done, nextDraws } = claimWindow(bank);
-    const duration = (5 + bank) * 1_000;
+    const duration = (8 + bank) * 1_000;
     t.mock.timers.tick(duration - 1);
     await Promise.resolve();
     assert.ok(engine._expectedClaim);
@@ -52,6 +52,19 @@ test('延长时间耗尽后，基础时间最后一毫秒仍能提交碰牌', as
   assert.equal(engine.players[0].timeBank, 0);
 });
 
+test('客户端自己倒计时结束前后提交的碰仍被受理，服务端宽限不额外扣备用时间', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
+  const { engine, done } = claimWindow(0);
+  let claim;
+  engine.executeClaim = async (...args) => { claim = args; return Result.Succ; };
+  // 客户端显示的基础时间是 5 秒：最后一眼点下去的请求会晚到一点，服务端必须还在等。
+  t.mock.timers.tick(5_400);
+  assert.equal(engine.submitClaim({ action: PlayAction.Peng, otherCards: [451, 452] }), Result.Succ);
+  await done;
+  assert.deepEqual(claim, [0, PlayAction.Peng, 453, 1, [451, 452]]);
+  assert.equal(engine.players[0].timeBank, 0, '宽限是往返容差，不算玩家的思考时间');
+});
+
 test('鸣牌者二次校验没通过时：不卡住牌桌，按空窗口收尾并轮到下一家', async (t) => {
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
   const { engine, done, nextDraws } = claimWindow(0);
@@ -78,6 +91,22 @@ test('鸣牌基础时间内手动过不扣延长时间，且不会残留超时�
   assert.equal(nextDraws(), 1);
 });
 
+test('途中流局丢弃残留的真人窗口，备用时间不会被下一局扣掉', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
+  const { engine } = claimWindow(20);
+  t.mock.timers.tick(3_000);
+  engine.finishHand = async () => {};
+  engine.recordHumanHandStats = () => {};
+  engine.buildStopUserInfos = () => [];
+  engine.doraIndicators = [];
+  engine.players = engine.players.map((p) => ({ melds: [], waits: [], riichi: false, score: 25_000, drawnTile: null, ...p }));
+  await engine.endHand({ type: 'draw', liuJuType: LiuJuType.JiuZhongJiuPai, tenpai: [false, false, false], noPenalty: true });
+  assert.equal(engine._pending, null, '流局后不能留下会触发的窗口计时');
+  assert.equal(engine._expectedClaim, null);
+  t.mock.timers.tick(60_000);
+  assert.equal(engine.players[0].timeBank, 20, '玩家没用完的备用时间不应该被残留计时扣走');
+});
+
 test('鸣牌使用延长时间只扣本次超出基础 5 秒的部分', async (t) => {
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
   const { engine, done } = claimWindow(20);
@@ -90,7 +119,10 @@ test('鸣牌使用延长时间只扣本次超出基础 5 秒的部分', async (t
 test('服务端超时跳过后，迟到的 Pass 只回成功：不再推进、不扣时、不记录；迟到的碰仍失败', async (t) => {
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
   const { engine, done, nextDraws } = claimWindow(0);
-  t.mock.timers.tick(5_000);
+  t.mock.timers.tick(7_999);
+  await Promise.resolve();
+  assert.ok(engine._expectedClaim, '客户端倒计时结束后时还要等满服务端宽限');
+  t.mock.timers.tick(1);
   await done;
   assert.equal(nextDraws(), 1);
   const logged = engine.humanLog.length;
@@ -126,7 +158,8 @@ test('服务端超时摸切后，迟到的同一张摸切只回成功，打别�
   }));
   engine.expectDraw(0, true, [PlayAction.Normal]);
   const turn = engine.waitHuman('draw');
-  t.mock.timers.tick(5_000);
+  // First decision of a match: base 5 + the 3s allowance + 8 more for the deal/join animation.
+  t.mock.timers.tick(16_000);
   assert.deepEqual(await turn, { action: PlayAction.Normal, card: drawn });
   const logged = engine.humanLog.length;
   assert.equal(engine.submitDraw({ action: PlayAction.Normal, card: drawn, isTimeout: true }), Result.Succ);

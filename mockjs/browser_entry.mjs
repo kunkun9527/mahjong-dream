@@ -201,7 +201,8 @@ var RiichiSession = class {
         const e = this.ensureEngine();
         if (!e) return;
         const result = e.submitDraw(payload);
-        this.log(`[client] <- ReqPlayCard action=${payload?.action} card=${payload?.card ? tileName(payload.card) : "-"} -> ${result}`);
+        this.log(`[client] <- ReqPlayCard action=${payload?.action} card=${payload?.card ? tileName(payload.card) : "-"}` +
+          ` timeout=${payload?.isTimeout ? 1 : 0} -> ${result}`);
         this.send(RiichiMsg.ERspPlayCard, { result });
         break;
       }

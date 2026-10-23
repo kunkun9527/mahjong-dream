@@ -131,3 +131,20 @@ test('个人连续连庄独立于继承本场并在轮庄时清零', async () =>
   assert.equal(engine.matchStats.maxRenchan, 1);
   assert.equal(finalStats.maxRenchan, 1);
 });
+
+test('听牌提示在别人行动时也带着自己的听牌信息（13 张手牌）', () => {
+  const engine = drawEngine();
+  const human = engine.players[0];
+  // 123m456m789m 11p 34p，听 2p/5p
+  human.hand = [110, 120, 130, 140, 150, 160, 170, 180, 190, 210, 211, 230, 240];
+  human.isHuman = true;
+  human.discardKinds = new Set();
+  human.waits = [];
+
+  assert.deepEqual(engine.buildTingInfos(human).map((i) => i.ting), [220, 250], '13 张手牌也要给出听牌');
+  assert.deepEqual(engine.buildTingInfos(human, 250).map((i) => i.play), [250, 250], 'play 用刚打出的牌做牌种编码');
+
+  const playCard = engine.buildPlayCard(1, 250, 0, false, []);
+  assert.deepEqual(playCard.userInfos[0].tingInfos.map((i) => i.ting), [220, 250], '别人打牌时不下发听牌信息，客户端右侧提示会被清空');
+  assert.equal(playCard.userInfos[1].tingInfos.length, 0, '不下发他人的暗手信息');
+});

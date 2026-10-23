@@ -101,7 +101,7 @@ test('共享备用时间按实际超出 5 秒的部分扣减，耗尽后下次�
   done = f.discard();
   await flush();
   assert.equal(f.frames.filter((frame) => frame.type === RiichiMsg.ENtfPlayCard).at(-1).payload.userInfos[0].leftTimer, 17);
-  t.mock.timers.tick(21_999);
+  t.mock.timers.tick(24_999);
   await flush();
   assert.equal(f.nextDraws.length, 1);
   t.mock.timers.tick(1);
@@ -109,7 +109,7 @@ test('共享备用时间按实际超出 5 秒的部分扣减，耗尽后下次�
   assert.equal(f.engine.players[0].timeBank, 0);
   done = f.discard();
   await flush();
-  t.mock.timers.tick(4_999);
+  t.mock.timers.tick(7_999);
   await flush();
   assert.equal(f.nextDraws.length, 2);
   t.mock.timers.tick(1);
@@ -176,7 +176,7 @@ test('重新绑定页面清除旧自动操作授权，但不删除历史设置�
   assert.equal(f.session.opts.internalState[2], 1);
   const done = f.discard();
   await flush();
-  t.mock.timers.tick(11_999);
+  t.mock.timers.tick(14_999);
   await flush();
   assert.equal(f.nextDraws.length, 0);
   t.mock.timers.tick(1);
@@ -192,7 +192,7 @@ test('取消不鸣时，已经排队但尚未执行的自动过牌不得继续�
   f.setting({ 2: 0 });
   await flush();
   assert.ok(f.engine._pending, '取消自动过后恢复原窗口，不得执行旧微任务');
-  t.mock.timers.tick(24_999);
+  t.mock.timers.tick(27_999);
   await flush();
   assert.ok(f.engine._pending);
   t.mock.timers.tick(1);
@@ -236,7 +236,9 @@ test('出牌与鸣牌共用备用时间，仅下一小局恢复到 20 秒', asyn
   await f.engine.runHand();
   assert.equal(f.engine.players[0].timeBank, 20);
   const start = f.frames.find((frame) => frame.type === RiichiMsg.ENtfGameStart).payload;
+  // 公告保持玩家可见的基础 5 秒；服务端冗余只在服务端计时上加，不通过公告暴露（否则客户端会在基础段末尾多等一个冗余）。
   assert.equal(start.defaultMinTimeout, 5);
+  assert.equal(start.ServerRedundantTimeOut, 0);
   assert.equal(start.leftTimer, 20);
 });
 
@@ -257,11 +259,11 @@ for (const [players, action, label] of [
   [3, PlayAction.Peng, '三麻碰'], [3, PlayAction.MingGang, '三麻明杠'],
   [4, PlayAction.Chi, '四麻吃'], [4, PlayAction.Peng, '四麻碰'], [4, PlayAction.MingGang, '四麻明杠'],
 ]) {
-  test(`${label}：备用时间耗尽后仍等待完整 5 秒才推进下一家`, async (t) => {
+  test(`${label}：备用时间耗尽后仍等完基础 5 秒加 3 秒宽限才推进下一家`, async (t) => {
     const f = setup(t, players, action, 0);
     const done = f.discard();
     await flush();
-    t.mock.timers.tick(4_999);
+    t.mock.timers.tick(7_999);
     await flush();
     assert.equal(f.nextDraws.length, 0);
     assert.ok(f.engine._pending);
@@ -301,7 +303,7 @@ test('鸣牌窗口超时自动过牌后同样下发 NtfQiangCardEnd', async (t) 
   const f = setup(t, 3);
   const done = f.discard();
   await flush();
-  t.mock.timers.tick(25_000);
+  t.mock.timers.tick(28_000);
   await done;
   const ends = f.frames.filter((frame) => frame.type === RiichiMsg.ENtfQiangCardEnd);
   assert.equal(ends.length, 1);

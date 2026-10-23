@@ -393,6 +393,11 @@ sequenceDiagram
 `RiichiSession.opts.internalState` 保留历史设置供存档兼容；运行中的自动操作只接受当前客户端实际提交的 `clientInternalState`。开局协议没有自动操作设置字段，不能把存档中的“不鸣”等开关直接激活，否则界面显示可鸣牌，后端却立即自动过。新会话和更换连接时清除旧自动操作授权，不修改历史档案；客户端明确提交的开关仍正常生效。
 
 真人每次出牌或鸣牌决策有基础 5 秒，超出部分才扣本小局共用的 20 秒备用时间；只有下一小局补满。切换自动操作或重连不补时。取消不鸣时，尚未执行的自动过牌微任务必须重新检查当前设置，并继续等待原截止时间。
+服务端截止 = 公告基础 + 剩余备用 + 服务端冗余 3 秒（引擎内常量 `SERVER_REDUNDANT_TIMEOUT`），第一小局第一次出牌再额外加 8 秒（`FIRST_START_REDUNDANT_TIMEOUT`，配牌/入场演出）。冗余只在服务端计时上加，**不通过公告暴露**：`NtfGameStart.ServerRedundantTimeOut` 与 `FirstGameStartRedundantTimeOut` 都写 0，`defaultMinTimeout` 写真实基础 5 秒。客户端 `InitCountDown(base, bank)` 把 `352 = now + base`、`360 = now + min(base, 备用余量)`、`368 = now + base + bank` 做成三个绝对截止点，`UpdateTimeText` 在 `now < 352` 时显示 `max(360 − now, 0)`（基础段），到点后改显示 `368 − now`（备用段）。因此基础段长度由**公告值**决定、显示数字是它减去 `ServerRedundantTimeOut`：公告 8 秒时数字 5 但基础段 8 秒，第 5 秒后会有 3 秒不倒数（实测卡顿），公告 5 秒时数字与基础段都是 5 秒、备用段紧接着开始。两者都远小于服务端截止（多 3 秒），玩家在倒计时内点下去一定来得及；冗余只是往返容差，不计入扣时（扣时按玩家可见的基础 + 备用封顶）。
+
+### 10.0 听牌提示（右侧感叹号面板）
+
+客户端右侧的听牌提示（听哪几张、剩几枚）由 `UserInfo.tingInfos` 驱动，而且**每收到一份 userInfos 就整块替换**：`NtfSendCard`（自己摸牌）、`NtfPlayCard`（任何人打牌）、`NtfQiangCard` / `NtfQiangCardEnd` 都要带上本人那一份。14 张手牌时给「打哪张 → 听哪些张」，13 张手牌（刚打完、或等其他人行动）给出已经成立的听牌、`play` 写刚打出的那张；非本人座位一律空。`tingInfos.play` / `ting` 用牌种编码（copy 位固定 0，如 3s=380、1p=210），其他字段仍用带副露位的实体 ID。少给一份就会被客户端当成「没有听牌」而收起面板，表现为听牌/立直后提示时有时无。
 
 ### 10.1 状态
 

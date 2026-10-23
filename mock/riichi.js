@@ -14060,6 +14060,8 @@
   // mockjs/engine.mjs
   var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   var WIND_NAME = { 1: "\u4E1C", 2: "\u5357", 3: "\u897F", 4: "\u5317" };
+  var SERVER_REDUNDANT_TIMEOUT = 3;
+  var FIRST_START_REDUNDANT_TIMEOUT = 8;
   var kindOf2 = (id) => {
     const d = decodeId(id);
     return d.suit * 10 + d.rank;
@@ -14351,14 +14353,16 @@
           };
         }),
         leftTimer: this.extraTime,
+        // The player's own clock stays exactly base + bank: the client subtracts ServerRedundantTimeOut from the announced base
+        // only to render the number, so any allowance announced here shows up as a stall before the bank countdown starts.
         defaultMinTimeout: this.baseTime,
         riichiBangNum: this.riichiSticks,
         isAllLast: this.isAllLast(),
         gameID: "mock-" + Date.now() + "-" + this.handIndex,
         duiCardsStrEncode: "",
         duiCardsStrSaltEncode: "",
-        ServerRedundantTimeOut: 3,
-        FirstGameStartRedundantTimeOut: 8
+        ServerRedundantTimeOut: 0,
+        FirstGameStartRedundantTimeOut: 0
       });
       await this._d(this.T.step);
       await this.awaitTurn(this.dealerSeat, true, true);
@@ -14526,7 +14530,7 @@
           userInfos: this.players.map((q) => ({
             seat: q.seat,
             card: q.seat === seat && (q.isHuman || this.autoHuman) ? p.drawnTile : 0,
-            tingInfos: q.seat === seat ? this.buildTingInfos(p) : [],
+            tingInfos: q.seat === seat ? this.buildTingInfos(p) : q.isHuman ? this.buildTingInfos(q) : [],
             canPlayActions: q.seat === seat ? can : [],
             leftTimer: q.isHuman ? Math.ceil(q.timeBank) : 0,
             isZhenTing: this.isFuriten(q),
@@ -14780,14 +14784,33 @@
       p.score += 1e3;
       this.riichiSticks = Math.max(0, this.riichiSticks - 1);
     }
-    // Tenpai hints for a 14-tile hand: discard which tile -> wait on which tiles
+    // Tenpai hints: discard which tile -> wait on which tiles.
     //
     // Encoding trap: tingInfos.play / ting use the tile-kind encoding (the copy bit is fixed at 0);
     // real-machine samples: play=380 (3s), ting=210 (1p), play=110 (1m), all ending in 0.
     // Other fields (handCards / NtfPlayCard.card / baoPreCard …) are full tile IDs with the copy bit.
     // Previously this sent full IDs with copy=1 (381/211); the client looks up by tile kind and could not match them,
     // so the result was "tenpai reached, but no tenpai indicator and no tenpai hint shown".
-    buildTingInfos(p) {
+    buildTingInfos(p, playedTile = null) {
+      if (p.hand.length % 3 === 1) {
+        const info = handWaits(p.hand, p.melds);
+        if (info.shanten !== 0 || !info.waitKinds.length) return [];
+        const play = playedTile == null ? 0 : kindOf2(playedTile) * 10;
+        return info.waitKinds.map((kind) => {
+          const tingTile = kind * 10;
+          const wMo = calcWin(p.hand.concat([tingTile]), p.melds, this.akaSet, this.winOpts(p, false));
+          const wRong = calcWin(p.hand, p.melds, this.akaSet, this.winOpts(p, true, tingTile));
+          return {
+            play,
+            ting: tingTile,
+            hasYiWhenMo: wMo.hasYaku,
+            yiManChance: 0,
+            fanFuTypeWhenMo: 0,
+            hasYiWhenRong: wRong.hasYaku,
+            manType: 0
+          };
+        }).slice(0, 60);
+      }
       if (p.hand.length % 3 !== 2) return [];
       const { shanten: sh, options } = discardOptionsOfCounts(
         countsOf(p.hand),
@@ -14913,6 +14936,8 @@
           isZhenTing: this.isFuriten(q),
           leftTimer: q.isHuman ? Math.ceil(q.timeBank) : 0,
           canAnGangNoNumCardsAfterRiichi: this.riichiFutureAnkanKinds(q),
+          // The tenpai panel is refreshed from every userInfos block, so the human's waits must ride along here too.
+          tingInfos: q.isHuman ? this.buildTingInfos(q, card) : [],
           zhenTingTypes: this.furitenTypes(q)
         }))
       };
@@ -15227,7 +15252,11 @@
         seat,
         action,
         otherCards: otherCards || [],
-        userInfos: this.players.map((q) => ({ seat: q.seat }))
+        userInfos: this.players.map((q) => ({
+          seat: q.seat,
+          // Same reason as NtfPlayCard: a missing list clears the human's tenpai panel.
+          tingInfos: q.isHuman ? this.buildTingInfos(q) : []
+        }))
       };
     }
     // otherCards = the "tiles this seat contributes from its own hand" sent to the client (excluding the called tile)
@@ -15241,7 +15270,7 @@
         otherCards: otherCards || [],
         userInfos: this.players.map((q) => ({
           seat: q.seat,
-          tingInfos: p && q.seat === seat ? this.buildTingInfos(p) : [],
+          tingInfos: q.seat === seat ? p ? this.buildTingInfos(p) : [] : q.isHuman ? this.buildTingInfos(q) : [],
           // Real-machine NtfQiangCardEnd canPlayActions can only be [] (others) or [0] (the caller,
           // i.e. "discard only"), never 6/7/8/9/10. The full set of options is sent by the NtfSendCard that immediately follows.
           canPlayActions: p && q.seat === seat ? [PlayAction.Normal] : [],
@@ -15332,6 +15361,12 @@
     async endHand(res) {
       if (this.handEnded) return;
       this.handEnded = true;
+      if (this._pending?.timer) clearTimeout(this._pending.timer);
+      this._pending = null;
+      this._bufferedDraw = null;
+      this._bufferedClaim = null;
+      this._expectedDraw = null;
+      this._expectedClaim = null;
       const n = this.playersN;
       const scores = this.players.map((p) => p.score);
       let dealerContinues = false;
@@ -15953,8 +15988,9 @@
       if (pending.timer) clearTimeout(pending.timer);
       const player = this.players[0];
       const elapsed = (Date.now() - pending.startedAt) / 1e3;
-      const timeBank = Number.isFinite(player.timeBank) ? player.timeBank : this.extraTime;
-      player.timeBank = Math.max(0, timeBank - Math.max(0, elapsed - this.baseTime));
+      const bankBefore = Number.isFinite(player.timeBank) ? player.timeBank : this.extraTime;
+      const charged = Math.min(elapsed, this.baseTime + bankBefore);
+      player.timeBank = Math.max(0, bankBefore - Math.max(0, charged - this.baseTime));
       if (pending.kind === "draw") this._expectedDraw = null;
       else this._expectedClaim = null;
       this._pending = null;
@@ -15968,7 +16004,8 @@
     }
     _armHumanTimer(pending) {
       const player = this.players[0];
-      const timeoutMs = Math.max(0, this.baseTime + player.timeBank) * 1e3;
+      const grace = pending.grace != null ? pending.grace : SERVER_REDUNDANT_TIMEOUT;
+      const timeoutMs = Math.max(0, this.baseTime + player.timeBank + grace) * 1e3;
       pending.timer = setTimeout(() => {
         const payload = this.timeoutHumanAction(pending.kind);
         this.note("timeout", `${pending.kind === "claim" ? "\u9E23\u724C\u7A97\u53E3" : "\u51FA\u724C"}\u8D85\u65F6\uFF0C\u670D\u52A1\u7AEF\u81EA\u52A8${pending.kind === "claim" ? "\u8FC7\u724C" : "\u6253\u51FA"}\uFF08\u5BA2\u6237\u7AEF\u6B64\u540E\u624D\u5230\u7684\u7A97\u53E3\u5185\u8BF7\u6C42\u4ECD\u4F1A\u56E0\u7A97\u53E3\u5173\u95ED\u800C\u5931\u8D25\uFF09`);
@@ -15986,10 +16023,16 @@
         return Promise.resolve({ ...replayed[1] });
       }
       return new Promise((resolve) => {
-        const pending = { kind, resolve, startedAt: Date.now(), timer: null };
+        let grace = SERVER_REDUNDANT_TIMEOUT;
+        if (kind === "draw" && this.handIndex === 0 && !this._usedFirstStartGrace) {
+          this._usedFirstStartGrace = true;
+          grace += FIRST_START_REDUNDANT_TIMEOUT;
+        }
+        const pending = { kind, resolve, startedAt: Date.now(), timer: null, grace };
         this._pending = pending;
         const buffered = kind === "draw" ? this._bufferedDraw : this._bufferedClaim;
-        this.note("wait", `\u7B49\u771F\u4EBA\u51B3\u7B56 ${kind}${buffered != null ? "\uFF08\u5DF2\u6709\u7F13\u5B58\u8BF7\u6C42\uFF0C\u76F4\u63A5\u6D88\u8D39\uFF09" : ""}`);
+        const total = this.baseTime + this.players[0].timeBank + grace;
+        this.note("wait", `\u7B49\u771F\u4EBA\u51B3\u7B56 ${kind}\uFF08\u73A9\u5BB6\u770B\u5230${this.baseTime + this.players[0].timeBank}s\uFF0C\u670D\u52A1\u7AEF\u7B49${total}s\uFF09` + (buffered != null ? "\uFF0C\u5DF2\u6709\u7F13\u5B58\u8BF7\u6C42\u76F4\u63A5\u6D88\u8D39" : ""));
         if (buffered != null) {
           if (kind === "draw") this._bufferedDraw = null;
           else this._bufferedClaim = null;
@@ -19301,6 +19344,7 @@
         internalState: own ? internalState : {},
         initScore: folded.initScore,
         canAnGangNoNumCardsAfterRiichi: engine.riichiFutureAnkanKinds(p),
+        // Same convention as NtfGameStart: the seat's base time is announced inclusive of the server's redundant allowance.
         DefaultMinTimeout: own && pending ? Math.ceil(baseLeft) : state.defaultMinTimeout,
         ServerRedundantTimeOut: state.redundant,
         zhenTingTypes: engine.furitenTypes(p),
@@ -20036,7 +20080,7 @@
           const e = this.ensureEngine();
           if (!e) return;
           const result = e.submitDraw(payload);
-          this.log(`[client] <- ReqPlayCard action=${payload?.action} card=${payload?.card ? tileName(payload.card) : "-"} -> ${result}`);
+          this.log(`[client] <- ReqPlayCard action=${payload?.action} card=${payload?.card ? tileName(payload.card) : "-"} timeout=${payload?.isTimeout ? 1 : 0} -> ${result}`);
           this.send(RiichiMsg.ERspPlayCard, { result });
           break;
         }

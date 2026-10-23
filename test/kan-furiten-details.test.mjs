@@ -223,7 +223,7 @@ for (const players of [3, 4]) {
         if (mode === '不鸣自动过') engine.setInternalState({ 2: true });
         const done = engine.resolveClaims(1, 472, can);
         if (mode === '手动过') assert.equal(engine.submitClaim({ action: A.Guo }), R.Succ);
-        else if (mode === '超时') t.mock.timers.tick(25_000);
+        else if (mode === '超时') t.mock.timers.tick(28_000);  // 基础 5 + 备用 20 + 服务端冗余 3
         else if (mode === '托管自动过') engine.setHumanAutoplay(true);
         await done;
         assert.equal(p.tempFuriten, !riichi);

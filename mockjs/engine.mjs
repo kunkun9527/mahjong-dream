@@ -7,6 +7,14 @@ import { mapYaku, manTypeFromResult } from './yaku_map.mjs';
 
 var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 var WIND_NAME = { 1: "东", 2: "南", 3: "西", 4: "北" };
+/** Extra seconds the server waits past the player's own clock (base + bank). The client counts `defaultMinTimeout +
+ *  leftTimer` and then sends its own timeout; without this allowance the server discards (or passes) at the same instant
+ *  the client's clock ends, so a click at the visible deadline always arrives after the window closed.
+ *  This allowance stays server-side only: the client renders `defaultMinTimeout − ServerRedundantTimeOut` as the base
+ *  countdown but switches to the bank when the *announced* base ends, so announcing it would leave a visible stall. */
+export var SERVER_REDUNDANT_TIMEOUT = 3;
+/** Extra allowance on a match's first decision (deal/join animation), also server-side only. */
+export var FIRST_START_REDUNDANT_TIMEOUT = 8;
 var kindOf2 = (id) => {
   const d = decodeId(id);
   return d.suit * 10 + d.rank;
@@ -308,14 +316,16 @@ var GameEngine = class {
         };
       }),
       leftTimer: this.extraTime,
+      // The player's own clock stays exactly base + bank: the client subtracts ServerRedundantTimeOut from the announced base
+      // only to render the number, so any allowance announced here shows up as a stall before the bank countdown starts.
       defaultMinTimeout: this.baseTime,
       riichiBangNum: this.riichiSticks,
       isAllLast: this.isAllLast(),
       gameID: "mock-" + Date.now() + "-" + this.handIndex,
       duiCardsStrEncode: "",
       duiCardsStrSaltEncode: "",
-      ServerRedundantTimeOut: 3,
-      FirstGameStartRedundantTimeOut: 8
+      ServerRedundantTimeOut: 0,
+      FirstGameStartRedundantTimeOut: 0
     });
     await this._d(this.T.step);
     await this.awaitTurn(this.dealerSeat, true, true);
@@ -488,7 +498,7 @@ var GameEngine = class {
         userInfos: this.players.map((q) => ({
           seat: q.seat,
           card: q.seat === seat && (q.isHuman || this.autoHuman) ? p.drawnTile : 0,
-          tingInfos: q.seat === seat ? this.buildTingInfos(p) : [],
+          tingInfos: q.seat === seat ? this.buildTingInfos(p) : q.isHuman ? this.buildTingInfos(q) : [],
           canPlayActions: q.seat === seat ? can : [],
           leftTimer: q.isHuman ? Math.ceil(q.timeBank) : 0,
           isZhenTing: this.isFuriten(q),
@@ -746,14 +756,35 @@ var GameEngine = class {
     p.score += 1e3;
     this.riichiSticks = Math.max(0, this.riichiSticks - 1);
   }
-  // Tenpai hints for a 14-tile hand: discard which tile -> wait on which tiles
+  // Tenpai hints: discard which tile -> wait on which tiles.
   //
   // Encoding trap: tingInfos.play / ting use the tile-kind encoding (the copy bit is fixed at 0);
   // real-machine samples: play=380 (3s), ting=210 (1p), play=110 (1m), all ending in 0.
   // Other fields (handCards / NtfPlayCard.card / baoPreCard …) are full tile IDs with the copy bit.
   // Previously this sent full IDs with copy=1 (381/211); the client looks up by tile kind and could not match them,
   // so the result was "tenpai reached, but no tenpai indicator and no tenpai hint shown".
-  buildTingInfos(p) {
+  buildTingInfos(p, playedTile = null) {
+    if (p.hand.length % 3 === 1) {
+      // 13-tile shape (just discarded, or waiting through other seats' turns): report the waits already achieved.
+      // Sending an empty list here clears the client's tenpai panel, which is what made the hint blink off between turns.
+      const info = handWaits(p.hand, p.melds);
+      if (info.shanten !== 0 || !info.waitKinds.length) return [];
+      const play = playedTile == null ? 0 : kindOf2(playedTile) * 10;
+      return info.waitKinds.map((kind) => {
+        const tingTile = kind * 10;
+        const wMo = calcWin(p.hand.concat([tingTile]), p.melds, this.akaSet, this.winOpts(p, false));
+        const wRong = calcWin(p.hand, p.melds, this.akaSet, this.winOpts(p, true, tingTile));
+        return {
+          play,
+          ting: tingTile,
+          hasYiWhenMo: wMo.hasYaku,
+          yiManChance: 0,
+          fanFuTypeWhenMo: 0,
+          hasYiWhenRong: wRong.hasYaku,
+          manType: 0
+        };
+      }).slice(0, 60);
+    }
     if (p.hand.length % 3 !== 2) return [];
     const { shanten: sh, options } = discardOptionsOfCounts(
       countsOf(p.hand),
@@ -880,6 +911,8 @@ var GameEngine = class {
         isZhenTing: this.isFuriten(q),
         leftTimer: q.isHuman ? Math.ceil(q.timeBank) : 0,
         canAnGangNoNumCardsAfterRiichi: this.riichiFutureAnkanKinds(q),
+        // The tenpai panel is refreshed from every userInfos block, so the human's waits must ride along here too.
+        tingInfos: q.isHuman ? this.buildTingInfos(q, card) : [],
         zhenTingTypes: this.furitenTypes(q)
       }))
     };
@@ -1214,7 +1247,11 @@ var GameEngine = class {
       seat,
       action,
       otherCards: otherCards || [],
-      userInfos: this.players.map((q) => ({ seat: q.seat }))
+      userInfos: this.players.map((q) => ({
+        seat: q.seat,
+        // Same reason as NtfPlayCard: a missing list clears the human's tenpai panel.
+        tingInfos: q.isHuman ? this.buildTingInfos(q) : []
+      }))
     };
   }
   // otherCards = the "tiles this seat contributes from its own hand" sent to the client (excluding the called tile)
@@ -1228,7 +1265,7 @@ var GameEngine = class {
       otherCards: otherCards || [],
       userInfos: this.players.map((q) => ({
         seat: q.seat,
-        tingInfos: p && q.seat === seat ? this.buildTingInfos(p) : [],
+        tingInfos: q.seat === seat ? (p ? this.buildTingInfos(p) : []) : q.isHuman ? this.buildTingInfos(q) : [],
         // Real-machine NtfQiangCardEnd canPlayActions can only be [] (others) or [0] (the caller,
         // i.e. "discard only"), never 6/7/8/9/10. The full set of options is sent by the NtfSendCard that immediately follows.
         canPlayActions: p && q.seat === seat ? [PlayAction.Normal] : [],
@@ -1327,6 +1364,14 @@ var GameEngine = class {
   async endHand(res) {
     if (this.handEnded) return;
     this.handEnded = true;
+    // An abort (九种九牌/四杠散了/…) can end the hand while the human's window is still armed. Drop that wait silently:
+    // its timer must not fire into the next hand, or it would charge the bank for time the player never got to use.
+    if (this._pending?.timer) clearTimeout(this._pending.timer);
+    this._pending = null;
+    this._bufferedDraw = null;
+    this._bufferedClaim = null;
+    this._expectedDraw = null;
+    this._expectedClaim = null;
     const n = this.playersN;
     const scores = this.players.map((p) => p.score);
     let dealerContinues = false;
@@ -1973,8 +2018,11 @@ var GameEngine = class {
     if (pending.timer) clearTimeout(pending.timer);
     const player = this.players[0];
     const elapsed = (Date.now() - pending.startedAt) / 1_000;
-    const timeBank = Number.isFinite(player.timeBank) ? player.timeBank : this.extraTime;
-    player.timeBank = Math.max(0, timeBank - Math.max(0, elapsed - this.baseTime));
+    const bankBefore = Number.isFinite(player.timeBank) ? player.timeBank : this.extraTime;
+    // Only the clock the client shows (base + bank) is charged; the server's redundant allowance is a tolerance for the
+    // round trip and for the client's own timeout, never thinking time the player has to pay for.
+    const charged = Math.min(elapsed, this.baseTime + bankBefore);
+    player.timeBank = Math.max(0, bankBefore - Math.max(0, charged - this.baseTime));
     if (pending.kind === "draw") this._expectedDraw = null;
     else this._expectedClaim = null;
     this._pending = null;
@@ -1988,7 +2036,8 @@ var GameEngine = class {
   }
   _armHumanTimer(pending) {
     const player = this.players[0];
-    const timeoutMs = Math.max(0, this.baseTime + player.timeBank) * 1_000;
+    const grace = pending.grace != null ? pending.grace : SERVER_REDUNDANT_TIMEOUT;
+    const timeoutMs = Math.max(0, this.baseTime + player.timeBank + grace) * 1_000;
     pending.timer = setTimeout(() => {
       const payload = this.timeoutHumanAction(pending.kind);
       this.note("timeout", `${pending.kind === "claim" ? "鸣牌窗口" : "出牌"}超时，服务端自动${pending.kind === "claim" ? "过牌" : "打出"}（客户端此后才到的窗口内请求仍会因窗口关闭而失败）`);
@@ -2006,10 +2055,19 @@ var GameEngine = class {
       return Promise.resolve({ ...replayed[1] });
     }
     return new Promise((resolve) => {
-      const pending = { kind, resolve, startedAt: Date.now(), timer: null };
+      // The match's first decision also covers the deal/join animation; both allowances stay server-side so the client's
+      // visible 5 + bank countdown is untouched.
+      let grace = SERVER_REDUNDANT_TIMEOUT;
+      if (kind === "draw" && this.handIndex === 0 && !this._usedFirstStartGrace) {
+        this._usedFirstStartGrace = true;
+        grace += FIRST_START_REDUNDANT_TIMEOUT;
+      }
+      const pending = { kind, resolve, startedAt: Date.now(), timer: null, grace };
       this._pending = pending;
       const buffered = kind === "draw" ? this._bufferedDraw : this._bufferedClaim;
-      this.note("wait", `等真人决策 ${kind}${buffered != null ? "（已有缓存请求，直接消费）" : ""}`);
+      const total = this.baseTime + this.players[0].timeBank + grace;
+      this.note("wait", `等真人决策 ${kind}（玩家看到${this.baseTime + this.players[0].timeBank}s，服务端等${total}s）` +
+        (buffered != null ? "，已有缓存请求直接消费" : ""));
       if (buffered != null) {
         if (kind === "draw") this._bufferedDraw = null;
         else this._bufferedClaim = null;
