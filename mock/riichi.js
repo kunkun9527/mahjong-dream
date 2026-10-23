@@ -14081,6 +14081,7 @@
       this.emit = emit || (() => {
       });
       this.log = opts.log || null;
+      this.debug = !!opts.debug;
       this.autoHuman = !!opts.autoHuman;
       this.selfLoveLevel = Number(opts.selfLoveLevel) || 0;
       const levels = Array.isArray(opts.aiLevels) ? opts.aiLevels : [];
@@ -14193,7 +14194,7 @@
         runningSince: this.humanPresent ? Date.now() : null
       };
       this._publishHumanClock();
-      this.note("clock", JSON.stringify({ event: "open", ...this.humanTime() }));
+      this.note("clock", JSON.stringify({ event: "open", ...this.humanTime() }), true);
     }
     _freezeHumanClock() {
       const clock = this._humanClock;
@@ -14293,9 +14294,10 @@
     }
     // ================= Entry =================
     // ================= Diagnostics =================
-    /** One line per game event; the host decides the sink (console plus the launcher's log file), tests stay silent. */
-    note(tag, text) {
-      if (this.log) this.log(`[${tag}] ${this.handLabel ? this.handLabel + " " : ""}${text}`);
+    /** Live outcomes by default; replay, AI analysis and window bookkeeping are debug-only. */
+    note(tag, text, detail = false) {
+      if (!this.log || !this.debug && (this.replaying || detail || tag === "ai" || tag === "claim")) return;
+      this.log(`[${tag}] ${this.handLabel ? this.handLabel + " " : ""}${text}`);
     }
     cardName(card) {
       return card ? tileName(card) : "-";
@@ -14455,7 +14457,7 @@
       p.drawnTile = tile;
       p.rinshan = false;
       this.xunNum++;
-      this.note("draw", `P${seat} \u6478${this.cardName(tile)} \u724C\u5C71${this.remain}`);
+      this.note("draw", `P${seat} \u6478${this.cardName(tile)} \u724C\u5C71${this.remain}`, true);
       await this.awaitTurn(seat, true);
     }
     // Rinshan draw (after a kan)
@@ -14473,7 +14475,7 @@
       p.drawnTile = tile;
       p.rinshan = true;
       this.xunNum++;
-      this.note("draw", `P${seat} \u6760\u540E\u8865${this.cardName(tile)} \u724C\u5C71${this.remain}`);
+      this.note("draw", `P${seat} \u6760\u540E\u8865${this.cardName(tile)} \u724C\u5C71${this.remain}`, true);
       return true;
     }
     async doBaBei(seat, tile) {
@@ -16087,7 +16089,7 @@
     }
     _armHumanTimer(pending) {
       const time = this.humanTime();
-      this.note("clock", JSON.stringify({ event: "arm", ...time, deadline: Date.now() + time.timeoutMs }));
+      this.note("clock", JSON.stringify({ event: "arm", ...time, deadline: Date.now() + time.timeoutMs }), true);
       pending.timer = setTimeout(() => {
         if (this._pending !== pending || !this.humanPresent) return;
         const payload = this.timeoutHumanAction(pending.kind);
@@ -16112,11 +16114,11 @@
         const pending = { kind, resolve, timer: null };
         this._pending = pending;
         const buffered = kind === "draw" ? this._bufferedDraw : this._bufferedClaim;
-        this.note("clock", JSON.stringify({ event: "wait", ...this.humanTime(), buffered: buffered != null }));
+        this.note("clock", JSON.stringify({ event: "wait", ...this.humanTime(), buffered: buffered != null }), true);
         if (buffered != null) {
           if (kind === "draw") this._bufferedDraw = null;
           else this._bufferedClaim = null;
-          this.note("clock", JSON.stringify({ event: "consume-buffer", ...this.humanTime() }));
+          this.note("clock", JSON.stringify({ event: "consume-buffer", ...this.humanTime() }), true);
           this.resolveHumanPending(pending, buffered);
           return;
         }
@@ -20029,7 +20031,8 @@
         // Reload recovery: saved human-decision log to replay, and whether the player is connected
         replayLog: opts.replayLog || null,
         humanPresent: opts.humanPresent !== false,
-        onHumanClock: opts.onHumanClock || null
+        onHumanClock: opts.onHumanClock || null,
+        debug: !!opts.debug
       };
       this.onRecord = opts.onRecord || (() => {
       });
@@ -20066,13 +20069,13 @@
         return;
       }
       let bytes;
-      if (ev === RiichiMsg.ENtfQiangCard) {
+      if (this.opts.debug && ev === RiichiMsg.ENtfQiangCard) {
         this.log(`[claim] -> NtfQiangCard seat=${payload?.seat} action=${claimText(payload?.action)} other=${JSON.stringify(payload?.otherCards || [])}`);
-      } else if (ev === RiichiMsg.ENtfQiangCardEnd) {
+      } else if (this.opts.debug && ev === RiichiMsg.ENtfQiangCardEnd) {
         this.log(`[claim] -> NtfQiangCardEnd seats=${JSON.stringify(payload?.seats || [])} action=${claimText(payload?.action)}`);
-      } else if (ev === RiichiMsg.ENtfGameStart) {
+      } else if (this.opts.debug && ev === RiichiMsg.ENtfGameStart) {
         this.log(`[game] -> GameStart ju=${payload?.juNum} zhuang=${payload?.zhuangSeat} benChang=${payload?.benChangNum} bao=${payload?.baoPreCard} remain=${payload?.remainDuiCardNum}`);
-      } else if (ev === RiichiMsg.ENtfGameStop) {
+      } else if (this.opts.debug && ev === RiichiMsg.ENtfGameStop) {
         this.log(`[game] -> GameStop type=${payload?.stopType} hu=${JSON.stringify(payload?.huSeats || [])} liuJu=${payload?.liuJuType} final=${payload?.isFinal ? 1 : 0} scores=${JSON.stringify((payload?.userInfos || []).map((u) => u.score))}`);
       }
       try {
@@ -20101,6 +20104,7 @@
         seed,
         baseTime: o.baseTime,
         extraTime: o.extraTime,
+        debug: o.debug,
         internalState: this.clientInternalState,
         uids: o.uids,
         autoHuman: o.autoHuman,
@@ -20172,7 +20176,7 @@
           if (!e) return;
           const clock = e.humanTime();
           const result = e.submitDraw(payload);
-          this.log(`[clock-request] ${JSON.stringify({ ...clock, kind: "draw", result, present: e.humanPresent, buffered: e._bufferedDraw != null })}`);
+          if (this.opts.debug || result !== 0) this.log(`[clock-request] ${JSON.stringify({ ...clock, kind: "draw", result, present: e.humanPresent, buffered: e._bufferedDraw != null })}`);
           this.log(`[client] <- ReqPlayCard action=${payload?.action} card=${payload?.card ? tileName(payload.card) : "-"} timeout=${payload?.isTimeout ? 1 : 0} -> ${result}`);
           this.send(RiichiMsg.ERspPlayCard, { result });
           break;
@@ -20185,7 +20189,7 @@
           const clock = e.humanTime();
           const elapsed = pending?.kind === "claim" ? clock.elapsedMs : null;
           const result = e.submitClaim(payload);
-          this.log(`[clock-request] ${JSON.stringify({ ...clock, kind: "claim", result, present: e.humanPresent, buffered: e._bufferedClaim != null })}`);
+          if (this.opts.debug || result !== 0) this.log(`[clock-request] ${JSON.stringify({ ...clock, kind: "claim", result, present: e.humanPresent, buffered: e._bufferedClaim != null })}`);
           const windowText = open ? `seat${open.seat}<from${open.discarderSeat} card${open.card} can[${open.actions.map(claimText).join("/")}]` : "closed";
           this.log(`[claim] <- ReqQiangCard action=${claimText(payload?.action)} other=${JSON.stringify(payload?.otherCards || [])} timeout=${payload?.isTimeout ? 1 : 0} at=${elapsed == null ? "-" : elapsed + "ms"} -> ${result} window=${windowText}`);
           this.send(RiichiMsg.ERspQiangCard, { result });

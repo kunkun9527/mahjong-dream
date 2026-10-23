@@ -58,7 +58,7 @@ Prefer to play without a browser tab pointing at a website? Run the game locally
 
 The offline version saves to `userdata/profile.json`; copy that file to back it up. Use the Save Editor's Export and Import to move a save between the browser and offline versions.
 
-Every launch also writes a timestamped log to `logs/game-<time>.log` (dealt tiles, draws, discards, calls, win settlement, and every client request with its result code), which is what to attach when reporting a stuck or misbehaving hand. The game server process writes the file itself, so the log keeps growing even if the console window is paused or selected.
+Every launch also writes a timestamped log to `logs/game-<time>.log` (live actions, clock settlements/timeouts, reconnects, win settlement, request outcomes and errors; successful keepalives are omitted), which is what to attach when reporting a stuck or misbehaving hand. The game server process writes the file itself, so the log keeps growing even if the console window is paused or selected.
 
 Optional shortcuts that open a specific match directly:
 
@@ -69,7 +69,7 @@ start-game.bat --players=3 --length=east
 
 ## Diagnostic Logs
 
-The reconnect banner has an **导出诊断日志** (export diagnostics) button. You can also run `__mjmock.exportLogs()` in the browser developer console. Logs stay local and include clock lifecycle, request results, reconnect/sync events and frontend errors; the browser history is bounded, so export soon after a problem. The offline launcher also keeps the full server log under `logs/`.
+The reconnect banner has an **导出诊断日志** (export diagnostics) button. You can also run `__mjmock.exportLogs()` in the browser developer console. Logs stay local and include clock lifecycle, request results, reconnect/sync events and frontend errors; the browser history is bounded, so export soon after a problem. The offline launcher also keeps the server log under `logs/`. Default logs omit AI calculations, empty claim-window bookkeeping, historical replay details, Unity/SDK progress and duplicate exported page entries. Unknown warnings/errors remain recorded. For detailed diagnostics, set `MJ_DEBUG=1` for the Node backend and add `mjDebug=1` to the game URL for the page/static backend; no remote upload is used.
 
 The local backend owns the countdown: the opening decision has 5 seconds of base time plus a 20-second bank shared across the hand (25 seconds total, no entrance bonus). Losing focus or hiding the page does not pause play or trigger a reconnect; the countdown continues. Only a real disconnection freezes it, and recovery continues the remaining time. A hash-pinned derived client synchronizes the current international build without replacing the original files. Recovery keeps the clock frozen until Unity confirms the current batch has been consumed, its render queue is idle, and any snapshot reload has returned to gameplay. Stale or missing confirmations cannot resume it. Both hosts have passed controlled Edge recovery checks; real OS background switching and naturally occurring robbing-kan/north windows remain unverified. See [current status](docs/handoff.md).
 

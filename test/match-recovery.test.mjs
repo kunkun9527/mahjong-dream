@@ -98,6 +98,25 @@ test('真人决策记录可在任意切点重演到同一局面，接着打完�
   }
 });
 
+test('默认精简日志不改变牌局，调试模式可还原摸牌、AI及空窗口细节', async () => {
+  const normal = [], detailed = [];
+  const options = settings({ players: 3, maxHands: 1, autoHuman: true });
+  const engine = new GameEngine({ ...options, log: (line) => normal.push(line) });
+  const debug = new GameEngine({ ...options, debug: true, log: (line) => detailed.push(line) });
+  await engine.start();
+  await debug.start();
+  assert.deepEqual(engine.scores, debug.scores);
+  assert.deepEqual(engine.matchRecord(), debug.matchRecord());
+  assert.ok(normal.length < detailed.length / 2, `${normal.length} < ${detailed.length}/2`);
+  assert.doesNotMatch(normal.join('\n'), /\[ai\]|\[claim\]|\[draw\].*P\d 摸/);
+  assert.match(normal.join('\n'), /\[hand\].*开局/);
+  assert.match(normal.join('\n'), /\[discard\]/);
+  assert.match(normal.join('\n'), /\[hand\].*结束/);
+  assert.match(detailed.join('\n'), /\[ai\]/);
+  assert.match(detailed.join('\n'), /\[claim\]/);
+  assert.match(detailed.join('\n'), /\[draw\].*P\d 摸/);
+});
+
 test('离开时真人回合冻结不超时，回来后才开始计时', async () => {
   const engine = new GameEngine({ ...settings({ baseTime: 0, extraTime: 0, speed: 0 }), humanPresent: false, emit() {} });
   let pendingSeen = false;

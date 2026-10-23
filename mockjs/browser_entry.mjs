@@ -62,7 +62,8 @@ var RiichiSession = class {
       // Reload recovery: saved human-decision log to replay, and whether the player is connected
       replayLog: opts.replayLog || null,
       humanPresent: opts.humanPresent !== false,
-      onHumanClock: opts.onHumanClock || null
+      onHumanClock: opts.onHumanClock || null,
+      debug: !!opts.debug
     };
     // Called with the full record after every human decision (and once when the engine starts)
     this.onRecord = opts.onRecord || (() => {
@@ -100,13 +101,13 @@ var RiichiSession = class {
       return;
     }
     let bytes;
-    if (ev === RiichiMsg.ENtfQiangCard) {
+    if (this.opts.debug && ev === RiichiMsg.ENtfQiangCard) {
       this.log(`[claim] -> NtfQiangCard seat=${payload?.seat} action=${claimText(payload?.action)} other=${JSON.stringify(payload?.otherCards || [])}`);
-    } else if (ev === RiichiMsg.ENtfQiangCardEnd) {
+    } else if (this.opts.debug && ev === RiichiMsg.ENtfQiangCardEnd) {
       this.log(`[claim] -> NtfQiangCardEnd seats=${JSON.stringify(payload?.seats || [])} action=${claimText(payload?.action)}`);
-    } else if (ev === RiichiMsg.ENtfGameStart) {
+    } else if (this.opts.debug && ev === RiichiMsg.ENtfGameStart) {
       this.log(`[game] -> GameStart ju=${payload?.juNum} zhuang=${payload?.zhuangSeat} benChang=${payload?.benChangNum} bao=${payload?.baoPreCard} remain=${payload?.remainDuiCardNum}`);
-    } else if (ev === RiichiMsg.ENtfGameStop) {
+    } else if (this.opts.debug && ev === RiichiMsg.ENtfGameStop) {
       this.log(`[game] -> GameStop type=${payload?.stopType} hu=${JSON.stringify(payload?.huSeats || [])} liuJu=${payload?.liuJuType} final=${payload?.isFinal ? 1 : 0} scores=${JSON.stringify((payload?.userInfos || []).map((u) => u.score))}`);
     }
     try {
@@ -135,6 +136,7 @@ var RiichiSession = class {
       seed,
       baseTime: o.baseTime,
       extraTime: o.extraTime,
+      debug: o.debug,
       internalState: this.clientInternalState,
       uids: o.uids,
       autoHuman: o.autoHuman,
@@ -204,7 +206,7 @@ var RiichiSession = class {
         if (!e) return;
         const clock = e.humanTime();
         const result = e.submitDraw(payload);
-        this.log(`[clock-request] ${JSON.stringify({ ...clock, kind: "draw", result, present: e.humanPresent, buffered: e._bufferedDraw != null })}`);
+        if (this.opts.debug || result !== 0) this.log(`[clock-request] ${JSON.stringify({ ...clock, kind: "draw", result, present: e.humanPresent, buffered: e._bufferedDraw != null })}`);
         this.log(`[client] <- ReqPlayCard action=${payload?.action} card=${payload?.card ? tileName(payload.card) : "-"}` +
           ` timeout=${payload?.isTimeout ? 1 : 0} -> ${result}`);
         this.send(RiichiMsg.ERspPlayCard, { result });
@@ -218,7 +220,7 @@ var RiichiSession = class {
         const clock = e.humanTime();
         const elapsed = pending?.kind === "claim" ? clock.elapsedMs : null;
         const result = e.submitClaim(payload);
-        this.log(`[clock-request] ${JSON.stringify({ ...clock, kind: "claim", result, present: e.humanPresent, buffered: e._bufferedClaim != null })}`);
+        if (this.opts.debug || result !== 0) this.log(`[clock-request] ${JSON.stringify({ ...clock, kind: "claim", result, present: e.humanPresent, buffered: e._bufferedClaim != null })}`);
         const windowText = open
           ? `seat${open.seat}<from${open.discarderSeat} card${open.card} can[${open.actions.map(claimText).join("/")}]`
           : "closed";

@@ -73,9 +73,8 @@
   // Reconnect/session diagnostics must survive mock.quiet(): after a stuck reconnection the question is "where did it stop",
   // and these marks answer exactly that (WS back -> 20162 -> replay done -> live push).
   function stampLog(line) {
-    var d = new Date();
-    var pad = function (v, n) { return String(v).padStart(n, '0'); };
-    console.log('[' + pad(d.getHours(), 2) + ':' + pad(d.getMinutes(), 2) + ':' + pad(d.getSeconds(), 2) + '.' + pad(d.getMilliseconds(), 3) + '] ' + line);
+    // Host sinks already timestamp each record; do not nest a second clock in the message.
+    console.log(line.trimStart());
   }
 
   // Recording/replay library: msg_id -> payload
@@ -826,8 +825,8 @@
       aiStyles: styles,
       selfLoveLevel: sess.table && sess.table.self ? sess.table.self.loveLevel || 0 : 0,
       internalState: sess.internalState || {},
-      // Engine/hand logs (claim windows, frame pushes) go to the launcher's console and log file; without this the
-      // session swallows them and a stuck hand leaves no trace to read afterwards.
+      // Keep live outcomes; only explicit debug enables protocol/window/AI details.
+      debug: LOG.enabled,
       log: stampLog,
       onSettingsChange: function (state) {
         sess.internalState = state;
@@ -1486,9 +1485,11 @@
         tag = 'error';
       }
     }
-    // Always retain request outcomes; quiet only suppresses verbose protocol traces.
-    console.log('[request] ' + JSON.stringify({ mid: mid, name: nameOf(mid), seq: seq,
-      bytes: raw.length, result: tag, replies: out.map(function (reply) { return reply[0]; }) }));
+    // Successful keepalives have no diagnostic value; failures and all other outcomes remain visible.
+    if (LOG.enabled || mid !== 20019 || tag !== 'handled') {
+      console.log('[request] ' + JSON.stringify({ mid: mid, name: nameOf(mid), seq: seq,
+        bytes: raw.length, result: tag, replies: out.map(function (reply) { return reply[0]; }) }));
+    }
     log('  <- %s %s seq=%s %dB [%s]', mid, nameOf(mid), seq, raw.length, tag);
 
     var frames = [];

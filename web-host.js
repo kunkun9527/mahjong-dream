@@ -9,6 +9,7 @@
   var STORAGE_KEY = 'mahjong-dream/profile';
   var LEGACY_KEY = 'mahjong-dream-snapshot/profile'; // before the project was renamed
   var mode = window.__mjHostMode === 'node' ? 'node' : 'browser';
+  var debug = new URLSearchParams(location.search).get('mjDebug') === '1';
   var diagnosticLines = [], pendingLines = [], diagnosticTimer = null;
   var diagnosticFetch = window.fetch && window.fetch.bind(window);
   var diagnosticKey = 'mahjong-dream/diagnostics';
@@ -32,6 +33,11 @@
     var original = console[name].bind(console);
     console[name] = function () {
       var args = Array.prototype.slice.call(arguments);
+      original.apply(console, args);
+      var first = String(args[0] || '');
+      // Unity/SDK progress stays in DevTools, not the diagnostic file. Unknown warnings/errors stay visible.
+      if (!debug && ((name === 'log' && !/^\[(?:riichi|hand|discard|meld|kan|win|draw|clock|human|timeout|client|claim|clock-request|reload|resync|request|mock|local|offline|clock-bridge|web-host)\]/.test(first))
+        || /^warning: \d+ FS\.syncfs operations in flight at once, probably just doing extra work$/.test(first))) return;
       // Do not serialize arbitrary objects (which may contain whole saves or network payloads).
       var line = (new Date().toISOString() + ' [' + name + '] ' + args.map(function (arg) {
         return arg && arg.stack ? arg.stack : String(arg);
@@ -43,7 +49,6 @@
         if (pendingLines.length > 1000) pendingLines.shift();
       }
       if (!diagnosticTimer) diagnosticTimer = setTimeout(flushDiagnostics, 500);
-      original.apply(console, args);
     };
   });
   window.addEventListener('error', function (event) {
@@ -59,7 +64,9 @@
       return response.text();
     }).catch(function (error) { return '[server logs unavailable] ' + error.message; }) : Promise.resolve('');
     return server.then(function (serverText) {
-      var text = 'Mahjong Dream diagnostics; host=' + mode + '\n' + serverText + '\n[page]\n' + diagnosticLines.join('\n');
+      // Node has already persisted uploaded page lines; append only the not-yet-uploaded/local remainder.
+      var pageLines = mode === 'node' ? diagnosticLines.filter(function (line) { return serverText.indexOf(JSON.stringify(line)) === -1; }) : diagnosticLines;
+      var text = 'Mahjong Dream diagnostics; host=' + mode + '\n' + serverText + '\n[page]\n' + pageLines.join('\n');
       var url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
       var link = document.createElement('a');
       link.href = url;
@@ -106,7 +113,7 @@
       return chain.then(function () { return loadScript(src); });
     }, Promise.resolve()).then(function () {
       var mj = window.__mj;
-      mj.server.quiet(new URLSearchParams(location.search).get('mjDebug') !== '1');
+      mj.server.quiet(!debug);
       var host = null, timer = null;
       function write() {
         clearTimeout(timer);

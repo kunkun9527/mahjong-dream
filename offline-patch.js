@@ -4,6 +4,7 @@
   'use strict';
 
   // Directory of game.html; static hosting may serve the game under a sub-path such as /mahjong-dream/.
+  var DEBUG = new URLSearchParams(location.search).get('mjDebug') === '1';
   var BASE = location.href.split(/[?#]/)[0].replace(/[^/]*$/, '');
   var LOCAL_WS = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws' + location.search;
   function localUrl(value) {
@@ -221,7 +222,7 @@
       var assetUrl = localAssetUrl(url);
       if (assetUrl) return nativeFetch(assetUrl, init);
       if (!localUrl(url)) {
-        console.log('[offline] 拦截外部 fetch:', url);
+        if (DEBUG) console.log('[offline] 拦截外部 fetch:', url);
         return emptyResponse();
       }
       return nativeFetch(input, init);
@@ -239,7 +240,7 @@
     if (assetUrl) {
       args[1] = assetUrl;
     } else if (this._mjOfflineBlocked) {
-      console.log('[offline] 拦截外部 XHR:', u);
+      if (DEBUG) console.log('[offline] 拦截外部 XHR:', u);
       args[1] = BASE + 'mock/empty.json';
     }
     return open.apply(this, args);
@@ -258,7 +259,7 @@
   var setAttr = Element.prototype.setAttribute;
   Element.prototype.setAttribute = function (k, v) {
     if (this.tagName === 'SCRIPT' && k === 'src' && !localUrl(v)) {
-      console.log('[offline] 拦截 script:', v);
+      if (DEBUG) console.log('[offline] 拦截 script:', v);
       return;
     }
     return setAttr.apply(this, arguments);
@@ -269,7 +270,7 @@
       get: srcDesc.get,
       set: function (v) {
         if (!localUrl(v)) {
-          console.log('[offline] 拦截 script.src:', v);
+          if (DEBUG) console.log('[offline] 拦截 script.src:', v);
           return;
         }
         srcDesc.set.call(this, v);
@@ -278,7 +279,7 @@
     });
   }
 
-  console.log('[offline] 补丁已加载');
+  if (DEBUG) console.log('[offline] 补丁已加载');
 
   // ---------------- Safe override of webGLPluginHelper.getUrlParams ----------------
   // framework.js's implementation does split('?')[1] when the URL has no '?', getting undefined, and then split('&') blows up;
@@ -307,7 +308,7 @@
     if (helper.__patched) return true;
     helper.__patched = true;
     helper.getUrlParams = safeGetUrlParams;
-    console.log('[offline] 已 patch webGLPluginHelper.getUrlParams');
+    if (DEBUG) console.log('[offline] 已 patch webGLPluginHelper.getUrlParams');
     return true;
   }
   // Polling: framework.js loads asynchronously, so wait until Module/webGLPluginHelper appears

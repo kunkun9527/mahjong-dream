@@ -55,6 +55,44 @@ function setup(t, players, action = PlayAction.Peng, bank = 20) {
   return { session, engine, frames, card, used, discard, submit, setting, saved, nextDraws, claimTurns };
 }
 
+test('默认仅记关键事件，历史重演静默，调试模式保留细节', (t) => {
+  t.mock.method(GameEngine.prototype, 'start', async () => {});
+  const lines = [];
+  const session = new RiichiSession({ players: 4, log: (line) => lines.push(line), onFrame: () => {} });
+  t.after(() => session.stop());
+  const engine = session.ensureEngine();
+  lines.length = 0;
+  engine.note('ai', 'analysis-fixture');
+  engine.note('claim', 'empty-claim-fixture');
+  engine.note('draw', 'draw-detail-fixture', true);
+  engine.note('clock', 'arm-fixture', true);
+  session.send(RiichiMsg.ENtfQiangCardEnd, { seats: [], action: PlayAction.Guo });
+  assert.equal(lines.length, 0, '无候选窗口和重复协议通知不写默认日志');
+  engine.replaying = true;
+  engine.note('discard', 'historical-discard-fixture');
+  engine.note('hand', 'historical-hand-fixture');
+  session.send(RiichiMsg.ENtfGameStart, {});
+  assert.equal(lines.length, 0, '恢复旧对局不重复写入历史事件');
+  engine.replaying = false;
+  engine.note('discard', 'live-discard-fixture');
+  engine.note('clock', 'resolve-fixture');
+  engine.note('win', 'win-fixture');
+  assert.equal(lines.length, 3);
+  assert.match(lines.join('\n'), /live-discard-fixture/);
+  assert.match(lines.join('\n'), /resolve-fixture/);
+  assert.match(lines.join('\n'), /win-fixture/);
+  const debug = new RiichiSession({ debug: true, log: (line) => lines.push(line) });
+  t.after(() => debug.stop());
+  const diagnostic = debug.ensureEngine();
+  diagnostic.replaying = true;
+  diagnostic.note('ai', 'debug-analysis-fixture');
+  diagnostic.note('clock', 'debug-arm-fixture', true);
+  debug.send(RiichiMsg.ENtfQiangCardEnd, { seats: [], action: PlayAction.Guo });
+  assert.match(lines.join('\n'), /debug-analysis-fixture/);
+  assert.match(lines.join('\n'), /debug-arm-fixture/);
+  assert.match(lines.join('\n'), /NtfQiangCardEnd/);
+});
+
 test('引擎日志通过会话日志回调输出（避免再被静默吞掉）', async (t) => {
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
   t.mock.method(GameEngine.prototype, 'start', async () => {});

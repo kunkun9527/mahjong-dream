@@ -34,6 +34,7 @@ var GameEngine = class {
     });
     // Diagnostic sink: the host passes one (console + log file); without it every note() is a no-op.
     this.log = opts.log || null;
+    this.debug = !!opts.debug;
     this.autoHuman = !!opts.autoHuman;
     this.selfLoveLevel = Number(opts.selfLoveLevel) || 0;
     // Shared policy with progressively reduced analysis: basic / intermediate / advanced.
@@ -150,7 +151,7 @@ var GameEngine = class {
       elapsedMs: 0, runningSince: this.humanPresent ? Date.now() : null,
     };
     this._publishHumanClock();
-    this.note("clock", JSON.stringify({ event: "open", ...this.humanTime() }));
+    this.note("clock", JSON.stringify({ event: "open", ...this.humanTime() }), true);
   }
   _freezeHumanClock() {
     const clock = this._humanClock;
@@ -245,9 +246,10 @@ var GameEngine = class {
   }
   // ================= Entry =================
   // ================= Diagnostics =================
-  /** One line per game event; the host decides the sink (console plus the launcher's log file), tests stay silent. */
-  note(tag, text) {
-    if (this.log) this.log(`[${tag}] ${this.handLabel ? this.handLabel + " " : ""}${text}`);
+  /** Live outcomes by default; replay, AI analysis and window bookkeeping are debug-only. */
+  note(tag, text, detail = false) {
+    if (!this.log || (!this.debug && (this.replaying || detail || tag === "ai" || tag === "claim"))) return;
+    this.log(`[${tag}] ${this.handLabel ? this.handLabel + " " : ""}${text}`);
   }
   cardName(card) {
     return card ? tileName(card) : "-";
@@ -410,7 +412,7 @@ var GameEngine = class {
     p.drawnTile = tile;
     p.rinshan = false;
     this.xunNum++;
-    this.note("draw", `P${seat} 摸${this.cardName(tile)} 牌山${this.remain}`);
+    this.note("draw", `P${seat} 摸${this.cardName(tile)} 牌山${this.remain}`, true);
     await this.awaitTurn(seat, true);
   }
   // Rinshan draw (after a kan)
@@ -428,7 +430,7 @@ var GameEngine = class {
     p.drawnTile = tile;
     p.rinshan = true;
     this.xunNum++;
-    this.note("draw", `P${seat} 杠后补${this.cardName(tile)} 牌山${this.remain}`);
+    this.note("draw", `P${seat} 杠后补${this.cardName(tile)} 牌山${this.remain}`, true);
     return true;
   }
   async doBaBei(seat, tile) {
@@ -2109,7 +2111,7 @@ var GameEngine = class {
   }
   _armHumanTimer(pending) {
     const time = this.humanTime();
-    this.note("clock", JSON.stringify({ event: "arm", ...time, deadline: Date.now() + time.timeoutMs }));
+    this.note("clock", JSON.stringify({ event: "arm", ...time, deadline: Date.now() + time.timeoutMs }), true);
     pending.timer = setTimeout(() => {
       if (this._pending !== pending || !this.humanPresent) return;
       const payload = this.timeoutHumanAction(pending.kind);
@@ -2134,11 +2136,11 @@ var GameEngine = class {
       const pending = { kind, resolve, timer: null };
       this._pending = pending;
       const buffered = kind === "draw" ? this._bufferedDraw : this._bufferedClaim;
-      this.note("clock", JSON.stringify({ event: "wait", ...this.humanTime(), buffered: buffered != null }));
+      this.note("clock", JSON.stringify({ event: "wait", ...this.humanTime(), buffered: buffered != null }), true);
       if (buffered != null) {
         if (kind === "draw") this._bufferedDraw = null;
         else this._bufferedClaim = null;
-        this.note("clock", JSON.stringify({ event: "consume-buffer", ...this.humanTime() }));
+        this.note("clock", JSON.stringify({ event: "consume-buffer", ...this.humanTime() }), true);
         this.resolveHumanPending(pending, buffered);
         return;
       }

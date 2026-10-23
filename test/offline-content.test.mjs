@@ -15,7 +15,7 @@ function connect(session) {
   return received;
 }
 
-test('默认quiet仍记录普通、未支持和异常请求结果，不输出载荷', (t) => {
+test('默认quiet不记心跳，仍记录普通、未支持和异常请求结果，不输出载荷', (t) => {
   const lines = [];
   t.mock.method(console, 'log', (...args) => lines.push(args.join(' ')));
   t.mock.method(console, 'error', () => {});
@@ -23,6 +23,7 @@ test('默认quiet仍记录普通、未支持和异常请求结果，不输出载
   t.after(() => session.destroy());
   const privatePayload = P.W().s(1, 'private-payload-fixture').bytes();
   request(session, 20019, 71);
+  request(session, 20102, 74);
   request(session, 987654, 72, privatePayload);
   mock.handlers[987650] = () => { throw new Error('handler-fixture'); };
   t.after(() => { delete mock.handlers[987650]; });
@@ -31,10 +32,20 @@ test('默认quiet仍记录普通、未支持和异常请求结果，不输出载
     .map((line) => JSON.parse(line.slice('[request] '.length)));
   assert.equal(results.length, 3);
   assert.deepEqual(results.map((entry) => [entry.mid, entry.seq, entry.result]), [
-    [20019, 71, 'handled'], [987654, 72, 'unsupported'], [987650, 73, 'error'],
+    [20102, 74, 'handled'], [987654, 72, 'unsupported'], [987650, 73, 'error'],
   ]);
   assert.deepEqual(results[1].replies, [987655]);
   assert.doesNotMatch(lines.join('\n'), /private-payload-fixture/);
+});
+
+test('调试模式仍可查看心跳结果', (t) => {
+  const lines = [];
+  t.mock.method(console, 'log', (...args) => lines.push(args.join(' ')));
+  const session = mock.createSession();
+  mock.quiet(false);
+  t.after(() => { session.destroy(); mock.quiet(true); });
+  request(session, 20019, 75);
+  assert.ok(lines.some((line) => line.startsWith('[request] ') && line.includes('20019')));
 });
 
 function request(session, mid, seq, payload = new Uint8Array()) {
