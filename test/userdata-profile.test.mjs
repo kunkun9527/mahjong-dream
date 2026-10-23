@@ -32,12 +32,12 @@ test('本地分模式战绩写回原客户端 DT42 ProfileInfo', () => {
   const userData = new userdata.UserData(P.b64decode(data.userdataB64), 10_000_001);
   const stats = {
     yonma: { byLength: {
-      east: statDetail(4, { games: 2, hands: 9, wins: 3, dealIns: 1, calls: 4, winPoints: 11_600, maxRenchan: 2, winTurns: 21, ron: 2, tsumo: 1, riichi: 3 }),
+      east: statDetail(4, { games: 2, hands: 9, wins: 3, dealIns: 1, calls: 4, winPoints: 11_600, maxRenchan: 2, winTurns: 21, ron: 2, tsumo: 1, riichi: 3, placements: [1, 1, 0, 0] }),
       hanchan: statDetail(4),
     } },
     sanma: { byLength: {
       east: statDetail(3),
-      hanchan: statDetail(3, { games: 1, hands: 7, wins: 2, busts: 1, tsumo: 2 }),
+      hanchan: statDetail(3, { games: 1, hands: 7, wins: 2, busts: 1, tsumo: 2, placements: [0, 0, 1, 0] }),
     } },
   };
 
@@ -56,6 +56,14 @@ test('本地分模式战绩写回原客户端 DT42 ProfileInfo', () => {
   assert.equal(yonmaEast[20], 2);
   assert.equal(yonmaEast[21], 1);
   assert.equal(yonmaEast[22], 3);
+  // Place counts: the client sums 1_0 + 1_1 for the displayed 1st..4th rates, so a block that
+  // reports no games must not keep the shipped sample's counts.
+  assert.equal(yonmaEast[24], 1);
+  assert.equal(yonmaEast[25], 1);
+  assert.equal(yonmaEast[26], undefined);
+  assert.equal(yonmaEast[27], undefined);
+  const yonmaHanchan = P.parse(profileInfo(userData, 1, '1_1')).map((field) => field[0]);
+  assert.equal(yonmaHanchan.some((field) => field >= 24 && field <= 27), false);
   assert.equal(P.parse(profileInfo(userData, 1, '1_0')).some((field) => field[0] === 40), false);
 
   const sanmaHanchan = P.dict(profileInfo(userData, 2, '1_1'));
@@ -64,5 +72,7 @@ test('本地分模式战绩写回原客户端 DT42 ProfileInfo', () => {
   assert.equal(sanmaHanchan[12], 2);
   assert.equal(sanmaHanchan[17], 1);
   assert.equal(sanmaHanchan[21], 2);
+  assert.equal(sanmaHanchan[26], 1);
+  assert.equal(sanmaHanchan[24], undefined);
   assert.equal(userData.updateProfileStats(stats), null);
 });

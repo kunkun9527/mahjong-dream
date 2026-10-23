@@ -425,10 +425,11 @@
   }
 
   /** DT42 ProfileInfo measured fields: 10 matches, 11 hands, 12 wins, 13 deal-ins, 14 melds,
-   *  16 win points, 17 busted by others (tobi), 18 max consecutive dealer wins, 19 win turn, 20 ron wins, 21 tsumo wins, 22 riichi. */
+   *  16 win points, 17 busted by others (tobi), 18 max consecutive dealer wins, 19 win turn, 20 ron wins, 21 tsumo wins, 22 riichi,
+   *  24..27 place counts (1st..4th; the client derives 1st place and the average placement from these). */
   function encodeProfileInfo(bytes, stats) {
     var w = P.W(), fs = P.parse(bytes || new Uint8Array(0));
-    var replaced = { 10: 1, 11: 1, 12: 1, 13: 1, 14: 1, 16: 1, 17: 1, 18: 1, 19: 1, 20: 1, 21: 1, 22: 1, 40: 1 };
+    var replaced = { 10: 1, 11: 1, 12: 1, 13: 1, 14: 1, 16: 1, 17: 1, 18: 1, 19: 1, 20: 1, 21: 1, 22: 1, 24: 1, 25: 1, 26: 1, 27: 1, 40: 1 };
     for (var i = 0; i < fs.length; i++) {
       if (!replaced[fs[i][0]]) P.reencode(w, fs[i][0], fs[i][1], fs[i][2]);
     }
@@ -437,6 +438,8 @@
       14: stats.calls, 16: stats.winPoints, 17: stats.busts, 18: stats.maxRenchan,
       19: stats.winTurns, 20: stats.ron, 21: stats.tsumo, 22: stats.riichi
     };
+    var places = stats.placements || [];
+    for (var place = 0; place < 4; place++) values[24 + place] = places[place];
     for (var field in values) {
       var value = Math.max(0, Number(values[field]) || 0);
       if (value) w.v(Number(field), value);
