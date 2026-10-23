@@ -74,9 +74,9 @@ test('静态宿主直接读取当前引擎；WASM三次读取使用同一毫秒�
   assert.equal(clock(0), 1);
   app.engine({ id: 8, baseMs: 5000, extraMs: 0, running: true });
   assert.equal(clock(1), 3);
-  assert.equal(clock(2), 21, '总剩余向上取整一次，不能分段取整再相加');
+  assert.equal(clock(2), 22, '基础与备用各自向上取整，+N 在基础阶段保持不变');
   assert.equal(clock(0), 1);
-  assert.equal(clock(1), 0, '无备用时走原生临时倒数分支');
+  assert.equal(clock(1), 5, '无备用时仍在基础阶段，由原生白色临时倒数显示');
   assert.equal(clock(2), 5);
   app.engine(null);
   assert.equal(clock(0), 0);
@@ -90,7 +90,8 @@ for (const mode of ['node', 'browser']) {
     const publish = (state) => mode === 'browser' ? app.engine(state) : app.bridge.accept(state);
     for (const [id, baseMs, extraMs, base, total] of [
       [1, 8000, 20000, 8, 28], [2, 5000, 18000, 5, 23],
-      [3, 5000, 0, 0, 5], [3, 2999, 0, 0, 3],
+      [3, 5000, 0, 5, 5], [3, 2999, 0, 3, 3],
+      [4, 3500, 800, 4, 5], [4, 3100, 800, 4, 5], [4, 0, 800, 0, 1],
     ]) {
       publish({ id, baseMs, extraMs, running: true });
       assert.equal(imports.mj.clock(0), 1);
@@ -150,13 +151,27 @@ for (const mode of ['node', 'browser']) {
   });
 }
 
-test('备用耗尽的5秒保留服务端基础时限，但原生显示强制进入临时倒计时分支', async () => {
+test('备用不足1秒时+1在基础阶段每帧都稳定，不在+1与无+之间闪烁', async () => {
+  const app = page(); const { imports } = await app.load();
+  app.bridge.accept({ id: 1, baseMs: 5000, extraMs: 600, running: true });
+  for (let ms = 0; ms < 5000; ms += 50) {
+    imports.mj.clock(0);
+    const base = imports.mj.clock(1), total = imports.mj.clock(2);
+    assert.equal(base, Math.ceil((5000 - ms) / 1000));
+    assert.equal(total - base, 1, `基础剩余${5000 - ms}ms时+N必须保持为1`);
+    app.advance(50);
+  }
+  imports.mj.clock(0);
+  assert.deepEqual([imports.mj.clock(1), imports.mj.clock(2)], [0, 1], '基础用完后只剩备用1秒');
+});
+
+test('备用耗尽的5秒仍是基础阶段：不显示+0，也不扣真正的基础时间', async () => {
   const app = page(); const { imports } = await app.load();
   app.bridge.accept({ id: 1, baseMs: 5000, extraMs: 0, running: true });
   assert.equal(imports.mj.clock(0), 1);
-  assert.equal(imports.mj.clock(1), 0, '不能继续走基础色分支');
-  assert.equal(imports.mj.clock(2), 5);
-  assert.equal(app.bridge.current().baseMs, 5000, '只改变原生显示分支，不扣除真正的基础时间');
+  assert.equal(imports.mj.clock(1), 5);
+  assert.equal(imports.mj.clock(2), 5, '总截止等于基础截止，原生不显示+0');
+  assert.equal(app.bridge.current().baseMs, 5000);
 });
 
 test('拒绝未知构建、损坏派生文件和无效时钟投影，不静默降级原客户端', async () => {
@@ -190,6 +205,10 @@ test('交付派生文件匹配清单和固定原件哈希；仅增加时钟和�
     0x20, 0x00, 0x2d, 0x00, 0xf8, 0x02, 0x04, 0x40,
     0x20, 0x00, 0x20, 0x00, 0x10, 0xcc, 0x72, 0x0b, 0x02, 0x40,
   ])), '原生倒计时须每帧读取权威余量，不能等一秒节拍才刷新');
+  // UpdateTimeText colour: activeSelf(+N) OR base-phase-without-bank (local 9) -> white palette.
+  // GameObject.get_activeSelf f987 shifts to 989 (call = 10 dd 07); $l2 is local 2.
+  assert.ok(derived.includes(Buffer.from([0x10, 0xdd, 0x07, 0x20, 0x09, 0x72, 0x21, 0x02])),
+    '备用耗尽的基础阶段必须使用白色临时倒数样式');
   const module = new WebAssembly.Module(derived);
   const originalModule = new WebAssembly.Module(brotliDecompressSync(original));
   assert.deepEqual(WebAssembly.Module.imports(module), [

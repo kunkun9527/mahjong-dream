@@ -146,7 +146,9 @@
       applied++;
       return 1;
     }
-    return field === 1 ? (cached.extraMs > 0 ? Math.ceil(cached.baseMs / 1000) : 0) : Math.ceil((cached.baseMs + cached.extraMs) / 1000);
+    // Round base and bank separately so the native "+N" (total - base) stays fixed during the base phase.
+    var base = Math.ceil(cached.baseMs / 1000);
+    return field === 1 ? base : base + Math.ceil(cached.extraMs / 1000);
   }
   async function configure(config) {
     var response = await fetch('Build_intl/mj-h5.clock.json', { cache: 'no-store' });

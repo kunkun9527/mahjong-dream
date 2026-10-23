@@ -44,6 +44,14 @@ try {
       patched = patched.replace('    (local $l3 i32)', '    (local $mj.packets i32) (local $l3 i32)')
         .replace('    global.get $g0\n', '    local.get $p1\n    local.set $mj.packets\n    global.get $g0\n');
     }
+    if (id === 14666) {
+      // Base phase with an empty bank keeps the white base palette (native picks colour from +N visibility).
+      const colour = '    local.get $p0\n    i32.load offset=280\n    i32.const 0\n    call $f987\n    local.set $l2\n';
+      if (patched.split(colour).length !== 2 || patched.split('(local $l8 i64)').length !== 2) throw new Error('Ambiguous countdown colour site');
+      patched = patched.replace('(local $l8 i64)', '(local $l8 i64) (local $mj.white i32)')
+        .replace(hook, hook + '    local.get $l7\n    local.get $p0\n    i64.load offset=352\n    i64.lt_s\n    local.get $p0\n    i64.load offset=368\n    local.get $p0\n    i64.load offset=352\n    i64.eq\n    i32.and\n    local.set $mj.white\n')
+        .replace(colour, colour.replace('    local.set $l2\n', '    local.get $mj.white\n    i32.or\n    local.set $l2\n'));
+    }
     // Native InitCountDown is the real playable-hand boundary, not receipt of NtfGameStart.
     if (id === 39470) patched = patched.replace('    global.set $g0)', '    global.set $g0\n    i32.const 7\n    local.get $p0\n    call $mj.sync)');
     // Reload dispatch uses HybridCLR: observe the real native state machine, not an unused AOT async clone.
