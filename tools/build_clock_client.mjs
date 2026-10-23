@@ -23,7 +23,7 @@ try {
   execSync(`npm exec --yes --package=wabt@1.0.39 -- wasm2wat "${raw}" -o "${watFile}" --generate-names`, { stdio: 'inherit' });
   const wat = fs.readFileSync(watFile);
   const changes = [];
-  for (const id of [39470, 14666, 35847, 21653, 35819, 4571]) {
+  for (const id of [39470, 14666, 35847, 21653, 35819, 4571, 106610]) {
     const start = wat.indexOf(`\n  (func $f${id} `);
     const end = wat.indexOf('\n  (func ', start + 1);
     if (start < 0 || end < 0) throw new Error('Missing function ' + id);
@@ -35,6 +35,7 @@ try {
       21653: ['    call $f39590\n', '    local.get $p0\n    call $mj.render\n'],
       35819: ['    call_indirect $Kk (type $t2)', '    i32.const 5\n    i32.const 0\n    call $mj.sync\n'],
       4571: ['    global.set $g0)', '    local.get $mj.state\n    i32.const 4\n    i32.eq\n    if\n      i32.const 4\n      local.get $mj.machine\n      call $mj.sync\n    end'],
+      106610: ['      local.get $p0\n      local.get $p0\n      call $f14666\n', ''],
     };
     const [needle, hook] = sites[id];
     if (body.split(needle).length !== 2) throw new Error('Ambiguous clock/sync patch site ' + id);
@@ -51,6 +52,13 @@ try {
       patched = body.replace(needle, needle.slice(0, -1) + '\n' + hook + ')')
         .replace('    (local $l3 i32)', '    (local $mj.machine i32) (local $mj.state i32) (local $l3 i32)')
         .replace('    global.get $g0\n', '    local.get $p0\n    local.set $mj.machine\n    local.get $p1\n    local.set $mj.state\n    local.get $p1\n    i32.const 9\n    i32.eq\n    if\n      i32.const 3\n      local.get $p0\n      call $mj.sync\n    end\n    global.get $g0\n');
+    }
+    if (id === 106610) {
+      // Refresh active countdowns every frame; keep the native one-second sound/effect cadence.
+      const block = '    block $B1\n';
+      if (body.split(block).length !== 2) throw new Error('Ambiguous countdown refresh block');
+      patched = body.replace(needle, '').replace(block,
+        '    local.get $p0\n    i32.load8_u offset=376\n    if\n      local.get $p0\n      local.get $p0\n      call $f14666\n    end\n' + block);
     }
     changes.push({ start, end, data: Buffer.from(patched) });
   }

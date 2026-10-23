@@ -184,6 +184,12 @@ test('交付派生文件匹配清单和固定原件哈希；仅增加时钟和�
   assert.equal(manifest.sourceHash, sourceHash);
   assert.equal(hash(compressed), manifest.compressedHash);
   assert.equal(hash(derived), manifest.wasmHash);
+  // Fixed-build OnTimer: active -> UpdateTimeText -> one-second block, not inside it.
+  // f14666 shifts to index 14668 after the two mj imports (call = 10 cc 72).
+  assert.ok(derived.includes(Buffer.from([
+    0x20, 0x00, 0x2d, 0x00, 0xf8, 0x02, 0x04, 0x40,
+    0x20, 0x00, 0x20, 0x00, 0x10, 0xcc, 0x72, 0x0b, 0x02, 0x40,
+  ])), '原生倒计时须每帧读取权威余量，不能等一秒节拍才刷新');
   const module = new WebAssembly.Module(derived);
   const originalModule = new WebAssembly.Module(brotliDecompressSync(original));
   assert.deepEqual(WebAssembly.Module.imports(module), [
