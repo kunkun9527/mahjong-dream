@@ -10,27 +10,34 @@ import { loadProfile, saveProfile } from './profile.mjs';
 import { createProfileHost, AWAY_LIMIT_MS } from '../mockjs/profile_host.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-// The launcher passes the log path in MJ_LOG_FILE and this process writes it, instead of the launcher teeing our stdout:
-// clicking into the Windows console pauses console output, and a stalled tee used to cut a match's log off mid-hand.
+// The service owns the durable sink; console output is not used as a file transport.
+const diagnosticLines = [];
+let logStream = null;
 if (process.env.MJ_LOG_FILE) {
   const logPath = path.resolve(process.env.MJ_LOG_FILE);
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
-  const logStream = fs.createWriteStream(logPath, { flags: 'a' });
-  logStream.on('error', (error) => console.error('[local] 日志写入失败：' + error.message));
-  // Engine lines carry their own stamp; [local] lines do not, and timing questions need a clock reading.
-  const stamp = () => {
-    const now = new Date();
-    return `[${now.toTimeString().slice(0, 8)}.${String(now.getMilliseconds()).padStart(3, '0')}] `;
-  };
-  for (const name of ['log', 'warn', 'error']) {
-    const original = console[name].bind(console);
-    console[name] = (...args) => {
-      const line = format(...args);
-      logStream.write((line.startsWith('[local]') ? stamp() + line : line) + '\n');
-      original(...args);
-    };
-  }
+  logStream = fs.createWriteStream(logPath, { flags: 'a' });
+  const report = console.error.bind(console);
+  logStream.on('error', (error) => report('[local] 日志写入失败：' + error.message));
 }
+for (const name of ['log', 'warn', 'error']) {
+  const original = console[name].bind(console);
+  console[name] = (...args) => {
+    const line = new Date().toISOString() + ' [' + name + '] ' + format(...args);
+    diagnosticLines.push(line);
+    if (diagnosticLines.length > 5000) diagnosticLines.shift();
+    if (logStream && !logStream.destroyed) logStream.write(line + '\n');
+    original(...args);
+  };
+}
+process.on('uncaughtExceptionMonitor', (error, origin) => {
+  const line = new Date().toISOString() + ' [fatal:' + origin + '] ' + error.stack + '\n';
+  diagnosticLines.push(line);
+  // Observe, never swallow: Node still exits on the original fatal exception.
+  if (process.env.MJ_LOG_FILE) {
+    try { fs.appendFileSync(process.env.MJ_LOG_FILE, line); } catch { /* Native stderr remains available. */ }
+  }
+});
 const requiredResources = ['index.html', 'game.html', 'Build_intl/mj-h5.loader.js',
   'Build_intl/mj-h5.data.unityweb', 'Build_intl/mj-h5.framework.js.unityweb', 'Build_intl/mj-h5.wasm.unityweb'];
 for (const resource of requiredResources) {
@@ -147,6 +154,10 @@ async function sendStatic(request, response) {
     'Cache-Control': extension === '.html' || extension === '.js' ? 'no-cache' : 'public, max-age=3600',
     'X-Content-Type-Options': 'nosniff',
   };
+  if (/^mj-h5\.clock-[a-f0-9]{16}\.wasm\.unityweb$/.test(path.basename(file))) {
+    headers['Content-Type'] = 'application/wasm';
+    headers['Content-Encoding'] = 'br';
+  }
 
   const range = request.headers.range?.match(/^bytes=(\d*)-(\d*)$/);
   if (range) {
@@ -205,6 +216,27 @@ async function handleProfileApi(request, response) {
   catch (error) { send(400, { ok: false, error: error.message }); }
 }
 
+/** A bounded diagnostic tail, not a profile/network-payload endpoint. */
+async function handleDiagnostics(request, response) {
+  const origin = request.headers.origin;
+  if (origin && origin !== `http://${request.headers.host}`) { response.writeHead(403).end(); return; }
+  if (request.method === 'GET') {
+    response.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+    response.end(diagnosticLines.join('\n') + '\n');
+    return;
+  }
+  if (request.method !== 'POST') { response.writeHead(405).end(); return; }
+  if (!/^application\/json\s*(?:;|$)/i.test(request.headers['content-type'] || '')) { response.writeHead(403).end(); return; }
+  try {
+    const body = await readJson(request);
+    if (!Array.isArray(body.lines) || body.lines.length > 100 || body.lines.some((line) => typeof line !== 'string' || line.length > 2000)) {
+      response.writeHead(400).end(); return;
+    }
+    for (const line of body.lines) console.log('[frontend] ' + JSON.stringify(line));
+    response.writeHead(204).end();
+  } catch { response.writeHead(400).end(); }
+}
+
 // A hidden tab is not a disconnected player: pause the human clock instead of freezing the table or letting the AI take over.
 let pageVisible = true;
 let visibilityTimer = null;
@@ -212,24 +244,26 @@ const VISIBILITY_GRACE_MS = 4_000;
 function notePageVisibility(visible) {
   clearTimeout(visibilityTimer);
   visibilityTimer = null;
-  const engine = session.riichi?.engine;
-  const live = engine && !session.riichi.matchOver;
+  if (pageVisible !== visible) console.log('[local] 页面' + (visible ? '回到前台，先同步画面再续时' : '切到后台，精确冻结剩余时间'));
+  pageVisible = visible;
+  const resync = session.setPageVisible(visible);
   if (visible) {
-    if (!pageVisible) console.log('[local] 页面回到前台，你这一巡的倒计时继续');
-    pageVisible = true;
-    // Heartbeats stop when the tab is hidden or its timers are throttled; silence means "in the background".
     visibilityTimer = setTimeout(() => notePageVisibility(false), VISIBILITY_GRACE_MS);
-    if (live) engine.setHumanPresent(true);
-    return;
+    if (resync && activeSocket?.readyState === WebSocket.OPEN) {
+      console.log('[local] 前台恢复：触发原客户端重连同步');
+      activeSocket.close(1012, 'foreground-resync');
+    }
   }
-  if (pageVisible) console.log('[local] 页面切到后台，牌桌暂停等你回来（不按离开处理，也不会 AI 代打）');
-  pageVisible = false;
-  if (live) engine.setHumanPresent(false);
 }
 
 const server = http.createServer((request, response) => {
   const pathname = new URL(request.url, 'http://127.0.0.1').pathname;
+  if (pathname === '/api/diagnostics') {
+    void handleDiagnostics(request, response);
+    return;
+  }
   if (pathname === '/api/page-visibility') {
+    if (request.headers.origin && request.headers.origin !== `http://${request.headers.host}`) { response.writeHead(403).end(); return; }
     if (request.method !== 'POST') { response.writeHead(405, { Allow: 'POST' }).end(); return; }
     notePageVisibility(new URL(request.url, 'http://127.0.0.1').searchParams.get('visible') !== '0');
     response.writeHead(204, { 'Cache-Control': 'no-store' }).end();
@@ -261,6 +295,12 @@ const server = http.createServer((request, response) => {
 
 const websocketServer = new WebSocketServer({ noServer: true, maxPayload: 2 * 1024 * 1024 });
 let activeSocket = null;
+function publishHumanClock() {
+  if (activeSocket?.readyState === WebSocket.OPEN) {
+    activeSocket.send(JSON.stringify({ mjClock: session.riichi?.engine?.humanClockState() ?? null }));
+  }
+}
+session.onHumanClock = publishHumanClock;
 
 function applyGameOptions(requestUrl) {
   const url = new URL(requestUrl, 'http://127.0.0.1');
@@ -302,6 +342,9 @@ websocketServer.on('connection', (websocket) => {
     _deliver(bytes) {
       if (websocket.readyState === WebSocket.OPEN) websocket.send(bytes, { binary: true });
     },
+    _sync(message) {
+      if (websocket.readyState === WebSocket.OPEN) websocket.send(JSON.stringify({ mjSync: message }));
+    },
     close(code, reason) {
       serverClose = { code, reason: String(reason || '') };
       websocket.close(code, reason);
@@ -310,15 +353,20 @@ websocketServer.on('connection', (websocket) => {
   session.resume(adapter);
   clearTimeout(awayTimer);
   awayTimer = null;
-  pageVisible = true;
-  clearTimeout(visibilityTimer);
-  visibilityTimer = null;
+  session.setPageVisible(pageVisible);
+  publishHumanClock();
   // The frozen turn resumes its clock once the client has re-synced the table (mock/server.js playerBack).
   profileHost.touch();
   console.log('[local] 游戏页面已连接');
 
   websocket.on('message', (data, isBinary) => {
-    if (!isBinary) return;
+    if (!isBinary) {
+      if (data.length <= 1024) {
+        try { session.ackClientSync(JSON.parse(data.toString()).mjSyncAck, adapter); }
+        catch { /* Invalid control messages never enter the binary dispatcher. */ }
+      }
+      return;
+    }
     // Keep only the message ID; do not record nicknames, saves, hands, or full payloads.
     try {
       recentRequests.push(Number(globalThis.__mj.proto.dict(new Uint8Array(data))[2]) || 0);
@@ -386,6 +434,7 @@ async function shutdown() {
   await saveNow().catch((error) => console.error('[local] 存档失败:', error));
   server.close();
   websocketServer.close();
+  if (logStream && !logStream.destroyed) await new Promise((resolve) => logStream.end(resolve));
 }
 
 process.once('SIGINT', () => void shutdown().finally(() => process.exit(0)));

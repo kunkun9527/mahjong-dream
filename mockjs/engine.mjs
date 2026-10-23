@@ -13,7 +13,7 @@ var WIND_NAME = { 1: "东", 2: "南", 3: "西", 4: "北" };
  *  This allowance stays server-side only: the client renders `defaultMinTimeout − ServerRedundantTimeOut` as the base
  *  countdown but switches to the bank when the *announced* base ends, so announcing it would leave a visible stall. */
 export var SERVER_REDUNDANT_TIMEOUT = 3;
-/** Extra allowance on a match's first decision (deal/join animation), also server-side only. */
+/** Visible, non-chargeable entrance allowance on the match's first human draw window. */
 export var FIRST_START_REDUNDANT_TIMEOUT = 8;
 var kindOf2 = (id) => {
   const d = decodeId(id);
@@ -67,6 +67,9 @@ var GameEngine = class {
     this.scores = null;
     this.xunNum = 0;
     this._pending = null;
+    this._humanClock = null;
+    this._windowId = 0;
+    this._usedFirstStartGrace = false;
     this._processing = false; // Action-in-progress flag (prevents duplicate-packet replay)
     this._expectedDraw = null;
     this._expectedClaim = null;
@@ -90,6 +93,7 @@ var GameEngine = class {
     //   ['d'|'c', payload, bank] turn / claim decision as finally applied (client, auto setting or timeout) and the time bank after it
     this.humanLog = [];
     this.onRecord = opts.onRecord || null;
+    this.onHumanClock = opts.onHumanClock || null;
     // Replay: feed a saved log back at speed 0; when it runs out the engine goes live at the next human wait.
     this._replay = Array.isArray(opts.replayLog) && opts.replayLog.length ? opts.replayLog.slice() : null;
     this.replaying = !!opts.replayLog;
@@ -115,21 +119,76 @@ var GameEngine = class {
     if (this.onReplayDone) this.onReplayDone(!next);
     return null;
   }
-  /** Player connection state. Leaving pauses the current human wait; returning restarts its clock from the saved time bank. */
+  /** Hosts supply the conjunction of visibility, connection and completed synchronization. */
   setHumanPresent(present) {
-    this.humanPresent = !!present;
+    present = !!present;
+    if (this.humanPresent === present) return;
+    this.humanPresent = present;
     const pending = this._pending;
-    if (!this.humanPresent) {
+    if (!present) {
+      this._freezeHumanClock();
       if (pending?.timer) { clearTimeout(pending.timer); pending.timer = null; }
-      if (this._prepareWaiter?.timer) { clearTimeout(this._prepareWaiter.timer); this._prepareWaiter.timer = null; }
-      return;
+      const prepare = this._prepareWaiter;
+      if (prepare?.timer) {
+        clearTimeout(prepare.timer); prepare.timer = null;
+        prepare.timeoutMs = Math.max(0, prepare.timeoutMs - (Date.now() - prepare.startedAt));
+      }
+    } else {
+      if (this._humanClock && this._humanClock.runningSince == null && !this._bufferedDraw && !this._bufferedClaim) {
+        this._humanClock.runningSince = Date.now();
+      }
+      if (pending && !pending.timer && !this.autoHuman) {
+        this._armHumanTimer(pending);
+        this._queueAutomatic(pending);
+      }
+      if (this._prepareWaiter && !this._prepareWaiter.timer) this._armPrepareTimer(this._prepareWaiter);
     }
-    if (pending && !pending.timer && !this.autoHuman) {
-      pending.startedAt = Date.now();
-      this._armHumanTimer(pending);
-      this._queueAutomatic(pending);
+    this._publishHumanClock();
+    this.note("clock", JSON.stringify({ event: present ? "resume" : "pause", ...this.humanTime() }));
+  }
+  _openHumanClock(kind) {
+    const bonus = kind === "draw" && this.handIndex === 0 && !this._usedFirstStartGrace ? FIRST_START_REDUNDANT_TIMEOUT : 0;
+    if (bonus) this._usedFirstStartGrace = true;
+    this._humanClock = {
+      id: ++this._windowId, kind, base: this.baseTime, bonus,
+      bank: Number.isFinite(this.players[0].timeBank) ? this.players[0].timeBank : this.extraTime,
+      elapsedMs: 0, runningSince: this.humanPresent ? Date.now() : null,
+    };
+    this._publishHumanClock();
+    this.note("clock", JSON.stringify({ event: "open", ...this.humanTime(), bonus }));
+  }
+  _freezeHumanClock() {
+    const clock = this._humanClock;
+    if (clock?.runningSince != null) {
+      clock.elapsedMs += Math.max(0, Date.now() - clock.runningSince);
+      clock.runningSince = null;
+      this._publishHumanClock();
     }
-    if (this._prepareWaiter && !this._prepareWaiter.timer) this._armPrepareTimer(this._prepareWaiter);
+  }
+  /** Millisecond projection for the host bridge; no network grace or rounded wire values. */
+  humanClockState(now = Date.now()) {
+    const clock = this._humanClock;
+    if (!clock) return null;
+    const time = this.humanTime(now);
+    const baseMs = Math.max(0, clock.base * 1000 - time.elapsedMs);
+    const totalMs = Math.max(0, (clock.base + clock.bonus + clock.bank) * 1000 - time.elapsedMs);
+    return { id: clock.id, baseMs, extraMs: totalMs - baseMs, running: clock.runningSince != null };
+  }
+  _publishHumanClock() {
+    if (this.onHumanClock) this.onHumanClock(this.humanClockState());
+  }
+  /** One projection for notices, deadlines, bank accounting and reload; wire seconds round up. */
+  humanTime(now = Date.now()) {
+    const c = this._humanClock;
+    if (!c) return { defaultMinTimeout: this.baseTime, leftTimer: Math.ceil(this.players?.[0]?.timeBank ?? this.extraTime) };
+    const elapsedMs = c.elapsedMs + (c.runningSince == null ? 0 : Math.max(0, now - c.runningSince));
+    const elapsed = elapsedMs / 1000;
+    const baseLeft = Math.max(0, c.base - elapsed);
+    const bonusLeft = Math.max(0, c.bonus - Math.max(0, elapsed - c.base));
+    const bankLeft = Math.max(0, c.bank - Math.max(0, elapsed - c.base - c.bonus));
+    return { id: c.id, kind: c.kind, elapsedMs, bankLeft,
+      defaultMinTimeout: Math.ceil(baseLeft), leftTimer: Math.ceil(bonusLeft + bankLeft),
+      timeoutMs: Math.max(0, (c.base + c.bonus + c.bank + SERVER_REDUNDANT_TIMEOUT) * 1000 - elapsedMs) };
   }
   uidOf(seat) {
     return this.uids[seat];
@@ -176,6 +235,7 @@ var GameEngine = class {
     });
   }
   _armPrepareTimer(fin) {
+    fin.startedAt = Date.now();
     fin.timer = setTimeout(() => {
       fin.timer = null;
       this.log && this.log("[riichi] \u7B49 ReqPrepare \u8D85\u65F6\uFF0C\u81EA\u884C\u5F00\u5C40");
@@ -210,7 +270,7 @@ var GameEngine = class {
     while (!this.finished) {
       await this.runHand();
     }
-    if (this.onFinish) this.onFinish(this.scores);
+    if (this.scores && this.onFinish) this.onFinish(this.scores);
   }
   // ================= One hand =================
   async runHand() {
@@ -251,7 +311,6 @@ var GameEngine = class {
         score,
         scoreAtStart: score,
         timeBank: s === 0 ? this.extraTime : 0,
-        pao: null,
         baoPaiWin: false,
         hand: wall.splice(0, 13).sort((a, b) => a - b),
         melds: [],
@@ -317,7 +376,7 @@ var GameEngine = class {
           xunNum: isDealer ? 1 : 0
         };
       }),
-      leftTimer: this.extraTime,
+      leftTimer: this._humanClock ? this.humanTime().leftTimer : this.extraTime,
       // The client's clock for a turn is `defaultMinTimeout + leftTimer` (base phase, then the shared bank), so leftTimer
       // carries the bank only; adding the base here would count it twice and the server would cut the turn off early.
       defaultMinTimeout: this.baseTime,
@@ -389,8 +448,7 @@ var GameEngine = class {
     await this._d(this.T.claim);
     if (await this.resolveKanRob(seat, tile, canQiang, {})) return;
     // Nobody robbed the North: close the claim window like any other quiet window.
-    this.emit(RiichiMsg.ENtfQiangCardEnd, this.buildQiangEnd(null, PlayAction.Guo, [], []));
-    await this._d(this.T.claim);
+    await this.closeEmptyClaimWindow();
 
     p.hand.splice(p.hand.indexOf(tile), 1);
     p.melds.push({ type: "babei", tiles: [tile] });
@@ -407,6 +465,7 @@ var GameEngine = class {
     this._processing = false;
     if (this._timedOut?.kind === "draw") this._timedOut = null;
     this._expectedDraw = { seat, drew, actions: actions.slice(), cantPlays: cantPlays.slice() };
+    this._openHumanClock("draw");
   }
   validateTurnPayload(payload, expected = this._expectedDraw) {
     if (!expected || !this.players?.[expected.seat]) return Result.Fail_InvalidSequence;
@@ -450,6 +509,7 @@ var GameEngine = class {
     this._processing = false;
     if (this._timedOut?.kind === "claim") this._timedOut = null;
     this._expectedClaim = { seat, discarderSeat, card, actions: actions.slice() };
+    this._openHumanClock("claim");
     this.note("claim", `打开鸣牌窗口 P${seat} 可鸣[${actions.map((act) => this.claimName(act)).join("/")}] 来自P${discarderSeat}的${this.cardName(card)}`);
   }
   validateClaimPayload(payload, expected = this._expectedClaim) {
@@ -502,7 +562,7 @@ var GameEngine = class {
           card: q.seat === seat && (q.isHuman || this.autoHuman) ? p.drawnTile : 0,
           tingInfos: q.seat === seat ? this.buildTingInfos(p) : q.isHuman ? this.buildTingInfos(q) : [],
           canPlayActions: q.seat === seat ? can : [],
-          leftTimer: q.isHuman ? Math.ceil(q.timeBank + this._firstStartBonus(q)) : 0,
+          leftTimer: q.isHuman ? this.humanTime().leftTimer : 0,
           isZhenTing: this.isFuriten(q),
           xunNum: this.xunNum,
           zhenTingTypes: this.furitenTypes(q)
@@ -1037,10 +1097,13 @@ var GameEngine = class {
    * Ends a claim window nobody won. The window has to be closed on the wire (the client leaves its claim
    * phase only on NtfQiangCardEnd), then the turn passes to the next seat.
    */
-  async continueAfterNoClaim(discarderSeat) {
-    this.note("claim", "无人鸣牌，窗口收尾并轮到下一家");
+  async closeEmptyClaimWindow() {
     this.emit(RiichiMsg.ENtfQiangCardEnd, this.buildQiangEnd(null, PlayAction.Guo, [], []));
     await this._d(this.T.claim);
+  }
+  async continueAfterNoClaim(discarderSeat) {
+    this.note("claim", "无人鸣牌，窗口收尾并轮到下一家");
+    await this.closeEmptyClaimWindow();
     this.confirmRiichiDeclaration(this.players[discarderSeat]);
     if (this.playersN === 4 && this.players.every((player) => player.riichi)) {
       await this.abortiveDraw(LiuJuType.SiJiaLiZhi, discarderSeat);
@@ -1198,8 +1261,7 @@ var GameEngine = class {
     await this._d(this.T.claim);
     if (await this.resolveKanRob(seat, card, canQiang)) return;
     // Same as a quiet discard: nobody robbed the kan, so close the window before the replacement draw.
-    this.emit(RiichiMsg.ENtfQiangCardEnd, this.buildQiangEnd(null, PlayAction.Guo, [], []));
-    await this._d(this.T.claim);
+    await this.closeEmptyClaimWindow();
 
     if (kind === "ankan") {
       const tiles = this.takeTilesByKind(p, kindOf2(card), 4);
@@ -1331,10 +1393,10 @@ var GameEngine = class {
         { ...this.winOpts(p, true, card), ...extra }
       );
       if (!win.isAgari || !win.hasYaku) throw new Error(`非法荣和 seat=${seat}`);
-      this.recordPaoOnRon(p, loser, win);
       wins.set(seat, win);
     }
-    // State is committed only after all winners pass validation; for multi-ron, the robbed tile is removed only once.
+    // Commit pao as well as the tile/declaration only after every winner has passed validation.
+    for (const [seat, win] of wins) this.recordPaoOnRon(this.players[seat], loser, win);
     this.rollbackRiichiDeclaration(donor);
     if (robbed) {
       donor.hand.splice(robbedIndex, 1);
@@ -1378,6 +1440,9 @@ var GameEngine = class {
     // An abort (九种九牌/四杠散了/…) can end the hand while the human's window is still armed. Drop that wait silently:
     // its timer must not fire into the next hand, or it would charge the bank for time the player never got to use.
     if (this._pending?.timer) clearTimeout(this._pending.timer);
+    if (this._humanClock) this.note("clock", JSON.stringify({ event: "hand-end", ...this.humanTime() }));
+    this._humanClock = null;
+    this._publishHumanClock();
     this._pending = null;
     this._bufferedDraw = null;
     this._bufferedClaim = null;
@@ -1998,7 +2063,7 @@ var GameEngine = class {
     if (this._prepareWaiter) this._prepareWaiter();
     if (!this._pending) return;
     const pending = this._pending;
-    this.resolveHumanPending(pending, this.timeoutHumanAction(pending.kind));
+    this.resolveHumanPending(pending, this.timeoutHumanAction(pending.kind), "autoplay");
   }
   automaticHumanAction(kind) {
     const expected = kind === "draw" ? this._expectedDraw : this._expectedClaim;
@@ -2025,16 +2090,18 @@ var GameEngine = class {
     const forbiddenKinds = new Set((expected.cantPlays || []).map((value) => Math.floor(value / 10)));
     return { action: PlayAction.Normal, card: this.bestDiscard(player, { forbiddenKinds }).discardId };
   }
-  resolveHumanPending(pending, payload) {
+  resolveHumanPending(pending, payload, source = "client") {
     if (this._pending !== pending) return;
     if (pending.timer) clearTimeout(pending.timer);
+    this._freezeHumanClock();
+    const time = this.humanTime();
     const player = this.players[0];
-    const elapsed = (Date.now() - pending.startedAt) / 1_000;
-    const bankBefore = Number.isFinite(player.timeBank) ? player.timeBank : this.extraTime;
-    // Only the clock the client shows (base + bank) is charged; the server's redundant allowance is a tolerance for the
-    // round trip and for the client's own timeout, never thinking time the player has to pay for.
-    const charged = Math.min(elapsed, this.baseTime + bankBefore);
-    player.timeBank = Math.max(0, bankBefore - Math.max(0, charged - this.baseTime));
+    const bankBefore = player.timeBank;
+    player.timeBank = time.bankLeft;
+    if (source === "client" && payload?.isTimeout) source = "client-timeout";
+    this.note("clock", JSON.stringify({ event: "resolve", ...time, source, bankBefore, bankAfter: player.timeBank }));
+    this._humanClock = null;
+    this._publishHumanClock();
     if (pending.kind === "draw") this._expectedDraw = null;
     else this._expectedClaim = null;
     this._pending = null;
@@ -2042,30 +2109,27 @@ var GameEngine = class {
     for (const key of ["action", "card", "otherCards"]) if (payload?.[key] != null) applied[key] = payload[key];
     const act = pending.kind === "claim" ? (applied.action === PlayAction.Guo ? "过牌" : this.claimName(applied.action)) : "出牌";
     const cards = [applied.card, ...(applied.otherCards || [])].filter((value) => value != null).map((value) => this.cardName(value)).join(" ");
-    this.note("human", `${act}${cards ? " " + cards : ""} 用时${elapsed.toFixed(1)}s 备用${Math.round(player.timeBank * 10) / 10}s`);
+    this.note("human", act + (cards ? " " + cards : "") + " 用时" + (time.elapsedMs / 1000).toFixed(1) + "s 备用" + Math.round(player.timeBank * 10) / 10 + "s");
     this._record([pending.kind === "draw" ? "d" : "c", applied, player.timeBank]);
     pending.resolve(payload || {});
   }
   _armHumanTimer(pending) {
-    const player = this.players[0];
-    const grace = pending.grace != null ? pending.grace : SERVER_REDUNDANT_TIMEOUT;
-    const timeoutMs = Math.max(0, this.baseTime + player.timeBank + grace) * 1_000;
+    const time = this.humanTime();
+    this.note("clock", JSON.stringify({ event: "arm", ...time, deadline: Date.now() + time.timeoutMs }));
     pending.timer = setTimeout(() => {
+      if (this._pending !== pending || !this.humanPresent) return;
       const payload = this.timeoutHumanAction(pending.kind);
-      this.note("timeout", `${pending.kind === "claim" ? "鸣牌窗口" : "出牌"}超时，服务端自动${pending.kind === "claim" ? "过牌" : "打出"}（客户端此后才到的窗口内请求仍会因窗口关闭而失败）`);
-      this.resolveHumanPending(pending, payload);
-      this._timedOut = { kind: pending.kind, payload };
-    }, timeoutMs);
-  }
-  /** Hand 0 / draw 0 also covers the deal animation. The extra seconds are announced in `leftTimer` too: the client starts
-   *  its clock on the frame, so a server-only allowance would still let its own countdown run out during the entrance. */
-  _firstStartBonus(q) {
-    // Replay-safe predicate (a mutable "already used" flag would announce a different clock after a mid-hand reload).
-    return q.isHuman && this.handIndex === 0 && q.discards.length === 0 ? FIRST_START_REDUNDANT_TIMEOUT : 0;
+      this.note("timeout", "窗口#" + time.id + " 服务端超时，执行默认动作");
+      this.resolveHumanPending(pending, payload, "server-timeout");
+      this._timedOut = { kind: pending.kind, payload, id: time.id };
+    }, time.timeoutMs);
   }
   waitHuman(kind) {
+    if (!this._humanClock) this._openHumanClock(kind);
     const replayed = this._replayNext(kind === "draw" ? "d" : "c");
     if (replayed) {
+      this._humanClock = null;
+      this._publishHumanClock();
       if (kind === "draw") this._expectedDraw = null;
       else this._expectedClaim = null;
       this.players[0].timeBank = replayed[2];
@@ -2073,33 +2137,22 @@ var GameEngine = class {
       return Promise.resolve({ ...replayed[1] });
     }
     return new Promise((resolve) => {
-      // The match's first decision also covers the deal/join animation; both allowances stay server-side so the client's
-      // visible 5 + bank countdown is untouched.
-      let grace = SERVER_REDUNDANT_TIMEOUT;
-      if (kind === "draw" && this.handIndex === 0 && !this._usedFirstStartGrace) {
-        this._usedFirstStartGrace = true;
-        grace += FIRST_START_REDUNDANT_TIMEOUT;
-      }
-      const pending = { kind, resolve, startedAt: Date.now(), timer: null, grace };
+      const pending = { kind, resolve, timer: null };
       this._pending = pending;
       const buffered = kind === "draw" ? this._bufferedDraw : this._bufferedClaim;
-      const total = this.baseTime + this.players[0].timeBank + grace;
-      const shown = this.baseTime + this.players[0].timeBank + (grace - SERVER_REDUNDANT_TIMEOUT);
-      this.note("wait", `等真人决策 ${kind}（玩家看到${shown}s，服务端等${total}s）` +
-        (buffered != null ? "，已有缓存请求直接消费" : ""));
+      this.note("clock", JSON.stringify({ event: "wait", ...this.humanTime(), buffered: buffered != null }));
       if (buffered != null) {
         if (kind === "draw") this._bufferedDraw = null;
         else this._bufferedClaim = null;
+        this.note("clock", JSON.stringify({ event: "consume-buffer", ...this.humanTime() }));
         this.resolveHumanPending(pending, buffered);
         return;
       }
       if (this.autoHuman) {
         const payload = this.automaticHumanAction(kind) || this.timeoutHumanAction(kind);
-        queueMicrotask(() => this.resolveHumanPending(pending, payload));
+        queueMicrotask(() => this.resolveHumanPending(pending, payload, "autoplay"));
         return;
       }
-      // Disconnected: freeze on the player's decision (no timeout) until they return or the host hands the seat to the AI.
-      // Auto tsumogiri / no-call also stays frozen while away; it resumes when the player returns (setHumanPresent).
       if (this.humanPresent) {
         this._armHumanTimer(pending);
         this._queueAutomatic(pending);
@@ -2114,7 +2167,7 @@ var GameEngine = class {
     queueMicrotask(() => {
       if (this._pending !== pending || !this.humanPresent) return;
       const automatic = this.automaticHumanAction(pending.kind);
-      if (automatic) this.resolveHumanPending(pending, automatic);
+      if (automatic) this.resolveHumanPending(pending, automatic, "client-setting");
     });
   }
   /**
@@ -2128,12 +2181,16 @@ var GameEngine = class {
     const done = this._timedOut;
     if (!done || done.kind !== kind || (kind === "draw" ? this._expectedDraw : this._expectedClaim)) return false;
     if (Number(payload?.action ?? PlayAction.Normal) !== done.payload.action) return false;
-    return kind === "claim" ? done.payload.action === PlayAction.Guo : Number(payload?.card) === done.payload.card;
+    const accepted = kind === "claim" ? done.payload.action === PlayAction.Guo : Number(payload?.card) === done.payload.card;
+    if (accepted) this.note("clock", JSON.stringify({ event: "late-ack", id: done.id, kind }));
+    return accepted;
   }
   submitDraw(payload) {
     if (this.ackTimedOut("draw", payload)) return Result.Succ;
+    if (!this.humanPresent) return Result.Fail_InvalidSequence;
     const result = this.validateTurnPayload(payload);
     if (result !== Result.Succ) return result;
+    this._freezeHumanClock();
     this._expectedDraw = null;
     this._processing = true;
     if (this._pending && this._pending.kind === "draw") {
@@ -2145,6 +2202,7 @@ var GameEngine = class {
   }
   submitClaim(payload) {
     if (this.ackTimedOut("claim", payload)) return Result.Succ;
+    if (!this.humanPresent) return Result.Fail_InvalidSequence;
     const result = this.validateClaimPayload(payload);
     if (result !== Result.Succ) {
       // A claim arriving with no window open means the client still believes it is choosing: its button presses would
@@ -2152,6 +2210,7 @@ var GameEngine = class {
       if (!this._expectedClaim && !this.handEnded && !this.matchOver) this.resyncClaimWindow();
       return result;
     }
+    this._freezeHumanClock();
     this._expectedClaim = null;
     this._processing = true;
     if (this._pending && this._pending.kind === "claim") {
@@ -2167,6 +2226,9 @@ var GameEngine = class {
     this.emit(RiichiMsg.ENtfQiangCardEnd, this.buildQiangEnd(null, PlayAction.Guo, [], []));
   }
   cancelPending() {
+    if (this._humanClock) this.note("clock", JSON.stringify({ event: "cancel", ...this.humanTime() }));
+    this._humanClock = null;
+    this._publishHumanClock();
     this._expectedDraw = null;
     this._expectedClaim = null;
     this._timedOut = null;

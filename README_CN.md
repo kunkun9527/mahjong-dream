@@ -65,6 +65,12 @@ start-game.bat --players=4 --length=hanchan
 start-game.bat --players=3 --length=east
 ```
 
+## 调试日志
+
+断线提示上可点**导出诊断日志**；正常运行时也可在浏览器开发者控制台执行 `__mjmock.exportLogs()`。日志只留本地，包含计时生命周期、请求结果、连接/同步过程和前端异常。浏览器历史有容量上限，出问题后请及时导出；离线启动器还会把完整服务端日志写入 `logs/`。
+
+倒计时由本地后端统一管理，切后台或断线时冻结，恢复后继续剩余时间。当前国际版通过保留原件的派生计时客户端同步显示；恢复时须等原 Unity 消费当前批次、渲染队列空闲，且快照 Reload 返回对局后才续时；迟到、旧连接或缺失确认不能解冻。双宿主已通过受控 Edge 恢复验证；真实系统后台切换、自然抢杠/抢北仍待验收。详见[当前交接状态](docs/handoff.md)。
+
 ## 常见问题
 
 **黑屏或卡在加载中？** 请使用较新的 Chrome 或 Edge，打开硬件加速后刷新页面。首次加载需要稳定的网络。
@@ -88,7 +94,7 @@ npm run build   # 由 mockjs/ 重新生成 mock/riichi.js
 
 - 网页版与离线版共用同一后端：[ADR 0007](docs/adr/0007-browser-and-node-hosts.md)
 - 架构：[`docs/technical-architecture.md`](docs/technical-architecture.md) · 代码地图：[`codemap.md`](codemap.md)
-- 规则基线：[ADR 0002](docs/adr/0002-use-mahjong-soul-ranked-rules.md) · AI 分级：[ADR 0006](docs/adr/0006-riichi-ai-levels.md) · NPC 与对局恢复：[ADR 0008](docs/adr/0008-npc-roster-and-match-recovery.md)
+- 规则基线：[ADR 0002](docs/adr/0002-use-mahjong-soul-ranked-rules.md) · AI 分级：[ADR 0006](docs/adr/0006-riichi-ai-levels.md) · NPC 与对局恢复：[ADR 0008](docs/adr/0008-npc-roster-and-match-recovery.md) · 倒计时桥接（哈希固定的派生 Unity WASM）：[ADR 0009](docs/adr/0009-derived-unity-clock-client.md)
 - 历史记录：[`docs/handoff.md`](docs/handoff.md)、[`docs/repair-backlog.md`](docs/repair-backlog.md)
 
 <details>
@@ -122,4 +128,4 @@ npm run build   # 由 mockjs/ 重新生成 mock/riichi.js
 
 ---
 
-*粉丝自制的保存项目，与原开发商、发行商无关；Unity 客户端文件保持原样，未作修改。*
+*粉丝自制的保存项目，与原开发商、发行商无关；原始 Unity 客户端文件保留不动，另用哈希固定的派生 WASM 同步倒计时（ADR 0009）。*

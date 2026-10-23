@@ -147,9 +147,9 @@ start-game.bat --players=3 --length=hanchan
 | `[human]` / `[wait]` / `[timeout]` | 真人决策内容、等哪一步、用时与剩余备用时间、超时自动动作 |
 | `[ai]` | 非真人席每一巡的取舍：立直/默听、立直摸切、弃牌（向听变化、进张数、EV、是否转守）、鸣牌或放过。高级档另外带搜索采样数、计算量与预算是否用尽，其余档没有搜索字段 |
 
-会话层（`mockjs/browser_entry.mjs`）另有 `[client] <-`（客户端上行请求与返回码）、`[claim] ->`（下发的鸣牌通知）、`[game] ->`（GameStart/GameStop 摘要）、`[reload]`（重连快照）和 `[riichi]`（新对局、重演、异常栈）。断线重连还有一组恢复计时：`[mock] 重连：会话已接管` 记录接管与暂停下推，`[resync]` 记录收到 `20162` 距 WS 恢复的耗时、重放起止帧数、重放耗时以及 10 秒兜底，用来判断客户端等在哪一步。排查“按钮点了没反应”这类问题时，按 `[discard]` 里的可鸣列表、`[claim] 打开鸣牌窗口`、`[client] <- ReqQiangCard ... -> 返回码`、`[claim] -> NtfQiangCardEnd` 的顺序对照，就能判断是客户端没发包、服务端拒包，还是服务端没收尾窗口；排查“AI 打得怪”时看 `[ai]` 那一巡的 EV 与风险项。
+会话层（`mockjs/browser_entry.mjs`）另有 `[client] <-`（客户端上行请求与返回码）、`[claim] ->`（下发的鸣牌通知）、`[game] ->`（GameStart/GameStop 摘要）、`[reload]`（重连快照）和 `[riichi]`（新对局、重演、异常栈）。断线重连还有一组恢复计时：`[mock] 重连：会话已接管` 记录接管与暂停下推，`[resync]` 记录收到 `20162` 距 WS 恢复的耗时、重放起止帧数、重放耗时及等待同步 10 秒后的断线重试（保持冻结，不解除同步门禁），用来判断客户端等在哪一步。排查“按钮点了没反应”这类问题时，按 `[discard]` 里的可鸣列表、`[claim] 打开鸣牌窗口`、`[client] <- ReqQiangCard ... -> 返回码`、`[claim] -> NtfQiangCardEnd` 的顺序对照，就能判断是客户端没发包、服务端拒包，还是服务端没收尾窗口；排查“AI 打得怪”时看 `[ai]` 那一巡的 EV 与风险项。
 
-重连期间客户端会自己锁住界面等重放，所以页面上没有可点的东西。`offline-patch.js` 为此加了一个覆盖层横幅（`#mj-reconnect`，`pointer-events: none`，不拦截点击）：socket 断开时显示“连接中断，正在重连…”并计时，重连后改显示“已重新连接，正在恢复牌局…”，等服务端重放突发（连续 ≥3 帧后静默 900ms）自动收起；没有重放帧时 4 秒后收起。调试时可用 `__mjmock.reconnect.show()/hide()` 手动触发。
+重连期间客户端会自己锁住界面等重放，所以页面上没有可点的东西。`offline-patch.js` 为此加了一个覆盖层横幅（`#mj-reconnect`，`pointer-events: none`，不拦截点击）：socket 断开时显示“连接中断，正在重连…”并计时，重连后改显示“已重新连接，正在恢复牌局…”，等服务端重放突发（连续 ≥3 帧后静默 900ms）自动收起；没有重放帧时 4 秒后收起。断线超过 20 秒时仍显示重试提示，不假装已经恢复。调试时可用 `__mjmock.reconnect.show()/hide()` 手动触发。横幅提供“导出诊断日志”，正常运行时也可在开发者控制台执行 `__mjmock.exportLogs()`。Node 的 `/api/diagnostics` 导出服务端最近 5000 行，并接收同源、有限大小的前端日志批次；静态宿主保留有界页内历史（sessionStorage 最近 1000 行）。两宿主捕获前端 error/unhandledrejection，日志只留本地，不序列化任意对象、完整存档或网络载荷。
 
 ## 5. HTTP 静态资源服务
 
@@ -165,7 +165,7 @@ start-game.bat --players=3 --length=hanchan
 - 静态文件仅接受 `GET` 和 `HEAD`；
 - 对 URL 解码后执行 `path.resolve`，拒绝逃逸项目根目录的路径；
 - 为 HTML、JS、CSS、JSON、WASM、图片、音频、bundle 和 `.unityweb` 设置 MIME；
-- 不为 `*.unityweb` 加 `Content-Encoding`，由 Unity loader 自行解压，与静态托管行为一致；
+- 原 Unity 的 `*.unityweb` 不加 `Content-Encoding`，由 Unity loader 自行解压；唯一例外是哈希固定的派生计时客户端 `mj-h5.clock-*.wasm.unityweb`，以 `br` + `application/wasm` 交给浏览器原生解压（ADR 0009）；
 - `/host-mode.js` 返回 `window.__mjHostMode = 'node'`，让页面改用 `/ws` 和 `/api/profile`；
 - `POST /api/profile` 只接受同源 `application/json` 请求（其他方法 405，跨源或非 JSON 403），转给共享档案宿主处理存档修改器操作；
 - 支持普通、前缀和后缀 byte Range；非法或越界 Range 返回 416；
@@ -180,7 +180,7 @@ start-game.bat --players=3 --length=hanchan
 - `Build_intl/mj-h5.loader.js`
 - `Build_intl/mj-h5.data.unityweb`
 - `Build_intl/mj-h5.framework.js.unityweb`
-- `Build_intl/mj-h5.wasm.unityweb`
+- `Build_intl/mj-h5.wasm.unityweb`（原件，派生计时客户端由它生成，见 ADR 0009）
 
 缺失时服务会停止并提示重新解压完整游戏目录。
 
@@ -393,11 +393,11 @@ sequenceDiagram
 `RiichiSession.opts.internalState` 保留历史设置供存档兼容；运行中的自动操作只接受当前客户端实际提交的 `clientInternalState`。开局协议没有自动操作设置字段，不能把存档中的“不鸣”等开关直接激活，否则界面显示可鸣牌，后端却立即自动过。新会话和更换连接时清除旧自动操作授权，不修改历史档案；客户端明确提交的开关仍正常生效。
 
 真人每次出牌或鸣牌决策有基础 5 秒，超出部分才扣本小局共用的 20 秒备用时间；只有下一小局补满。切换自动操作或重连不补时。取消不鸣时，尚未执行的自动过牌微任务必须重新检查当前设置，并继续等待原截止时间。
-服务端截止 = 公告基础 + 剩余备用 + 服务端冗余 3 秒（引擎内常量 `SERVER_REDUNDANT_TIMEOUT`），第一小局第一次出牌再额外加 8 秒（`FIRST_START_REDUNDANT_TIMEOUT`，配牌/入场演出）。冗余只在服务端计时上加，**不通过公告暴露**：`NtfGameStart.ServerRedundantTimeOut` 与 `FirstGameStartRedundantTimeOut` 都写 0，`defaultMinTimeout` 写真实基础 5 秒。客户端 `InitCountDown(base, bank)` 把 `352 = now + base`、`360 = now + min(base, 备用余量)`、`368 = now + base + bank` 做成三个绝对截止点，`UpdateTimeText` 在 `now < 352` 时显示 `max(360 − now, 0)`（基础段），到点后改显示 `368 − now`（备用段）。因此基础段长度由**公告值**决定、显示数字是它减去 `ServerRedundantTimeOut`：公告 8 秒时数字 5 但基础段 8 秒，第 5 秒后会有 3 秒不倒数（实测卡顿），公告 5 秒时数字与基础段都是 5 秒、备用段紧接着开始。两者都远小于服务端截止（多 3 秒），玩家在倒计时内点下去一定来得及；冗余只是往返容差，不计入扣时（扣时按玩家可见的基础 + 备用封顶）。
+`GameEngine._humanClock` 是当前真人窗口的权威时钟：从公告前开始计时，窗口 ID 隔离过期计时任务，`humanTime()` 为公告、超时、备用扣费及快照提供同一余量投影。服务端截止 = 基础 + 入场补偿 + 剩余备用 + 服务端冗余 3 秒（引擎内常量 `SERVER_REDUNDANT_TIMEOUT`）；第一小局首个真人摸牌窗口一次性增加 8 秒（`FIRST_START_REDUNDANT_TIMEOUT`，配牌/入场演出），补偿不扣备用。冗余只在服务端计时上加，**不通过公告暴露**：`NtfGameStart.ServerRedundantTimeOut` 与 `FirstGameStartRedundantTimeOut` 都写 0，`defaultMinTimeout` 写真实基础 5 秒。客户端 `InitCountDown(base, bank)` 把 `352 = now + base`、`360 = now + min(base, 备用余量)`、`368 = now + base + bank` 做成三个绝对截止点，`UpdateTimeText` 在 `now < 352` 时显示 `max(360 − now, 0)`（基础段），到点后改显示 `368 − now`（备用段）。因此基础段长度由**公告值**决定、显示数字是它减去 `ServerRedundantTimeOut`：公告 8 秒时数字 5 但基础段 8 秒，第 5 秒后会有 3 秒不倒数（实测卡顿），公告 5 秒时数字与基础段都是 5 秒、备用段紧接着开始。两者都远小于服务端截止（多 3 秒），玩家在倒计时内点下去一定来得及；冗余只是往返容差，不计入扣时（扣时按玩家可见的基础 + 备用封顶）。
 
-页面可见性单独走一条通道，避免把"切到后台"当成断线：`game.html` 在页面可见时每 2 秒向后端 `POST /api/page-visibility?visible=1` 打心跳，`local/server.mjs` 收到心跳就 `engine.setHumanPresent(true)`；连续 4 秒没有心跳（标签页切到后台、定时器被饿死或页面关闭）就 `setHumanPresent(false)`，把这一巡的计时器摘掉。后台**不**触发 254 行那套冻结/5 分钟离开计时/AI 代打，也不走重连：回到前台时这一巡从基础时间重新开始，备用时间不扣。只有 WebSocket 断开才算离开。
+`offline-patch.js` 统一上报两宿主的页面可见性，前台每 2 秒心跳；Node 通过 `/api/page-visibility` 接收，静态宿主直接交给 Session。`Session.updateHumanPresence()` 集中计算“页面可见 + 活动连接存在 + 重同步完成”门禁；Node 连续 4 秒无心跳也会冻结。后台、断线、同步期间累计用时精确冻结，恢复不补基础或备用时间；冻结期间拒绝真人动作，前台心跳不能越过连接或同步门禁。回到前台若需要同步，主动重连，20162/20163 恢复帧发完后仍冻结，直到 v2 派生客户端确认已消费末帧、渲染空闲，以及快照对应的 Reload 状态机已回到 Gameplay，再经两次绘制机会提交 ACK。ACK 须绑定当前连接、批次 UUID 与末帧 `f27` 计数；新增帧先追帧，缺失确认只会重连，不能解冻。`{mjSync: …}` / `{mjSyncAck: …}` 侧带由宿主吞掉，不进入 Unity protobuf 解码。后台冻结本身不触发 5 分钟离开托管。
 
-本巡的 `leftTimer`（`NtfSendCard` / `NtfPlayCard` / `NtfQiangCardEnd` / `Offline2OnlineUserInfo`）只带**备用余量**，客户端一巡的总时钟是 `defaultMinTimeout`（基础段长度）+ `leftTimer`（备用段）。把基础时间也写进 `leftTimer` 会让客户端多算一遍，服务端反而比客户端早几秒截断（表现为屏幕上还剩一两秒牌就被自动打出）。服务端截止 = 基础 + 备用 + 冗余 3 秒，因此始终比玩家看到的时钟晚 3 秒。唯一例外是第一手：客户端时钟从收到帧就开始走，而入场演出要十几秒，所以第一手的 `leftTimer` 额外加 `FIRST_START_REDUNDANT_TIMEOUT`（8 秒），与服务端第一手的 33 秒窗口对齐。
+本巡的 `leftTimer`（`NtfSendCard` / `NtfPlayCard` / `NtfQiangCardEnd` / `Offline2OnlineUserInfo`）只带**备用余量**，客户端一巡的总时钟是 `defaultMinTimeout`（基础段长度）+ `leftTimer`（备用段）。把基础时间也写进 `leftTimer` 会让客户端多算一遍，服务端反而比客户端早几秒截断（表现为屏幕上还剩一两秒牌就被自动打出）。服务端截止 = 基础 + 备用 + 冗余 3 秒，因此始终比玩家看到的时钟晚 3 秒。首次真人窗口的 `leftTimer` 还携带一次性 8 秒入场补偿，坐庄首手的 `NtfGameStart` 同样包含；基础与补偿都耗尽后才扣备用。普通公告按整秒向上取整，实际扣费与冻结累计用毫秒。抢杠/抢北、牌山为 0 等不支持局面快照的切点仍退回整手重放，历史公告保持原样；显示由客户端计时桥接纠正：`game.html` 先经 `clock-bridge.js` 加载哈希固定的派生 WASM，`InitCountDown` / `UpdateTimeText` 每次读到当前时间后调用 `mj.clock`，用 `GameEngine.humanClockState()` 的毫秒投影覆盖三个截止点，所以重放、冻结和续时都显示权威余量。静态宿主直接读页内引擎；Node 宿主在游戏 WebSocket 上发 JSON 文本帧（`{mjClock: …}`），`offline-patch.js` 在交给 Unity 前吞掉。派生文件、哈希约束和升级流程见 [ADR 0009](adr/0009-derived-unity-clock-client.md)。
 
 ### 10.0 听牌提示（右侧感叹号面板）
 

@@ -15,6 +15,28 @@ function connect(session) {
   return received;
 }
 
+test('默认quiet仍记录普通、未支持和异常请求结果，不输出载荷', (t) => {
+  const lines = [];
+  t.mock.method(console, 'log', (...args) => lines.push(args.join(' ')));
+  t.mock.method(console, 'error', () => {});
+  const session = mock.createSession();
+  t.after(() => session.destroy());
+  const privatePayload = P.W().s(1, 'private-payload-fixture').bytes();
+  request(session, 20019, 71);
+  request(session, 987654, 72, privatePayload);
+  mock.handlers[987650] = () => { throw new Error('handler-fixture'); };
+  t.after(() => { delete mock.handlers[987650]; });
+  request(session, 987650, 73, privatePayload);
+  const results = lines.filter((line) => line.startsWith('[request] '))
+    .map((line) => JSON.parse(line.slice('[request] '.length)));
+  assert.equal(results.length, 3);
+  assert.deepEqual(results.map((entry) => [entry.mid, entry.seq, entry.result]), [
+    [20019, 71, 'handled'], [987654, 72, 'unsupported'], [987650, 73, 'error'],
+  ]);
+  assert.deepEqual(results[1].replies, [987655]);
+  assert.doesNotMatch(lines.join('\n'), /private-payload-fixture/);
+});
+
 function request(session, mid, seq, payload = new Uint8Array()) {
   return mock.dispatch(session, P.W().v(2, mid).v(11, seq).s(3, payload).bytes()).map((frame) => P.dict(frame));
 }

@@ -227,6 +227,7 @@ test('客户端仅提交部分开关不能激活存档中其他自动动作', as
 
 test('出牌与鸣牌共用备用时间，仅下一小局恢复到 20 秒', async (t) => {
   const f = setup(t, 3);
+  f.engine.handIndex = 1; // Test the shared bank independently of the match's one-time entrance allowance.
   const p = f.engine.players[0];
   p.hand.push(471);
   p.drawnTile = 471;

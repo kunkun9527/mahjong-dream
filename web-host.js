@@ -9,6 +9,66 @@
   var STORAGE_KEY = 'mahjong-dream/profile';
   var LEGACY_KEY = 'mahjong-dream-snapshot/profile'; // before the project was renamed
   var mode = window.__mjHostMode === 'node' ? 'node' : 'browser';
+  var diagnosticLines = [], pendingLines = [], diagnosticTimer = null;
+  var diagnosticFetch = window.fetch && window.fetch.bind(window);
+  var diagnosticKey = 'mahjong-dream/diagnostics';
+  try {
+    var previous = JSON.parse(sessionStorage.getItem(diagnosticKey) || '[]');
+    if (Array.isArray(previous)) diagnosticLines = previous.filter(function (line) { return typeof line === 'string' && line.length <= 2000; }).slice(-1000);
+  } catch (_) { /* Storage may be disabled. Logging must not prevent boot. */ }
+  function flushDiagnostics() {
+    if (diagnosticTimer) clearTimeout(diagnosticTimer);
+    diagnosticTimer = null;
+    try { sessionStorage.setItem(diagnosticKey, JSON.stringify(diagnosticLines.slice(-1000))); } catch (_) { /* Keep the in-memory export available. */ }
+    if (mode !== 'node' || !diagnosticFetch || !pendingLines.length) return;
+    var batch = pendingLines.splice(0, 100);
+    diagnosticFetch('api/diagnostics', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lines: batch }), keepalive: true
+    }).catch(function () { /* The local ring remains exportable while disconnected. */ });
+    if (pendingLines.length) diagnosticTimer = setTimeout(flushDiagnostics, 500);
+  }
+  ['log', 'warn', 'error'].forEach(function (name) {
+    var original = console[name].bind(console);
+    console[name] = function () {
+      var args = Array.prototype.slice.call(arguments);
+      // Do not serialize arbitrary objects (which may contain whole saves or network payloads).
+      var line = (new Date().toISOString() + ' [' + name + '] ' + args.map(function (arg) {
+        return arg && arg.stack ? arg.stack : String(arg);
+      }).join(' ')).slice(0, 2000);
+      diagnosticLines.push(line);
+      if (diagnosticLines.length > 5000) diagnosticLines.shift();
+      if (mode === 'node') {
+        pendingLines.push(line);
+        if (pendingLines.length > 1000) pendingLines.shift();
+      }
+      if (!diagnosticTimer) diagnosticTimer = setTimeout(flushDiagnostics, 500);
+      original.apply(console, args);
+    };
+  });
+  window.addEventListener('error', function (event) {
+    console.error('[frontend-error]', event.message || 'resource-load', event.filename || event.target?.src || '', event.lineno || 0, event.error || '');
+  }, true);
+  window.addEventListener('unhandledrejection', function (event) {
+    console.error('[unhandledrejection]', event.reason);
+  });
+  window.addEventListener('pagehide', flushDiagnostics);
+  function downloadLogs() {
+    var server = mode === 'node' && diagnosticFetch ? diagnosticFetch('api/diagnostics').then(function (response) {
+      if (!response.ok) throw new Error('日志导出 HTTP ' + response.status);
+      return response.text();
+    }).catch(function (error) { return '[server logs unavailable] ' + error.message; }) : Promise.resolve('');
+    return server.then(function (serverText) {
+      var text = 'Mahjong Dream diagnostics; host=' + mode + '\n' + serverText + '\n[page]\n' + diagnosticLines.join('\n');
+      var url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+      var link = document.createElement('a');
+      link.href = url;
+      link.download = 'mahjong-diagnostics-' + Date.now() + '.log';
+      link.click();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      return text;
+    });
+  }
 
   function loadScript(src) {
     return new Promise(function (resolve, reject) {
@@ -78,8 +138,17 @@
       }
       if (changed) write();
       // The first connection of this page picks up a match left by a reload (within the away limit) where it stopped.
-      var resumePending = true;
+      var resumePending = true, currentSession = null;
+      window.__mjHost.humanClock = function () {
+        return currentSession && currentSession.riichi && currentSession.riichi.engine
+          ? currentSession.riichi.engine.humanClockState() : null;
+      };
+      host.setPageVisible = function (visible) {
+        return currentSession ? currentSession.setPageVisible(visible) : false;
+      };
       mj.server.onSessionCreated = function (session) {
+        currentSession = session;
+        session.setPageVisible(!document.hidden);
         host.attach(session);
         if (!resumePending) return;
         resumePending = false;
@@ -116,7 +185,12 @@
 
   window.__mjHost = {
     mode: mode,
+    downloadLogs: downloadLogs,
+    diagnosticText: function () { return diagnosticLines.join("\n"); },
     ready: started.then(function () {}),
+    setPageVisible: function (visible) {
+      return started.then(function (host) { return host ? host.setPageVisible(visible) : false; });
+    },
     request: function (body) {
       if (mode === 'browser') return started.then(function (host) { return host.handle(body); });
       return fetch('api/profile', {

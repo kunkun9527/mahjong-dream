@@ -258,6 +258,8 @@
     this.tableId = 0;
     this.seat = -1;
     this.socket = null;         // The bound FakeWebSocket, used when the server pushes actively
+    this.pageVisible = true;
+    this._needsResync = false;
     this.lastSeq = 0;           // seq of the most recent request, reused for active pushes
     this.riichi = null;         // Riichi mahjong match session (created lazily)
     // For disconnect-reconnect recovery (see HANDLERS[20162]):
@@ -271,7 +273,7 @@
 
   /** Actively push one frame from the server (not triggered by a request, e.g. match events produced by the AI's draws/discards).
    *  Delivered asynchronously: a synchronous callback would re-enter on the client's send() call stack and disrupt Unity's message queue. */
-  Session.prototype.push = function (msgId, payload, ptype, extra, seq) {
+  Session.prototype.push = function (msgId, payload, ptype, extra, seq, delivered) {
     var sock = this.socket;
     if (!sock || sock.readyState !== OPEN) return;
     var self = this;
@@ -281,12 +283,16 @@
     setTimeout(function () {
       if (self.socket !== sock || sock.readyState !== OPEN) return;
       var frame = self.wrap(msgId, payload, seq === undefined ? null : seq, ptype || 1, extra);
+      var counter = self.counter;
       sock._deliver(frame);
+      if (delivered) delivered(counter);
     }, 0);
   };
 
   /** Release attached resources when the connection closes */
   Session.prototype.destroy = function () {
+    this.cancelClientSync();
+    if (this._resyncTimer) { clearTimeout(this._resyncTimer); this._resyncTimer = null; }
     if (this.matchTimer) { clearTimeout(this.matchTimer); this.matchTimer = null; }
     if (this.engineStartTimer) { clearTimeout(this.engineStartTimer); this.engineStartTimer = null; }
     this.matchToken += 1;
@@ -302,13 +308,28 @@
     return !!(this.tableId && this.riichi && !this.riichi.matchOver);
   };
 
-  /** Pause the session (keep the engine for reuse after reconnect) */
+  /** The only host-level clock gate: visible AND connected AND synchronized. */
+  Session.prototype.updateHumanPresence = function () {
+    var present = this.pageVisible && this.socket && this.socket.readyState === OPEN && !this.replaying && !this._needsResync;
+    if (this.riichi && this.riichi.engine) this.riichi.engine.setHumanPresent(!!present);
+  };
+  Session.prototype.setPageVisible = function (visible) {
+    this.pageVisible = !!visible;
+    if (!visible && this.liveMatch()) this._needsResync = true;
+    this.updateHumanPresence();
+    return !!(visible && this.liveMatch() && this._needsResync && !this.replaying);
+  };
+  /** Pause the session (keep the engine for reuse after reconnect). */
   Session.prototype.suspend = function () {
-    this.socket = null;  // Unbind the WS but keep the riichi engine
+    this.cancelClientSync();
+    this.socket = null;
+    if (this.liveMatch()) this._needsResync = true;
+    this.updateHumanPresence();
   };
 
   /** On reconnect, attach the old session's engine to the new WS */
   Session.prototype.resume = function (socket) {
+    this.cancelClientSync();
     var self = this;
     if (this.socket !== socket) this.shopReplies = new Map();
     if (this.socket !== socket && this.riichi && this.riichi.resetClientSettings) {
@@ -329,16 +350,17 @@
     // So on reconnect, pushes are suspended and queued, then filled in order when 20162 triggers the replay.
     if (this.liveMatch()) {
       this.replaying = true;
-      // Fallback: if the client never asks 20162 (e.g. it does not intend to resume the match), resume
-      // live pushes at the deadline; frames must not be held in the cache indefinitely.
+      this._needsResync = true;
+      this.updateHumanPresence();
+      // Do not charge an invisible table if the client never requests synchronization. Retry the connection instead.
       this._resyncTimer = setTimeout(function () {
         self._resyncTimer = null;
         if (!self.replaying) return;
-        self.replaying = false; self._replayStarted = false;
-        playerBack(self);
-        stampLog('[mock] 重连后 10s 未收到 20162，恢复实时下推');
+        stampLog('[mock] 重连后 10s 未收到 20162，保持冻结并重试连接');
+        if (self.socket && self.socket.readyState === OPEN) self.socket.close(1012, 'resync-timeout');
       }, 10000);
     }
+    this.updateHumanPresence();
     if (this.riichi) {
       // The engine's emit must be able to push to the new WS. The riichi engine uses an emit callback, so the engine has to be rebuilt
       // Only keep the riichi reference here; Server.prototype.push then sends through the socket.
@@ -362,6 +384,7 @@
     if (extra && extra[12] !== undefined) w.v(12, extra[12]);
     if (extra && extra[24] !== undefined) w.s(24, extra[24]);
     w.v(27, this.counter);
+    if (msgId === 20163 && this._clientSync && !this._clientSync.counter) this._clientSync.counter = this.counter;
     if (extra && extra[29] !== undefined) w.s(29, extra[29]);
     return w.bytes();
   };
@@ -792,7 +815,10 @@
       maxHands: sess.table && sess.table.oneRound ? 1 : undefined,
       matchLength: sess.table ? sess.table.matchLength : CONFIG.matchLength,
       replayLog: restore ? restore.log : null,
-      humanPresent: !restore || restore.present,
+      humanPresent: restore ? restore.present : !!(sess.pageVisible && sess.socket && sess.socket.readyState === OPEN && !sess._needsResync),
+      onHumanClock: function (clock) {
+        if (typeof sess.onHumanClock === 'function') sess.onHumanClock(clock);
+      },
       // The table snapshot plus the human-decision log is enough to rebuild this match after a reload or restart.
       onRecord: function (log) {
         if (typeof sess.onMatchRecord === 'function' && sess.table) sess.onMatchRecord({ v: 1, table: sess.table, log: log });
@@ -882,6 +908,7 @@
       return [];
     }
     var live = !!(sess.table && sess.liveMatch());
+    if (live) { sess._needsResync = true; sess.updateHumanPresence(); }
     stampLog('  [resync] 收到 20162，距 WS 恢复 ' + (sess._reconnectAt == null ? -1 : nowMs() - sess._reconnectAt) +
       'ms，进行中=' + (live ? 1 : 0));
 
@@ -906,6 +933,7 @@
 
     if (live && !sess._replayStarted) {
       sess._replayStarted = true;
+      sess.beginClientSync(cut >= 0);
       stampLog('  [resync] 有进行中对局，回 TableInfo，' + (cut >= 0
         ? '附局面快照，只补发其后的新帧' : '准备重放本局 ' + sess.handFrames.length + ' 帧'));
       // After 20163 the official server actively pushes NtfPrepare/NtfGameStart to resync the match.
@@ -918,12 +946,49 @@
       // so the client would see "the current turn" before "the start of the match", and the match would be scrambled.
       sess.replaying = true;
       if (sess._resyncTimer) { clearTimeout(sess._resyncTimer); sess._resyncTimer = null; }
-      var cutFrames = sess.handFrames;
-      setTimeout(function () { replayHand(sess, sess.handFrames === cutFrames ? cut : 0); }, 150);
+      var cutFrames = sess.handFrames, syncSocket = sess.socket;
+      setTimeout(function () {
+        if (sess.socket === syncSocket) replayHand(sess, sess.handFrames === cutFrames ? cut : 0);
+      }, 150);
     } else if (!live) {
       stampLog('  [resync] 无进行中对局');
     }
     return [[20163, w.bytes(), 1, null]];
+  };
+
+  Session.prototype.cancelClientSync = function () {
+    if (this._clientSync) clearTimeout(this._clientSync.timer);
+    this._clientSync = null;
+  };
+  Session.prototype.beginClientSync = function (reload) {
+    this.cancelClientSync();
+    var self = this, socket = this.socket;
+    var sync = this._clientSync = { id: uuid4(), socket: socket, counter: 0, pending: 0, end: false };
+    if (socket && socket._sync) socket._sync({ phase: 'start', id: sync.id, reload: !!reload });
+    sync.timer = setTimeout(function () {
+      if (self._clientSync !== sync || self.socket !== socket) return;
+      stampLog('[resync] 客户端未确认恢复完成，保持冻结并重试 id=' + sync.id);
+      if (socket.close) socket.close(1012, 'client recovery confirmation timeout');
+    }, 30000);
+    stampLog('[resync] 等待客户端消费确认 id=' + sync.id + ' snapshot=' + !!reload);
+    return sync;
+  };
+  Session.prototype.ackClientSync = function (ack, socket) {
+    var sync = this._clientSync;
+    if (!sync || sync.socket !== socket || this.socket !== socket || socket.readyState !== OPEN ||
+        !this.pageVisible || !sync.end || !ack || ack.id !== sync.id || ack.counter !== sync.counter) return false;
+    if (sync.frames !== this.handFrames || sync.index !== this.handFrames.length) {
+      var from = sync.frames === this.handFrames ? sync.index : 0;
+      this.beginClientSync(false);
+      replayHand(this, from);
+      return false;
+    }
+    this.cancelClientSync();
+    this.replaying = false; this._replayStarted = false;
+    playerBack(this);
+    if (socket._sync) socket._sync({ phase: 'complete', id: sync.id });
+    stampLog('[resync] 客户端消费完成 id=' + sync.id + ' counter=' + sync.counter);
+    return true;
   };
 
   /** Disconnect-reconnect: resend this hand's cached 20018 notification frames in order so the client rebuilds the position.
@@ -934,16 +999,22 @@
   /** The client shows the table again: a turn frozen while the player was away gets its clock back now, not on reconnect,
    *  because login and the resync take a few seconds. */
   function playerBack(sess) {
-    var eng = sess.riichi && sess.riichi.engine;
-    if (eng && !eng.humanPresent) eng.setHumanPresent(true);
+    if (!sess.socket || sess.socket.readyState !== OPEN || sess.replaying) return;
+    sess._needsResync = false;
+    sess.updateHumanPresence();
+    stampLog("[resync] 同步门禁解除：" + JSON.stringify({ visible: sess.pageVisible, present: !!sess.riichi?.engine?.humanPresent }));
   }
 
   function replayHand(sess, from) {
+    var syncSocket = sess.socket;
     var frames = sess.handFrames || [];
-    if (!frames.length || !sess.socket || sess.socket.readyState !== OPEN) {
-      sess.replaying = false; sess._replayStarted = false;
-      if (sess.socket && sess.socket.readyState === OPEN) playerBack(sess);
-      return;
+    var sync = sess._clientSync;
+    if (!sync || sync.socket !== syncSocket || !syncSocket || syncSocket.readyState !== OPEN) return;
+    function finishDelivery() {
+      if (sess._clientSync !== sync || sess.socket !== syncSocket || !sync.caught || sync.pending) return;
+      sync.end = true;
+      stampLog('[resync] 重放已投递，等待客户端完成 id=' + sync.id + ' counter=' + sync.counter);
+      if (syncSocket._sync) syncSocket._sync({ phase: 'end', id: sync.id, counter: sync.counter });
     }
 
     // Whether this hand has been dealt. If dealt, skip NtfToPrepare: the client would reply
@@ -963,20 +1034,25 @@
     // If a 20163.f100 snapshot was already sent, catch up from the snapshot cut point; if the hand has changed in the meantime (cache reset by NtfToPrepare), catch up from the start.
     var i = from > 0 && from <= frames.length ? from : 0;
     (function next() {
-      if (!sess.socket || sess.socket.readyState !== OPEN) { sess.replaying = false; sess._replayStarted = false; return; }
+      if (sess.socket !== syncSocket || sess._clientSync !== sync || syncSocket.readyState !== OPEN) return;
       var sent = 0;
       while (i < sess.handFrames.length && sent < BATCH) {
         var f = sess.handFrames[i];
         i++;
         if (!(skipToPrepare && f[0] === RIICHI_NTF_TO_PREPARE)) {
-          sess.push(20018, encodeKRiichi(f[0], f[1]), 1, null, null);
+          sync.pending++;
+          sess.push(20018, encodeKRiichi(f[0], f[1]), 1, null, null, function (counter) {
+            if (sess._clientSync !== sync) return;
+            sync.counter = counter; sync.pending--;
+            finishDelivery();
+          });
         }
         sent++;
       }
       if (i >= sess.handFrames.length) {
-        sess.replaying = false; sess._replayStarted = false;
-        stampLog('  [resync] 重放完成，共 ' + i + ' 帧，耗时 ' + (nowMs() - replayStart) + 'ms，恢复实时下推');
-        playerBack(sess);
+        sync.index = i; sync.frames = sess.handFrames; sync.caught = true;
+        stampLog('  [resync] 重放已排队，共 ' + i + ' 帧，耗时 ' + (nowMs() - replayStart) + 'ms，计时仍冻结');
+        finishDelivery();
         return;
       }
       setTimeout(next, BATCH_GAP);
@@ -1417,6 +1493,9 @@
         tag = 'error';
       }
     }
+    // Always retain request outcomes; quiet only suppresses verbose protocol traces.
+    console.log('[request] ' + JSON.stringify({ mid: mid, name: nameOf(mid), seq: seq,
+      bytes: raw.length, result: tag, replies: out.map(function (reply) { return reply[0]; }) }));
     log('  <- %s %s seq=%s %dB [%s]', mid, nameOf(mid), seq, raw.length, tag);
 
     var frames = [];
@@ -1487,14 +1566,16 @@
   };
 
   FakeWebSocket.prototype._emit = function (type, ev) {
-    var on = this['on' + type];
-    if (typeof on === 'function') {
-      try { on.call(this, ev); } catch (e) { console.error('[mock] on' + type, e); }
-    }
-    var arr = this._listeners[type];
-    if (!arr) return;
-    for (var i = 0; i < arr.slice().length; i++) {
+    var stopped = false;
+    ev.stopImmediatePropagation = function () { stopped = true; };
+    // The host interceptor is installed before Unity assigns onmessage. It must consume control frames first.
+    var arr = (this._listeners[type] || []).slice();
+    for (var i = 0; i < arr.length && !stopped; i++) {
       try { arr[i].call(this, ev); } catch (e) { console.error('[mock] listener ' + type, e); }
+    }
+    var on = this['on' + type];
+    if (!stopped && typeof on === 'function') {
+      try { on.call(this, ev); } catch (e) { console.error('[mock] on' + type, e); }
     }
   };
 
@@ -1514,6 +1595,10 @@
     });
   };
 
+  FakeWebSocket.prototype._sync = function (message) {
+    this._emit('message', { type: 'message', data: JSON.stringify({ mjSync: message }), target: this });
+  };
+
   FakeWebSocket.prototype.send = function (payload) {
     if (this.readyState !== OPEN) {
       throw new DOMException('WebSocket is not open', 'InvalidStateError');
@@ -1522,7 +1607,15 @@
     if (payload instanceof ArrayBuffer) bytes = new Uint8Array(payload);
     else if (ArrayBuffer.isView(payload)) {
       bytes = new Uint8Array(payload.buffer, payload.byteOffset, payload.byteLength);
-    } else if (typeof payload === 'string') bytes = P.utf8(payload);
+    } else if (typeof payload === 'string') {
+      if (payload.length <= 1024) {
+        try {
+          var control = JSON.parse(payload);
+          if (control && control.mjSyncAck) { this._session.ackClientSync(control.mjSyncAck, this); return; }
+        } catch (e) { /* Non-control strings follow the original dispatch path. */ }
+      }
+      bytes = P.utf8(payload);
+    }
     else {
       console.warn('[mock] 不支持的发送类型', payload);
       return;

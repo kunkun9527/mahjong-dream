@@ -118,10 +118,7 @@ export function buildRiichiReloadScene(frames, engine, mySeat = 0, now = Date.no
     hand.splice(hand.indexOf(me.drawnTile), 1);
     hand.push(me.drawnTile);
   }
-  const pending = engine._pending;
-  const elapsed = pending ? Math.max(0, (now - pending.startedAt) / 1000) : 0;
-  const baseLeft = Math.max(0, engine.baseTime - elapsed);
-  const bankLeft = Math.max(0, me.timeBank - Math.max(0, elapsed - engine.baseTime));
+  const time = engine.humanTime(now);
   const internalState = {};
   for (const [key, value] of Object.entries(engine.internalState)) internalState[key] = value ? 1 : 0;
   const users = state.players.map((folded) => {
@@ -146,7 +143,7 @@ export function buildRiichiReloadScene(frames, engine, mySeat = 0, now = Date.no
       canPlayActions: own && draw ? draw.actions.slice() : [],
       isZhenTing: engine.isFuriten(p),
       moQieMap: folded.moQie,
-      leftTimer: own ? Math.ceil(bankLeft) : 0,
+      leftTimer: own ? time.leftTimer : 0,
       cantPlays: own && draw ? draw.cantPlays.slice() : [],
       changeScore: p.score - folded.initScore,
       baBeiCards: folded.babei,
@@ -154,7 +151,7 @@ export function buildRiichiReloadScene(frames, engine, mySeat = 0, now = Date.no
       initScore: folded.initScore,
       canAnGangNoNumCardsAfterRiichi: engine.riichiFutureAnkanKinds(p),
       // Same convention as NtfGameStart: the client's clock is DefaultMinTimeout (base phase) + leftTimer (bank).
-      DefaultMinTimeout: own && pending ? Math.ceil(baseLeft) : state.defaultMinTimeout,
+      DefaultMinTimeout: own && (draw || claim) ? time.defaultMinTimeout : state.defaultMinTimeout,
       ServerRedundantTimeOut: state.redundant,
       zhenTingTypes: engine.furitenTypes(p),
       zhenTingTypesGuo: [],

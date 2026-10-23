@@ -113,6 +113,21 @@ test('抢牌的任一赢家不合法时，不能提交手牌或撤销立直状�
   assert.equal(engine.riichiSticks, 1);
 });
 
+test('多响中后续赢家非法时，先前赢家的包牌标记也不能被修改', async () => {
+  const { engine, donor, events } = setup('kakan');
+  const winner = engine.players[1];
+  winner.hand = [471, 472, 111, 112, 113, 211, 212];
+  winner.melds = [
+    { type: 'pon', tiles: [451, 452, 453], from: 2 },
+    { type: 'pon', tiles: [461, 462, 463], from: 3 },
+  ];
+  winner.menzen = false;
+  const before = structuredClone(engine.players);
+  await assert.rejects(engine.winRons([1, 2], donor.seat, 473), /非法荣和 seat=2/);
+  assert.deepEqual(engine.players, before);
+  assert.equal(events.length, 0);
+});
+
 test('被抢的实体牌不在手中时拒绝结算，不能误删末张手牌', async () => {
   const { engine, donor, card, events } = setup('babei');
   donor.hand.splice(donor.hand.indexOf(card), 1);

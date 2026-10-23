@@ -11,7 +11,7 @@ function element(tag) {
   return { tagName: tag.toUpperCase(), style: {}, children: [], id: '', textContent: '', appendChild(child) { this.children.push(child); }, setAttribute() {} };
 }
 
-function load() {
+function load(clock) {
   const sockets = [];
   const timers = new Map();
   let seq = 0;
@@ -22,7 +22,11 @@ function load() {
     removeEventListener() {}
     send() {}
     close() {}
-    emit(type, ev = { type }) { for (const fn of this.listeners[type] || []) fn(ev); }
+    emit(type, ev = { type }) {
+      let stopped = false;
+      ev.stopImmediatePropagation = () => { stopped = true; };
+      for (const fn of this.listeners[type] || []) { fn(ev); if (stopped) break; }
+    }
   }
   const document = {
     head: { appendChild() {} },
@@ -30,8 +34,9 @@ function load() {
     documentElement: { appendChild() {} },
     createElement: element,
     querySelector: () => null,
+    addEventListener() {},
   };
-  const win = { WebSocket: FakeWS, document };
+  const win = { WebSocket: FakeWS, document, __mjClock: clock, addEventListener() {} };
   const context = vm.createContext({
     window: win,
     document,
@@ -72,6 +77,27 @@ function load() {
     overlay,
   };
 }
+
+test('Node计时侧带被宿主吞掉，Unity只收到原二进制；断线冻结镜像', () => {
+  const samples = [];
+  let frozen = 0, unityFrames = 0;
+  const controls = [];
+  const app = load({ accept: (state) => samples.push(state), connect() {}, disconnect() { frozen++; },
+    synchronize: (message, socket) => controls.push({ message, socket }), status: () => ({ recovery: null }) });
+  app.socket.addEventListener('message', () => { unityFrames++; });
+  app.socket.emit('message', { data: JSON.stringify({ mjClock: { id: 4, baseMs: 0, extraMs: 18000, running: false } }) });
+  assert.equal(samples.length, 1);
+  assert.equal(samples[0].extraMs, 18000);
+  assert.equal(unityFrames, 0);
+  app.socket.emit('message', { data: JSON.stringify({ mjSync: { phase: 'end', id: 'batch', counter: 7 } }) });
+  assert.equal(controls.length, 1);
+  assert.equal(controls[0].socket, app.socket);
+  assert.equal(unityFrames, 0, '恢复确认侧带同样不能进入Unity协议解析器');
+  app.socket.emit('message', { data: new ArrayBuffer(8) });
+  assert.equal(unityFrames, 1);
+  app.socket.emit('close', { code: 1006 });
+  assert.equal(frozen, 1);
+});
 
 test('掉线后显示重连提示，重连后显示恢复提示，重放结束自动收起', () => {
   const app = load();
@@ -116,4 +142,8 @@ test('一直连不回来时提示保留并显示等待时长', () => {
   app.advance(5000);
   assert.equal(app.banner().visible, true);
   assert.equal(app.banner().seconds, '已等待 5 秒');
+  app.advance(16_000);
+  assert.equal(app.banner().visible, true, '20秒后仍应保持断线提示');
+  assert.match(app.banner().text, /仍未连接/);
+  assert.equal(app.banner().seconds, '已等待 21 秒');
 });

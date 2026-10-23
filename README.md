@@ -67,6 +67,12 @@ start-game.bat --players=4 --length=hanchan
 start-game.bat --players=3 --length=east
 ```
 
+## Diagnostic Logs
+
+The reconnect banner has an **导出诊断日志** (export diagnostics) button. You can also run `__mjmock.exportLogs()` in the browser developer console. Logs stay local and include clock lifecycle, request results, reconnect/sync events and frontend errors; the browser history is bounded, so export soon after a problem. The offline launcher also keeps the full server log under `logs/`.
+
+The local backend owns the countdown: hiding the page or disconnecting freezes it, and recovery continues the remaining time. A hash-pinned derived client synchronizes the current international build without replacing the original files. Recovery keeps the clock frozen until Unity confirms the current batch has been consumed, its render queue is idle, and any snapshot reload has returned to gameplay. Stale or missing confirmations cannot resume it. Both hosts have passed controlled Edge recovery checks; real OS background switching and naturally occurring robbing-kan/north windows remain unverified. See [current status](docs/handoff.md).
+
 ## FAQ
 
 **The screen stays black or loading stops.** Use a recent Chrome or Edge with hardware acceleration on, then refresh. The first load needs a stable connection.
@@ -90,7 +96,7 @@ npm run build   # rebuild mock/riichi.js from mockjs/
 
 - Browser and offline versions share one backend: [ADR 0007](docs/adr/0007-browser-and-node-hosts.md)
 - Architecture: [`docs/technical-architecture.md`](docs/technical-architecture.md) · Code map: [`codemap.md`](codemap.md)
-- Rules baseline: [ADR 0002](docs/adr/0002-use-mahjong-soul-ranked-rules.md) · AI tiers: [ADR 0006](docs/adr/0006-riichi-ai-levels.md) · NPCs and match recovery: [ADR 0008](docs/adr/0008-npc-roster-and-match-recovery.md)
+- Rules baseline: [ADR 0002](docs/adr/0002-use-mahjong-soul-ranked-rules.md) · AI tiers: [ADR 0006](docs/adr/0006-riichi-ai-levels.md) · NPCs and match recovery: [ADR 0008](docs/adr/0008-npc-roster-and-match-recovery.md) · Countdown bridge (hash-pinned derived Unity WASM): [ADR 0009](docs/adr/0009-derived-unity-clock-client.md)
 - History: [`docs/handoff.md`](docs/handoff.md), [`docs/repair-backlog.md`](docs/repair-backlog.md)
 
 <details>
@@ -124,4 +130,4 @@ npm run build   # rebuild mock/riichi.js from mockjs/
 
 ---
 
-*Fan-made preservation project. Not affiliated with the original developer or publisher. The Unity client files are kept unmodified.*
+*Fan-made preservation project. Not affiliated with the original developer or publisher. The original Unity client files are preserved; a separate hash-pinned derived WASM synchronizes the countdown (ADR 0009).*

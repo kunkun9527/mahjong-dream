@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import vm from 'node:vm';
 
 const html = readFileSync(new URL('../game.html', import.meta.url), 'utf8');
+const clockManifest = JSON.parse(readFileSync(new URL('../Build_intl/mj-h5.clock.json', import.meta.url), 'utf8'));
 const source = html.slice(html.indexOf('      function preparePlayerPrefs()'), html.indexOf('      function receiveOrientationFromUnity'));
 // Unity InitializeIfNeeded/Sync store a 1 MiB capacity at offset 12, not an entry count.
 const header = () => Uint8Array.from(Buffer.from('556e6974795072660000010000001000', 'hex'));
@@ -166,13 +167,20 @@ test('完整启动链无查询串也加载国际版，先提交偏好再启动 U
     const fake = fakeIDB([], { upgrade: true });
     const ctx = createContext(fake.indexedDB);
     ctx.location = new URL('http://127.0.0.1:8767/game.html' + suffix);
-    let unityConfig, loader;
+    let unityConfig, loader, clockReady = false;
     Object.assign(ctx, {
       URL, URLSearchParams, Uint8Array, performance: { now: () => 1 },
       navigator: { userAgent: 'Desktop' }, console: { log() {}, time() {}, timeLog() {} },
       setInterval: () => 1, clearInterval() {},
       fetch: () => Promise.resolve({ ok: true }),
       __mjHost: { ready: Promise.resolve() },
+      __mjClock: { async configure(config) {
+        assert.equal(fake.closed, true, '计时配置也不得早于偏好提交');
+        await Promise.resolve();
+        config.codeUrl = 'Build_intl/' + clockManifest.codeFile;
+        config.instantiateWasm = () => {};
+        clockReady = true;
+      } },
       history: { replaceState(_state, _title, url) { ctx.location = new URL(url, ctx.location); } },
       document: {
         hidden: false, addEventListener() {},
@@ -184,6 +192,8 @@ test('完整启动链无查询串也加载国际版，先提交偏好再启动 U
         } },
       },
       createUnityInstance(_canvas, config) {
+        assert.equal(clockReady, true, 'Unity必须等待派生客户端与计时桥接配置完成');
+        assert.equal(typeof config.instantiateWasm, 'function');
         const contents = fake.records.get(prefsPath).contents;
         assert.equal(intOf(contents, 'user_terms'), 1);
         assert.equal(new DataView(contents.buffer).getUint32(12, true), 1_048_576);
@@ -194,7 +204,7 @@ test('完整启动链无查询串也加载国际版，先提交偏好再启动 U
     vm.runInContext(bootstrap, ctx);
     await new Promise(setImmediate);
     assert.equal(loader, 'Build_intl/mj-h5.loader.js');
-    assert.equal(unityConfig.codeUrl, 'Build_intl/mj-h5.wasm.unityweb');
+    assert.equal(unityConfig.codeUrl, 'Build_intl/' + clockManifest.codeFile);
     assert.equal(unityConfig.productName, 'Mahjong Dream');
     assert.equal(ctx.location.searchParams.get('uid'), suffix.includes('uid=7') ? '7' : '1');
     assert.equal(ctx.location.searchParams.get('sign'), suffix.includes('sign=custom') ? 'custom' : '19a5aaae0d826f5ac640a4dbfafb1612');

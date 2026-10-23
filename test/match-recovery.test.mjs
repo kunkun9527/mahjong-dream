@@ -88,6 +88,7 @@ test('真人决策记录可在任意切点重演到同一局面，接着打完�
     assert.equal(replay.speed, 1, '重演结束后恢复正常速度');
     // Continue live with the same player and finish identically.
     replay.speed = 0;
+    replay.setHumanPresent(true); // The connection/sync gate opens before live client input resumes.
     autoRespond(replay);
     if (replay._pending) humanMove(replay);
     if (replay._prepareWaiter) replay.submitPrepare();
@@ -137,8 +138,10 @@ test('开了摸切/不鸣牌后离开：自动动作也冻结，回来后才继�
 });
 
 function socket() {
-  const frames = [];
-  return { frames, readyState: 1, _deliver(bytes) { frames.push(P.dict(bytes)); } };
+  const frames = [], controls = [];
+  return { frames, controls, readyState: 1, _deliver(bytes) { frames.push(P.dict(bytes)); },
+    _sync(message) { controls.push(message); },
+  };
 }
 
 /** Start a ranked match through the protocol and play `moves` human decisions; returns the session and its latest record. */
@@ -178,6 +181,7 @@ test('页面重载：从记录重建对局，20162 等重演完成后回到同�
   session.destroy(); // the page is gone
 
   const restored = mock.createSession();
+  t.after(() => restored.destroy());
   const ws = socket();
   restored.resume(ws);
   const ready = mock.restoreMatch(restored, JSON.parse(JSON.stringify(record)));
@@ -194,7 +198,11 @@ test('页面重载：从记录重建对局，20162 等重演完成后回到同�
   await until(() => ws.frames.some((f) => f[2] === 20163));
   const reply = P.dict(ws.frames.find((f) => f[2] === 20163)[3]);
   assert.ok(reply[4], '20163 带牌桌');
-  await until(() => !restored.replaying);
+  await until(() => ws.controls.some((message) => message.phase === 'end'));
+  assert.equal(restored.replaying, true, '发完恢复快照不是客户端已消费完成');
+  assert.equal(engine2.humanPresent, false);
+  assert.equal(restored.ackClientSync(ws.controls.find((message) => message.phase === 'end'), ws), true);
+  assert.equal(restored.replaying, false);
   assert.equal(engine2.humanPresent, true, '客户端同步后恢复计时');
   restored.destroy();
 });

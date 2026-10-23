@@ -45,7 +45,8 @@ async function connect(url) {
 function rpc(socket, mid, payload, seq) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => { cleanup(); reject(new Error('购物响应超时')); }, 5000);
-    const receive = (bytes) => {
+    const receive = (bytes, isBinary) => {
+      if (!isBinary) return; // JSON clock sideband for the bridge; not a protobuf reply
       const frame = P.dict(new Uint8Array(bytes));
       if (frame[2] !== mid + 1 || frame[11] !== seq) return;
       cleanup(); resolve(frame);

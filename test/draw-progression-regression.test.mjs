@@ -162,6 +162,7 @@ test('比赛第一手把入场演出的 8 秒也公告给客户端（leftTimer�
   void engine.turnDraw(0);
   const frame = (items) => items.find((item) => item.payload?.userInfos);
   assert.equal(frame(frames).payload.userInfos[0].leftTimer, 28, '第一手：备用 20 + 入场 8');
+  engine.cancelPending(); // A real hand transition closes the preceding decision window.
   engine.handIndex = 1;
   frames.length = 0;
   void engine.turnDraw(0);

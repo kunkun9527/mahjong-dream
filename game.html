@@ -10,6 +10,7 @@
     <!-- host-mode.js says whether the Node service or this page (static hosting) runs the backend; the patch installs its hijacks
          before Unity initializes, and web-host.js loads the in-page backend and save host. -->
     <script type="text/javascript" src="host-mode.js"></script>
+    <script type="text/javascript" src="clock-bridge.js"></script>
     <script type="text/javascript" src="offline-patch.js"></script>
     <script type="text/javascript" src="spark-md5.js"></script>
     <script type="text/javascript" src="web-host.js"></script>
@@ -113,7 +114,7 @@
       var config = {
         dataUrl: buildUrl + "/mj-h5.data.unityweb",
         frameworkUrl: buildUrl + "/mj-h5.framework.js.unityweb",
-        codeUrl: buildUrl + "/mj-h5.wasm.unityweb",
+        // codeUrl and instantiateWasm come from the hash-pinned clock bridge.
         symbolsUrl: buildUrl + "/mj-h5.symbols.json.unityweb",
         streamingAssetsUrl: "StreamingAssets",
         companyName: "DefaultCompany",
@@ -167,7 +168,7 @@
       console.time("h5 Startup Time");
       console.timeLog("h5 Startup Time","game html script start");
       script.onload = () => {
-          createUnityInstance(canvas, config, (progress) => {
+          __mjClock.configure(config).then(() => createUnityInstance(canvas, config, (progress) => {
             if (progress === 1)
             {
               currentProgress =  100;
@@ -178,7 +179,7 @@
               currentProgress =  50 * progress;
               progressBarFull.style.width = 50 * progress + "%";
             }
-          }).then((unityInstance) => {
+          })).then((unityInstance) => {
             console.timeLog("h5 Startup Time","Create unityInstance done ");
             bootingUpTime = performance.now() - bootingUpTime;
             console.log("h5 Startup Time 2",bootingUpTime);
@@ -193,25 +194,7 @@
           });
       };
 
-      // Heartbeats tell the local host the tab is still in front; when they stop (hidden tab or throttled timers) it pauses the
-      // table instead of counting the player as gone and letting the AI take the seat.
-      (function () {
-        var timer = null;
-        var beat = function () {
-          fetch('/api/page-visibility?visible=1', { method: 'POST', cache: 'no-store' }).catch(function () { });
-        };
-        var sync = function () {
-          if (document.hidden) {
-            if (timer) clearInterval(timer);
-            timer = null;
-            return;
-          }
-          beat();
-          if (!timer) timer = setInterval(beat, 2000);
-        };
-        document.addEventListener('visibilitychange', sync);
-        sync();
-      })();
+      // Visibility, front-end diagnostics and clock resynchronization are owned by offline-patch.js for both hosts.
 
       var time = setInterval(() => {
         // Progress bar slowly increasing

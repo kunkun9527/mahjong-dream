@@ -48,6 +48,7 @@
     server: null,
     // Manual trigger for the reconnect banner: __mjmock.reconnect.show('...') / .hide()
     reconnect: { show: function (t) { rcShow(t || '断线重连中…'); rc.stage = 'sync'; rc.openedAt = Date.now(); }, hide: rcHide, root: function () { return rc.root; } },
+    exportLogs: function () { return window.__mjHost.downloadLogs(); },
     dump: function (n) { return stats.frames.slice(-(n || 20)); }
   };
 
@@ -77,6 +78,11 @@
     box.appendChild(spin);
     box.appendChild(rc.textEl);
     box.appendChild(rc.secEl);
+    var exportButton = document.createElement("button");
+    exportButton.textContent = "导出诊断日志";
+    exportButton.style.cssText = "pointer-events:auto;margin-top:12px;padding:5px 12px;cursor:pointer";
+    exportButton.onclick = function () { window.__mjHost.downloadLogs().catch(function (error) { console.error("[offline] 日志导出失败", error); }); };
+    box.appendChild(exportButton);
     root.appendChild(box);
     (document.body || document.documentElement).appendChild(root);
     rc.root = root;
@@ -102,7 +108,10 @@
   }
   function rcLater(ms) {
     if (rc.hideTimer) clearTimeout(rc.hideTimer);
-    rc.hideTimer = setTimeout(rcHide, ms);
+    rc.hideTimer = setTimeout(function () {
+      if (window.__mjClock && window.__mjClock.status().recovery) return;
+      rcHide();
+    }, ms);
   }
   // One banner per game socket: close -> "reconnecting", open -> "restoring", the replay burst ending -> hide.
   function watchGameSocket(ws) {
@@ -120,10 +129,15 @@
       opened = false;
       rc.stage = 'down';
       rcShow('连接中断，正在重连…');
-      rcLater(20000);  // still not back after 20s: keep it up and say so rather than looking frozen
+      if (rc.hideTimer) clearTimeout(rc.hideTimer);
+      rc.hideTimer = setTimeout(function () {
+        rc.hideTimer = null;
+        if (rc.stage === "down") { rc.textEl.textContent = "仍未连接，正在重试；可导出日志排查"; console.warn("[offline] 断线超过20秒"); }
+      }, 20000);
     });
     ws.addEventListener('message', function () {
       if (rc.stage !== 'sync') return;
+      if (window.__mjClock && window.__mjClock.status().recovery) return;
       var now = Date.now();
       if (now - rc.openedAt > 12000) { rcHide(); return; }
       if (now - rc.lastMsg > 400) rc.burst = 0;
@@ -136,6 +150,7 @@
 
   // ---------------- WebSocket hijack ----------------
   var NativeWS = window.WebSocket;
+  var gameSocket = null;
   function PatchedWS(url, protocols) {
     var orig = url;
     var isGame = /riichiproxy|mahjongproxy|riichi_proxy/i.test(String(url));
@@ -153,12 +168,35 @@
       return _send(d);
     };
     ws.addEventListener('message', function (e) {
+      // Host-only clock sideband: consume before Unity sees the binary game protocol.
+      if (isGame && typeof e.data === 'string' && window.__mjClock) {
+        var packet;
+        try { packet = JSON.parse(e.data); } catch (_) { packet = null; }
+        if (packet && Object.prototype.hasOwnProperty.call(packet, 'mjSync')) {
+          e.stopImmediatePropagation();
+          window.__mjClock.synchronize(packet.mjSync, ws);
+          return;
+        }
+        if (packet && Object.prototype.hasOwnProperty.call(packet, 'mjClock')) {
+          e.stopImmediatePropagation();
+          if (gameSocket === ws) window.__mjClock.accept(packet.mjClock);
+          return;
+        }
+      }
       stats.recv++;
       recordFrame({ dir: 'recv', len: e.data && e.data.byteLength || 0, t: Date.now() });
     });
     ws.addEventListener('open', function () { console.log('[offline] WS 已连接', url); });
-    ws.addEventListener('error', function (e) { console.warn('[offline] WS 错误', e); });
-    if (isGame) watchGameSocket(ws);
+    ws.addEventListener('error', function (e) { console.warn('[offline] WS 错误', e.message || 'transport-error'); });
+    ws.addEventListener('close', function (e) {
+      if (window.__mjClock) window.__mjClock.disconnect(ws);
+      console.log('[offline] WS 关闭', JSON.stringify({ code: e.code, reason: e.reason, wasClean: e.wasClean, sent: stats.sent, recv: stats.recv }));
+    });
+    if (isGame) {
+      gameSocket = ws;
+      if (window.__mjClock) window.__mjClock.connect(ws);
+      watchGameSocket(ws);
+    }
     return ws;
   }
   PatchedWS.prototype = NativeWS.prototype;
@@ -241,6 +279,34 @@
   }
 
   console.log('[offline] 补丁已加载');
+
+  // One visibility bridge for both hosts. Native Unity has no pause/reset JS API: on return, use its existing Reload path.
+  var visibilityBeat = null;
+  function syncVisibility() {
+    var visible = !document.hidden;
+    if (window.__mjHostMode === 'node') {
+      if (nativeFetch) nativeFetch(BASE + 'api/page-visibility?visible=' + (visible ? '1' : '0'), {
+        method: 'POST', cache: 'no-store', keepalive: !visible
+      }).catch(function (error) { console.warn('[offline] 可见性上报失败', error.message); });
+    } else if (window.__mjHost) {
+      window.__mjHost.setPageVisible(visible).then(function (resync) {
+        if (resync && gameSocket && gameSocket.readyState === 1) gameSocket.close(1012, 'foreground-resync');
+      }).catch(function (error) { console.error('[offline] 可见性处理失败', error); });
+    }
+  }
+  function visibilityChanged() {
+    if (visibilityBeat) clearInterval(visibilityBeat);
+    visibilityBeat = null;
+    syncVisibility();
+    if (!document.hidden) visibilityBeat = setInterval(syncVisibility, 2000);
+  }
+  document.addEventListener('visibilitychange', visibilityChanged);
+  window.addEventListener('pagehide', function () {
+    if (visibilityBeat) clearInterval(visibilityBeat);
+    visibilityBeat = null;
+  });
+  window.addEventListener('pageshow', visibilityChanged);
+  visibilityChanged();
 
   // ---------------- Safe override of webGLPluginHelper.getUrlParams ----------------
   // framework.js's implementation does split('?')[1] when the URL has no '?', getting undefined, and then split('&') blows up;

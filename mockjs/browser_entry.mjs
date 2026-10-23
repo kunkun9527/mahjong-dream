@@ -61,7 +61,8 @@ var RiichiSession = class {
       uids: opts.uids || null,
       // Reload recovery: saved human-decision log to replay, and whether the player is connected
       replayLog: opts.replayLog || null,
-      humanPresent: opts.humanPresent !== false
+      humanPresent: opts.humanPresent !== false,
+      onHumanClock: opts.onHumanClock || null
     };
     // Called with the full record after every human decision (and once when the engine starts)
     this.onRecord = opts.onRecord || (() => {
@@ -142,6 +143,7 @@ var RiichiSession = class {
       selfLoveLevel: o.selfLoveLevel,
       replayLog: o.replayLog,
       humanPresent: o.humanPresent,
+      onHumanClock: (clock) => { if (!eng.replaying && o.onHumanClock) o.onHumanClock(clock); },
       // While replaying, the saved record is still the complete one; publish again only once the replay has caught up.
       onRecord: () => {
         if (!eng.replaying) this.onRecord(eng.matchRecord());
@@ -200,7 +202,9 @@ var RiichiSession = class {
       case RiichiMsg.EReqPlayCard: {
         const e = this.ensureEngine();
         if (!e) return;
+        const clock = e.humanTime();
         const result = e.submitDraw(payload);
+        this.log(`[clock-request] ${JSON.stringify({ ...clock, kind: "draw", result, present: e.humanPresent, buffered: e._bufferedDraw != null })}`);
         this.log(`[client] <- ReqPlayCard action=${payload?.action} card=${payload?.card ? tileName(payload.card) : "-"}` +
           ` timeout=${payload?.isTimeout ? 1 : 0} -> ${result}`);
         this.send(RiichiMsg.ERspPlayCard, { result });
@@ -211,8 +215,10 @@ var RiichiSession = class {
         if (!e) return;
         const open = e._expectedClaim;
         const pending = e._pending;
-        const elapsed = pending?.kind === "claim" ? Date.now() - pending.startedAt : null;
+        const clock = e.humanTime();
+        const elapsed = pending?.kind === "claim" ? clock.elapsedMs : null;
         const result = e.submitClaim(payload);
+        this.log(`[clock-request] ${JSON.stringify({ ...clock, kind: "claim", result, present: e.humanPresent, buffered: e._bufferedClaim != null })}`);
         const windowText = open
           ? `seat${open.seat}<from${open.discarderSeat} card${open.card} can[${open.actions.map(claimText).join("/")}]`
           : "closed";

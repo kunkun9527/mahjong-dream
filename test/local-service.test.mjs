@@ -82,9 +82,23 @@ test('段位 PT 使用资源表并正确升降段', () => {
   assert.equal(applyRankResult(profile, { players: 3, matchLength: 'hanchan', placement: 3 }).change, -270);
 });
 
-async function startService(directory) {
+// WHATWG Fetch "bad ports": Windows may hand these out for MJ_PORT=0, and fetch() then refuses them.
+const FETCH_BLOCKED_PORTS = new Set([1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79, 87, 95,
+  101, 102, 103, 104, 109, 110, 111, 113, 115, 117, 119, 123, 135, 137, 139, 143, 161, 179, 389, 427, 465, 512, 513, 514,
+  515, 526, 530, 531, 532, 540, 548, 554, 556, 563, 587, 601, 636, 989, 990, 993, 995, 1719, 1720, 1723, 2049, 3659, 4045,
+  4190, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6679, 6697, 10080]);
+
+async function startService(directory, env = {}) {
+  for (;;) {
+    const started = await startServiceOnce(directory, env);
+    if (!FETCH_BLOCKED_PORTS.has(Number(new URL(started.url).port))) return started;
+    started.child.kill('SIGTERM');
+  }
+}
+
+async function startServiceOnce(directory, env) {
   const child = fork(new URL('../local/server.mjs', import.meta.url), {
-    env: { ...process.env, MJ_PORT: '0', MJ_USERDATA_DIR: directory },
+    env: { ...process.env, MJ_PORT: '0', MJ_USERDATA_DIR: directory, ...env },
     execArgv: [],
     stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
   });
@@ -127,16 +141,34 @@ test('loopback 服务提供静态文件、WebSocket，并拒绝第二活动页�
     assert.equal((await rangeHead.arrayBuffer()).byteLength, 0);
     assert.equal((await fetch(`${url}README.md`, { headers: { Range: 'bytes=-0' } })).status, 416);
 
+    // The hash-pinned clock client is served as native Brotli WASM; the original Unity files keep loader-side decoding.
+    const clockManifest = JSON.parse(await fs.readFile(new URL('../Build_intl/mj-h5.clock.json', import.meta.url), 'utf8'));
+    const clockHead = await fetch(`${url}Build_intl/${clockManifest.codeFile}`, { method: 'HEAD' });
+    assert.equal(clockHead.status, 200);
+    assert.equal(clockHead.headers.get('content-encoding'), 'br');
+    assert.equal(clockHead.headers.get('content-type'), 'application/wasm');
+    const originalHead = await fetch(`${url}Build_intl/mj-h5.wasm.unityweb`, { method: 'HEAD' });
+    assert.equal(originalHead.headers.get('content-encoding'), null);
+
     const first = new WebSocket(url.replace('http:', 'ws:') + 'ws');
+    const initialClock = new Promise((resolve) => first.on('message', (data, isBinary) => {
+      if (!isBinary) resolve(JSON.parse(data.toString()));
+    }));
     await new Promise((resolve, reject) => {
       first.once('open', resolve);
       first.once('error', reject);
     });
     const reply = new Promise((resolve, reject) => {
-      first.once('message', (data) => resolve(new Uint8Array(data)));
+      const onFrame = (data, isBinary) => {
+        if (!isBinary) return;
+        first.off('message', onFrame);
+        resolve(new Uint8Array(data));
+      };
+      first.on('message', onFrame);
       first.once('error', reject);
     });
     first.send(P.W().v(2, 100141).v(11, 7).s(3, new Uint8Array(0)).bytes());
+    assert.deepEqual(await initialClock, { mjClock: null }, '宿主计时侧带与Unity二进制协议隔离');
     const responseFields = P.dict(await reply);
     assert.equal(responseFields[2], 100142);
     assert.equal(responseFields[11], 7);
@@ -184,6 +216,38 @@ test('loopback 服务提供静态文件、WebSocket，并拒绝第二活动页�
     assert.deepEqual(diagnostic.recentRequests, Array(12).fill(100141));
   } finally {
     await stopService(child, directory);
+  }
+});
+
+test('本地诊断收集前端异常、导出并直接落盘，拒绝跨站和无界输入', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mj-diagnostics-'));
+  const logPath = path.join(directory, 'game.log');
+  const { child, url } = await startService(directory, { MJ_LOG_FILE: logPath });
+  child.stdout.resume(); child.stderr.resume();
+  const post = (body, headers = { 'Content-Type': 'application/json' }) => fetch(url + 'api/diagnostics', {
+    method: 'POST', headers, body: JSON.stringify(body)
+  });
+  try {
+    assert.equal((await post({ lines: ['[frontend-error] timer-fixture', '[unhandledrejection] rejected-fixture'] })).status, 204);
+    assert.equal((await post({ lines: ['secret'] }, { 'Content-Type': 'application/json', Origin: 'https://example.com' })).status, 403);
+    assert.equal((await post({ lines: ['secret'] }, { 'Content-Type': 'text/plain' })).status, 403);
+    assert.equal((await post({ lines: Array(101).fill('x') })).status, 400);
+    assert.equal((await post({ lines: ['x'.repeat(2001)] })).status, 400);
+    const exported = await (await fetch(url + 'api/diagnostics')).text();
+    assert.match(exported, /\[frontend-error\] timer-fixture/);
+    assert.match(exported, /\[unhandledrejection\] rejected-fixture/);
+    assert.doesNotMatch(exported, /secret/);
+    child.kill('SIGTERM');
+    await new Promise((resolve) => child.once('exit', resolve));
+    const saved = await fs.readFile(logPath, 'utf8');
+    assert.match(saved, /\d{4}-\d\d-\d\dT.*\[frontend\].*timer-fixture/);
+    assert.match(saved, /rejected-fixture/);
+  } finally {
+    if (child.exitCode == null && child.signalCode == null) {
+      child.kill('SIGTERM');
+      await new Promise((resolve) => child.once('exit', resolve));
+    }
+    await fs.rm(directory, { recursive: true, force: true });
   }
 });
 
