@@ -7,7 +7,7 @@ await import('../mock/userdata.js');
 const { proto: P, data, userdata: U } = globalThis.__mj;
 const fresh = () => new U.UserData(P.b64decode(data.userdataB64), 10_000_001);
 
-test('扣款和发货一起提交，同一物品变化合并且保留未知字段', () => {
+test('the charge and the delivery are committed together, changes to the same item are merged, and unknown fields are kept', () => {
   const user = fresh();
   user.setRow(6, 60001, P.W().v(1, 60001).v(2, 1000).v(9, 42).bytes());
   const gifts = user.inventoryCount(7, 70011);
@@ -28,7 +28,7 @@ test('扣款和发货一起提交，同一物品变化合并且保留未知字�
   assert.equal(restored.inventoryCount(7, 70011), gifts + 2);
 });
 
-test('余额不足或发货溢出时整个背包和模块版本完全不变', () => {
+test('when the balance is insufficient or delivery overflows, the whole inventory and module versions stay completely unchanged', () => {
   const user = fresh();
   user.setRow(8, 80005, P.W().v(1, 80005).v(2, Number.MAX_SAFE_INTEGER).bytes());
   const before = user.serialize();
@@ -43,7 +43,7 @@ test('余额不足或发货溢出时整个背包和模块版本完全不变', ()
   }
 });
 
-test('首次获得物品使用 ADD 增量，零净变化不增加模块版本', () => {
+test('the first acquisition of an item uses an ADD delta, and zero net change does not bump the module version', () => {
   const user = fresh();
   const id = 69999;
   assert.equal(user.inventoryCount(6, id), 0);

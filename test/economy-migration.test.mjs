@@ -14,7 +14,7 @@ const { proto: P, data, userdata: U } = globalThis.__mj;
 const config = { coinId: 60001, currencyIds: [60001, 60002, 60008], rank: { level: 17, point: 2000 } };
 const fresh = () => new U.UserData(P.b64decode(data.userdataB64), 10_000_001);
 
-test('旧档案一次性补给并升级三四麻，不覆盖昵称装备与战绩', () => {
+test('an old profile gets a one-time grant and is upgraded to three- and four-player, without overwriting nickname, equipment or stats', () => {
   const profile = createDefaultProfile();
   profile.nickname = '测试档案';
   profile.stats.sanma.games = 7;
@@ -34,7 +34,7 @@ test('旧档案一次性补给并升级三四麻，不覆盖昵称装备与战�
   assert.deepEqual(user.row(1, '0'), equipment);
 });
 
-test('新档案补给后消费和降段，原子保存再载入不重复补满', async () => {
+test('after a new profile is granted, spending and a rank demotion, then an atomic save and reload, do not refill the grant again', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mj-economy-'));
   try {
     const profile = createDefaultProfile();
@@ -58,7 +58,7 @@ test('新档案补给后消费和降段，原子保存再载入不重复补满',
   }
 });
 
-test('迁移余额溢出时档案和大厅快照都不变，也不写完成标记', () => {
+test('when migrated balance overflows, both the profile and lobby snapshot are unchanged, and no completion marker is written', () => {
   const profile = createDefaultProfile();
   const user = fresh();
   user.setRow(6, config.coinId, P.W().v(1, config.coinId).v(2, Number.MAX_SAFE_INTEGER).bytes());

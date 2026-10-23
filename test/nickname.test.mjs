@@ -29,7 +29,7 @@ function changedDtypes(frame) {
   return P.parse(change).filter(([field]) => field === 2).map(([, , bytes]) => P.dict(bytes)[1]);
 }
 
-test('改名应答回显原请求、刷新 DT1 并消耗一张改名卡', (t) => {
+test('the rename reply echoes the original request, refreshes DT1 and consumes one rename card', (t) => {
   const session = mock.createSession();
   t.after(() => session.destroy());
   mock.userdata.changeInventory([{ dtype: 6, id: RENAME_CARD, count: 1 }]);
@@ -42,13 +42,13 @@ test('改名应答回显原请求、刷新 DT1 并消耗一张改名卡', (t) =>
   assert.equal(frame[2], 100008);
   const body = P.dict(frame[3]);
   assert.equal(body[1] || 0, 0);
-  assert.deepEqual(Buffer.from(body[2]), Buffer.from(request), '回显原请求供客户端按字段类型派发');
+  assert.deepEqual(Buffer.from(body[2]), Buffer.from(request), 'echo the original request so the client can dispatch by field type');
   assert.deepEqual(changedDtypes(frame).sort((a, b) => a - b), [1, 6]);
   assert.equal(mock.userdata.inventoryCount(6, RENAME_CARD), cards - 1);
   assert.equal(saved, '测试雀士');
 });
 
-test('空白昵称被拒绝且不扣卡；问候语离线不可用且不改昵称', (t) => {
+test('a blank nickname is rejected without deducting a card; a greeting is unavailable offline and does not change the nickname', (t) => {
   const session = mock.createSession();
   const pushed = [];
   session.resume({ readyState: 1, _deliver(bytes) { pushed.push(P.dict(bytes)); } });

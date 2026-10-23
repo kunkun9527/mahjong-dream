@@ -20,7 +20,7 @@ function freshHost(profile = createDefaultProfile()) {
   return { host, profile, writes };
 }
 
-test('新档案载入时执行一次性补给，修改器状态列出段位名与可编辑货币', async () => {
+test('loading a new profile runs the one-time grant; the editor state lists rank names and editable currencies', async () => {
   const { host } = freshHost();
   const state = await host.handle({ action: 'state' });
   assert.equal(state.rankNames.length, C.yonmaRanks.length);
@@ -30,7 +30,7 @@ test('新档案载入时执行一次性补给，修改器状态列出段位名�
   assert.equal(state.inMatch, false);
 });
 
-test('修改昵称、段位和货币后同步到大厅数据并立即存档', async () => {
+test('editing nickname, rank and currency syncs to lobby data and saves immediately', async () => {
   const { host, profile, writes } = freshHost();
   const state = await host.handle({ action: 'edit', changes: {
     nickname: '  新雀士 ', ranks: { yonma: { level: 20, point: 3900 } }, items: { 60001: 5, 60007: 3 },
@@ -48,7 +48,7 @@ test('修改昵称、段位和货币后同步到大厅数据并立即存档', as
   assert.equal(new TextDecoder().decode(P.get(basic, 1)), '新雀士');
 });
 
-test('任一字段非法时整次修改都不生效', async () => {
+test('if any field is invalid, the whole edit does not take effect', async () => {
   const { host, profile, writes } = freshHost();
   const before = host.snapshot().lobbyData;
   for (const changes of [
@@ -68,7 +68,7 @@ test('任一字段非法时整次修改都不生效', async () => {
   assert.deepEqual(writes, []);
 });
 
-test('重置战绩只清空对局记录，保留段位与货币', async () => {
+test('resetting stats only clears match records and keeps rank and currency', async () => {
   const { host, profile } = freshHost();
   profile.stats.yonma.games = 7;
   profile.stats.sanma.byLength.east.games = 2;
@@ -79,7 +79,7 @@ test('重置战绩只清空对局记录，保留段位与货币', async () => {
   assert.deepEqual(profile.ranks.yonma, { level: 19, point: 100 });
 });
 
-test('导出再导入可还原存档；坏存档导入失败时保留当前档案', async () => {
+test('export and re-import restores the save; if a corrupt save fails to import, the current profile is kept', async () => {
   const { host, profile } = freshHost();
   await host.handle({ action: 'edit', changes: { nickname: 'Exported', items: { 60010: 42 } } });
   const exported = JSON.parse(JSON.stringify(await host.handle({ action: 'export' })));
@@ -102,7 +102,7 @@ test('导出再导入可还原存档；坏存档导入失败时保留当前档�
   assert.equal(mock.userdata.inventoryCount(6, 60010), 42);
 });
 
-test('对局或匹配进行中拒绝修改存档，但允许查看与导出', async () => {
+test('editing the save is rejected while a match or matchmaking is in progress, but viewing and exporting are allowed', async () => {
   const { host, profile } = freshHost();
   const session = host.attach(mock.createSession());
   session.tableId = 12;

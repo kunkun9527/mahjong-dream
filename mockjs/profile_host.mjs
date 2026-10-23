@@ -15,7 +15,7 @@ export const EDITABLE_ITEMS = [
   { id: 60012, name: 'Honor Points' },
   { id: 60007, name: 'Rename Card' },
 ];
-// LanguageTbUIEN names of Rank2*CfgTb; level 11 is shown as "Novice" there, but it is 初段 (1st Dan).
+// LanguageTbUIEN names of Rank2*CfgTb; level 11 is shown as "Novice" there, but it is 1st Dan.
 export const RANK_NAMES = ['Novice', 'D3', 'D2', 'D1', 'C2', 'C1', 'B2', 'B1', 'A2', 'A1', '1st Dan', '2nd Dan', '3rd Dan',
   '4th Dan', '5th Dan', '6th Dan', '7th Dan', '8th Dan', '9th Dan', '10th Dan', 'Legend', 'Legend+'];
 // A disconnected player's table waits this long; after that the AI finishes the match and it counts as played.
@@ -101,7 +101,7 @@ export function createProfileHost(mock, profile, { persist, log = () => {} }) {
         ...mock.updateRanks(profile.ranks),
         mock.updateProfileStats(profile.stats),
       ];
-      log(`[local] 对局结束：${engine.playersN}麻 ${engine.matchLength}，第${result.placement}名，段位 PT ${result.rank.change >= 0 ? '+' : ''}${result.rank.change}，金币 +${result.coins}`);
+      log(`[local] Match finished: ${engine.playersN}-player ${engine.matchLength}, place ${result.placement}, rank PT ${result.rank.change >= 0 ? '+' : ''}${result.rank.change}, coins +${result.coins}`);
       persist();
       return result;
     };
@@ -128,7 +128,7 @@ export function createProfileHost(mock, profile, { persist, log = () => {} }) {
     try {
       await mock.restoreMatch(sess, record, { finish: true });
     } catch (error) {
-      log(`[local] 无法用对局记录完成上一场比赛，已丢弃：${error.message}`);
+      log(`[local] Could not finish previous match from its record; discarded: ${error.message}`);
     }
     profile.activeMatch = null;
     const ordinal = (n) => n + ([, 'st', 'nd', 'rd'][n] || 'th');
@@ -156,7 +156,7 @@ export function createProfileHost(mock, profile, { persist, log = () => {} }) {
       const ready = mock.restoreMatch(target, record);
       return { restored: true, remainingMs: maxAgeMs - age, ready };
     } catch (error) {
-      log(`[local] 对局记录无法恢复，已丢弃：${error.message}`);
+      log(`[local] Match record could not be restored; discarded: ${error.message}`);
       profile.activeMatch = null;
       persist();
       return null;

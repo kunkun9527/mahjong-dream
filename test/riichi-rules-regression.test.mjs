@@ -7,16 +7,16 @@ import { engineFixture, tiles } from './helpers/riichi-fixtures.mjs';
 const closedTenpai = '123m123p123s555z7z';
 
 for (const [name, payload, actions, cantPlays, result] of [
-  ['非整数动作', { action: 0.5, card: 471 }, [A.Normal], [], R.Fail_InvalidParam],
-  ['未提供动作', { action: A.Hu }, [A.Normal], [], R.Fail_ActionNotInCanPlayActions],
-  ['伪造牌实体', { action: A.Normal, card: 470 }, [A.Normal], [], R.Fail_CardNotInHand],
-  ['食替禁牌', { action: A.Normal, card: 471 }, [A.Normal], [470], R.Fail_CardInCantPlays],
-  ['立直未听牌的弃牌', { action: A.Riichi, card: 451 }, [A.Normal, A.Riichi], [], R.Fail_RiichiPlayCardWrong],
-  ['没有四张的暗杠', { action: A.AnGang, card: 471 }, [A.Normal, A.AnGang], [], R.Fail_CardNotMatchAction],
-  ['没有碰牌的加杠', { action: A.PengGang, card: 471 }, [A.Normal, A.PengGang], [], R.Fail_CardNotMatchAction],
-  ['非北牌拔北', { action: A.BaBei, card: 451 }, [A.Normal, A.BaBei], [], R.Fail_CardNotMatchAction],
+  ['non-integer action', { action: 0.5, card: 471 }, [A.Normal], [], R.Fail_InvalidParam],
+  ['action not provided', { action: A.Hu }, [A.Normal], [], R.Fail_ActionNotInCanPlayActions],
+  ['forged tile entity', { action: A.Normal, card: 470 }, [A.Normal], [], R.Fail_CardNotInHand],
+  ['kuikae-forbidden tile', { action: A.Normal, card: 471 }, [A.Normal], [470], R.Fail_CardInCantPlays],
+  ['riichi discard that does not leave tenpai', { action: A.Riichi, card: 451 }, [A.Normal, A.Riichi], [], R.Fail_RiichiPlayCardWrong],
+  ['ankan without four copies', { action: A.AnGang, card: 471 }, [A.Normal, A.AnGang], [], R.Fail_CardNotMatchAction],
+  ['added kan without a pon', { action: A.PengGang, card: 471 }, [A.Normal, A.PengGang], [], R.Fail_CardNotMatchAction],
+  ['nukidora on a non-north tile', { action: A.BaBei, card: 451 }, [A.Normal, A.BaBei], [], R.Fail_CardNotMatchAction],
 ]) {
-  test(`摸打错误码：${name}经提交入口返回指定错误且全状态不变`, () => {
+  test(`draw/discard error code: ${name} returns the expected error via the submit entry and leaves all state unchanged`, () => {
     const { engine } = engineFixture();
     engine.players[0].hand = tiles(closedTenpai + '6z');
     engine.expectDraw(0, true, actions, cantPlays);
@@ -25,16 +25,16 @@ for (const [name, payload, actions, cantPlays, result] of [
 }
 
 for (const [name, payload, result] of [
-  ['非整数动作', { action: 2.5 }, R.Fail_InvalidParam],
-  ['未提供动作', { action: A.Hu }, R.Fail_ActionNotInCanQiangActions],
-  ['缺少实体', { action: A.Peng, otherCards: [111] }, R.Fail_InvalidOtherCards],
-  ['重复实体', { action: A.Peng, otherCards: [111, 111] }, R.Fail_InvalidOtherCards],
-  ['外国实体', { action: A.Peng, otherCards: [111, 114] }, R.Fail_InvalidOtherCards],
-  ['错误牌种', { action: A.Peng, otherCards: [111, 121] }, R.Fail_InvalidOtherCards],
-  ['明杠少交一张', { action: A.MingGang, otherCards: [111, 112] }, R.Fail_InvalidOtherCards],
-  ['非连续吃牌', { action: A.Chi, otherCards: [121, 141] }, R.Fail_InvalidOtherCards],
+  ['non-integer action', { action: 2.5 }, R.Fail_InvalidParam],
+  ['action not provided', { action: A.Hu }, R.Fail_ActionNotInCanQiangActions],
+  ['missing tile entity', { action: A.Peng, otherCards: [111] }, R.Fail_InvalidOtherCards],
+  ['duplicate tile entity', { action: A.Peng, otherCards: [111, 111] }, R.Fail_InvalidOtherCards],
+  ['tile entity of another kind', { action: A.Peng, otherCards: [111, 114] }, R.Fail_InvalidOtherCards],
+  ['wrong tile kind', { action: A.Peng, otherCards: [111, 121] }, R.Fail_InvalidOtherCards],
+  ['open kan missing one tile', { action: A.MingGang, otherCards: [111, 112] }, R.Fail_InvalidOtherCards],
+  ['non-consecutive chi tiles', { action: A.Chi, otherCards: [121, 141] }, R.Fail_InvalidOtherCards],
 ]) {
-  test(`鸣牌错误码：${name}经提交入口拒绝且全状态不变`, () => {
+  test(`claim error code: ${name} is rejected via the submit entry and leaves all state unchanged`, () => {
     const { engine } = engineFixture();
     engine.players[0].hand = tiles('11234m123p123s11z');
     engine.players[3].discards = [113];
@@ -43,7 +43,7 @@ for (const [name, payload, result] of [
   });
 }
 
-test('弃牌振听封锁全部等待而非仅舍过的牌，但不封锁自摸', () => {
+test('discard furiten blocks all waits, not only the discarded tile, but does not block tsumo', () => {
   const { engine } = engineFixture();
   const p = engine.players[0];
   p.hand = tiles('123m123p123s55z67s');
@@ -58,7 +58,7 @@ test('弃牌振听封锁全部等待而非仅舍过的牌，但不封锁自摸',
   assert.equal(engine.canTsumo(p), true);
 });
 
-test('立直后见逃的永久振听在后续摸牌后保留并继续禁止荣和', async () => {
+test('permanent furiten from passing on riichi persists after the next draw and still forbids ron', async () => {
   const { engine } = engineFixture();
   const p = engine.players[0];
   p.hand = tiles(closedTenpai);
@@ -75,7 +75,7 @@ test('立直后见逃的永久振听在后续摸牌后保留并继续禁止荣�
   assert.equal(engine.canRon(p, 472), false);
 });
 
-test('立直宣言要求门清千点与剩余摸牌机会，振听和空听不妨碍宣言', () => {
+test('riichi declaration requires a closed hand, 1000 points and enough draws left; furiten and no-wait hands do not block it', () => {
   for (const players of [3, 4]) {
     const { engine } = engineFixture({ players });
     const p = engine.players[0];
@@ -98,7 +98,7 @@ test('立直宣言要求门清千点与剩余摸牌机会，振听和空听不�
   }
 });
 
-test('立直宣言实际扣千点，未放铳确认后供托与一发状态保持', async () => {
+test('riichi declaration actually deducts 1000 points; after no one calls ron on the discard, the riichi stick and ippatsu state are kept', async () => {
   const { engine } = engineFixture();
   const p = engine.players[0];
   p.hand = tiles(closedTenpai + '6z');
@@ -115,7 +115,7 @@ test('立直宣言实际扣千点，未放铳确认后供托与一发状态保�
   assert.deepEqual(p.discards, [461]);
 });
 
-test('立直暗杠拒绝改变等待牌种及不是新摸牌的送杠', () => {
+test('riichi ankan is rejected if it changes the wait tile kinds or is not made on the fresh draw', () => {
   const { engine } = engineFixture();
   const p = engine.players[0];
   // Nine Gates' thirteen-sided wait: after kanning the 1m triplet, the number of waiting tile kinds decreases.
@@ -132,7 +132,7 @@ test('立直暗杠拒绝改变等待牌种及不是新摸牌的送杠', () => {
   assert.deepEqual(engine.concealedQuadTiles(p), []);
 });
 
-test('非国士的完成牌即使有抢杠役也不得抢暗杠，但可抢加杠', () => {
+test('a non-kokushi winning tile cannot rob an ankan even with a robbing-kan yaku, but can rob an added kan', () => {
   const { engine } = engineFixture();
   const p = engine.players[1];
   p.hand = tiles('123m123p123s555z7z');
@@ -141,19 +141,19 @@ test('非国士的完成牌即使有抢杠役也不得抢暗杠，但可抢加�
   assert.equal(engine.canRobKan(p, 472, 'ankan'), false);
 });
 
-test('三响优先于碰与途中流局，按放铳者下家顺序提交全部赢家', async () => {
+test('triple ron takes priority over pon and mid-hand draws, and all winners are submitted in order starting from the seat after the discarder', async () => {
   const { engine } = engineFixture();
   engine.autoHuman = true;
   engine.players[0].isHuman = false;
   engine.aiClaim = (_seat, _from, _card, actions) => ({ action: actions.includes(A.Hu) ? A.Hu : A.Peng });
-  engine.checkSiFengLianDa = () => { throw new Error('荣和优先，不得先判四风连打'); };
+  engine.checkSiFengLianDa = () => { throw new Error('ron takes priority; four-wind must not be checked first'); };
   let result;
   engine.winRons = async (...args) => { result = args; };
   await engine.resolveClaims(2, 111, [[A.Hu, A.Guo], [A.Hu, A.Peng, A.Guo], [], [A.Hu, A.Guo]]);
   assert.deepEqual(result, [[3, 0, 1], 2, 111]);
 });
 
-test('四家立直优先于荒牌和流局满贯且不清算听牌罚符', async () => {
+test('four-riichi takes priority over exhaustive-draw nagashi mangan and does not settle tenpai payments', async () => {
   const { engine, frames } = engineFixture();
   engine.remain = 0;
   for (const p of engine.players) {
@@ -173,7 +173,7 @@ test('四家立直优先于荒牌和流局满贯且不清算听牌罚符', async
   assert.equal(engine.honba, 1);
 });
 
-test('四风连打仅四麻同种风牌首巡成立，三麻与被鸣后均不成立', async () => {
+test('four-wind declaration only holds in 4-player on the first go-around with the same wind tile; it does not hold in 3-player or after a claim', async () => {
   const { engine, frames } = engineFixture();
   for (const p of engine.players) p.discards = [411 + p.seat];
   engine.firstGoAround = true;
@@ -188,7 +188,7 @@ test('四风连打仅四麻同种风牌首巡成立，三麻与被鸣后均不�
   assert.equal(sanma.checkSiFengLianDa(), false);
 });
 
-test('九种九牌只计算首巡不同幺九种类，途中流局无罚符且连庄', async () => {
+test('nine-kinds nine-terminals counts distinct terminal/honor kinds on the first go-around only; mid-hand draw has no penalty and the dealer repeats', async () => {
   const { engine, frames } = engineFixture();
   const p = engine.players[0];
   p.hand = tiles('19m19p19s1234567z1m');
@@ -205,7 +205,7 @@ test('九种九牌只计算首巡不同幺九种类，途中流局无罚符且�
   assert.equal(engine.canJiuZhongJiuPai(p), false);
 });
 
-test('三麻拔北不算弃牌或副露面子，不翻杠宝但消除一发与首巡判定', async () => {
+test('in 3-player, nukidora is not counted as a discard or a meld set, does not flip kan dora, but cancels ippatsu and the first go-around', async () => {
   const { engine } = engineFixture({ players: 3 });
   const p = engine.players[0];
   p.hand = tiles('123p123s789s555z4z7z');
@@ -231,7 +231,7 @@ test('三麻拔北不算弃牌或副露面子，不翻杠宝但消除一发与�
   assert.equal(engine.remain, 1);
 });
 
-test('明杠的杠宝与加杠一样后翻，弃牌前连续杠先翻上一张', async () => {
+test('open kan dora is deferred like added kan; the earlier deferred dora flips with the next kan', async () => {
   const { engine } = engineFixture();
   const p = engine.players[0];
   p.hand = tiles('111m123p123s55z');
@@ -254,7 +254,7 @@ test('明杠的杠宝与加杠一样后翻，弃牌前连续杠先翻上一张',
   assert.equal(engine._deferredKanDora, 0);
 });
 
-test('真实三响逐家计分，最近赢家独收本场供托且含庄时连庄', async () => {
+test('real triple ron is scored seat by seat; the nearest winner alone collects honba and riichi sticks, and the dealer repeats if among the winners', async () => {
   const { engine, frames } = engineFixture();
   engine.autoHuman = true;
   engine.honba = 1;
@@ -280,7 +280,7 @@ test('真实三响逐家计分，最近赢家独收本场供托且含庄时连�
   assert.equal(engine.riichiSticks, 0);
 });
 
-test('多人流局满贯互相支付满贯而不收罚符、本场和供托', async () => {
+test('multi-player nagashi mangan payments do not collect tenpai penalties, honba or riichi sticks', async () => {
   const { engine } = engineFixture();
   engine.honba = 2;
   engine.riichiSticks = 1;

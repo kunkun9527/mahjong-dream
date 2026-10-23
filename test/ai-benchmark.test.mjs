@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { seatLayouts, ratioStat, pairedStat, routeAiMethods } from '../tools/ai_benchmark.mjs';
 
-test('基准：三麻/四麻布局不重复，两组在每个座位均衡，三麻覆盖多数和少数', () => {
+test('benchmark: 3p/4p layouts do not repeat, both groups are balanced across seats, and 3p covers both the majority and the minority', () => {
   for (const n of [3, 4]) {
     const layouts = seatLayouts(n);
     assert.equal(layouts.length, 6);
@@ -13,7 +13,7 @@ test('基准：三麻/四麻布局不重复，两组在每个座位均衡，三�
   assert.throws(() => seatLayouts(2), /players/);
 });
 
-test('基准：旧入口的动态鸣牌 helper 也使用旧策略，不污染新座位', () => {
+test('benchmark: the dynamic meld helper of the legacy entry also uses the old strategy and does not pollute new seats', () => {
   const engine = {
     marker: 17,
     aiTurn(seat) { return ['new-turn', this.marker, this.aiClaimByPolicy(seat)]; },
@@ -32,7 +32,7 @@ test('基准：旧入口的动态鸣牌 helper 也使用旧策略，不污染新
   assert.deepEqual(engine.aiClaim(0), ['new-claim', ['new-policy', 0]]);
 });
 
-test('基准：标准误按种子聚类，不会因复制同一局面虚假缩小', () => {
+test('benchmark: standard errors are clustered by seed, so copying the same position does not falsely shrink them', () => {
   const samples = [{ seed: 1, num: 10, den: 1 }, { seed: 2, num: 30, den: 1 }];
   const stat = ratioStat(samples);
   assert.equal(stat.value, 20);

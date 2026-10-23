@@ -39,7 +39,7 @@ function page(t, storage = new Map(), mode = 'node', search = '') {
     emit: (name, event) => listeners.get(name)?.forEach((callback) => callback(event)) };
 }
 
-test('前端异常进入本地日志批次；导出包含服务端及页面日志，不展开任意对象', async (t) => {
+test('frontend errors enter the local log batch; the export includes server and page logs without expanding arbitrary objects', async (t) => {
   const { context, emit, requests, downloads, storage } = page(t);
   await context.__mjHost.ready;
   emit('error', { message: 'clock-fixture', filename: 'game.js', lineno: 17, error: new Error('clock-fixture') });
@@ -59,7 +59,7 @@ test('前端异常进入本地日志批次；导出包含服务端及页面日�
   assert.match(downloads[0], /^mahjong-diagnostics-\d+\.log$/);
 });
 
-test('默认不写 Unity/SDK 普通输出，关键链路及未知警告错误仍保留', async (t) => {
+test('by default, ordinary Unity/SDK output is not written, while key-path entries and unknown warnings and errors are still kept', async (t) => {
   const { context, emit, requests } = page(t);
   await context.__mjHost.ready;
   for (let i = 0; i < 100; i++) {
@@ -79,7 +79,7 @@ test('默认不写 Unity/SDK 普通输出，关键链路及未知警告错误仍
   assert.doesNotMatch(context.__mjHost.diagnosticText(), /Unloading|PhysX|FS.syncfs/);
 });
 
-test('粒子缺网格警告每种网格保留首次，不重复淹没恢复日志；未知警告和错误不去重', async (t) => {
+test('particle missing-mesh warnings keep only the first occurrence per mesh and do not flood recovery logs; unknown warnings and errors are not deduplicated', async (t) => {
   const { context } = page(t);
   await context.__mjHost.ready;
   const warning = (mesh, n) => 'No mesh data available for mesh ' + mesh + ' on particle system Particle System (' + n + '). Make sure Read/Write Enabled is set in the importer to work on the particle system renderer';
@@ -93,7 +93,7 @@ test('粒子缺网格警告每种网格保留首次，不重复淹没恢复日�
   assert.match(text, /differentMesh/);
 });
 
-test('Node导出不重复附加已落盘的页面记录，尚未上传的异常仍可导出', async (t) => {
+test('the Node export does not re-append page records already written to disk, while errors not yet uploaded can still be exported', async (t) => {
   const { context, requests } = page(t);
   await context.__mjHost.ready;
   context.console.log('[clock-bridge] uploaded-fixture');
@@ -102,12 +102,12 @@ test('Node导出不重复附加已落盘的页面记录，尚未上传的异常�
   context.serverDiagnosticText = '[frontend] ' + JSON.stringify(posted.lines[0]);
   context.console.error('not-yet-uploaded-fixture');
   const text = await context.__mjHost.downloadLogs();
-  assert.equal(text.split('uploaded-fixture').length - 1, 2, '各出现一次：已上传及未上传两条');
-  assert.equal(text.split('[clock-bridge]').length - 1, 1, '已落盘的页面行不再复制一遍');
+  assert.equal(text.split('uploaded-fixture').length - 1, 2, 'each appears once: the uploaded and the not-yet-uploaded entry');
+  assert.equal(text.split('[clock-bridge]').length - 1, 1, 'page lines already written to disk are not copied again');
   assert.match(text, /not-yet-uploaded-fixture/);
 });
 
-test('mjDebug=1 保留引擎普通输出及性能提示供按需排查', async (t) => {
+test('mjDebug=1 keeps ordinary engine output and performance hints for on-demand troubleshooting', async (t) => {
   const { context } = page(t, new Map(), 'browser', '?mjDebug=1');
   await context.__mjHost.ready;
   context.console.log('Unloading debug-fixture');
@@ -116,7 +116,7 @@ test('mjDebug=1 保留引擎普通输出及性能提示供按需排查', async (
   assert.match(context.__mjHost.diagnosticText(), /FS.syncfs/);
 });
 
-test('静态宿主恢复本标签页日志，环形缓冲有界且只在本地导出', async (t) => {
+test('the static host restores logs for this tab; the ring buffer is bounded and exported only locally', async (t) => {
   const storage = new Map([['mahjong-dream/diagnostics', JSON.stringify(['previous-page-fixture'])]]);
   const { context, requests, downloads, emit } = page(t, storage, 'browser');
   await context.__mjHost.ready;

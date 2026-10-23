@@ -1,17 +1,17 @@
-/* 自动生成，勿手改 —— 由 tools/gen_mock_data_js.py 产出。
+/* Auto-generated, do not edit by hand — produced by tools/gen_mock_data_js.py.
  *
- * USERDATA : 大厅数据 100142 的初始快照（已注入全雀士解锁 / LV6 / 全皮肤）
- * REPLAY   : 其它可直接回放的服务端响应 payload，按 msg_id 索引
+ * USERDATA : initial snapshot of lobby data 100142 (with all warriors unlocked / LV6 / all skins injected)
+ * REPLAY   : other directly replayable server response payloads, indexed by msg_id
  */
 (function (global) {
   'use strict';
   var MJ = global.__mj || (global.__mj = {});
 
-  // 100142 QueryUserDataResponse（13525 bytes）
-  // 100142 大厅数据初始快照：以真实服务器抓包为基准，已注入
-  //   全雀士解锁 / 好感度 LV6 / 全皮肤（DT26+DT1）
-  //   全道具（DT6/7/8 按配置表补齐）
-  //   川味食府场景（DT20=200002 背景 + DT45=450002 内景，来自真实抓包）
+  // 100142 QueryUserDataResponse (13525 bytes)
+  // 100142 lobby data initial snapshot: based on real server packet captures, with these injected:
+  //   all warriors unlocked / affinity LV6 / all skins (DT26+DT1)
+  //   all items (DT6/7/8 filled in from the config table)
+  //   Sichuan Food House scene (DT20=200002 background + DT45=450002 interior, from real packet captures)
   var USERDATA_B64 = ['Gv4FCAEQyg8a9gUKATAS8AUKGQoETWF5eBILSGVsbG8gd29ybGQqBEJha2ESiwEKBggPEPeTCQoGCBcQ8YQOCgYIEBCB4gkKBggU',
   'EMKaDAoGCBIQof4KCgUICxDsBwoGCBgQgdMOCgYIERCRsAoKBQgNELkXCgYIDhDixQgKBggWEOG2DQoGCAcQgqMECgYILRDRuxsK',
   'BAgaEAQKBggTELHMCwoFCAwQ0Q8KBggVENHoDAoGCBkQkaEPIAIo1+ut0wZgEmpDChYIx2oSDOWGjeedoeS4gOS8mhjsB0AECh8I',
@@ -207,7 +207,7 @@
   };
 
 
-  // msg_id -> 名字（仅用于控制台日志）
+  // msg_id -> name (console logs only)
   var NAMES = {
     20001: "KGameServerLoginRequest",
     20002: "KGameServerLoginResponse",

@@ -74,7 +74,7 @@
       return;
     }
     if (window.matchMedia('(orientation: portrait)').matches) {
-      console.log("当前是竖屏");
+      console.log("Currently portrait");
       Frame.height = window.innerWidth;
       Frame.width = window.innerHeight;
 
@@ -83,7 +83,7 @@
       //Rotate 90 degrees via CSS
       Frame.classList.add("landscape-screen");
     } else {
-      console.log("当前是横屏");
+      console.log("Currently landscape");
       Frame.height = window.innerHeight;
       Frame.width = window.innerWidth;
 
@@ -102,7 +102,7 @@
 
   window.addEventListener('resize', function () {
     setTimeout(function() {
-      console.log("等待结束，执行后续操作！");
+      console.log("Wait ended, running follow-up actions!");
       // Put the code to run here
       Frame.contentWindow.postMessage('refreshMethod', '*');
 
@@ -115,15 +115,15 @@
     const data = event.data; // Get the parameters passed from the child page
 
     if (data && data.action === 'receiveOrientationFromUnity') {
-      console.log('接收到子页面的数据 Received from Unity:', data.value);  // Handle the received data
+      console.log('Received child-page data from Unity:', data.value);  // Handle the received data
       setOrientation = data.value;
       Frame.contentWindow.postMessage('refreshMethod', '*');
       unityRefreshOrientation()
     }
     else
     {
-      console.log('接收到子页面的数据 event origin:', event.origin);  // Handle the received data
-      console.log('接收到子页面的数据 event data:', event.data);  // Handle the received data
+      console.log('Received child-page data, event origin:', event.origin);  // Handle the received data
+      console.log('Received child-page data, event data:', event.data);  // Handle the received data
       var obj = null;
       try{
         obj = JSON.parse(event.data);

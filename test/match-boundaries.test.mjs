@@ -6,7 +6,7 @@ import { ECONOMY_CATALOG as C } from '../mockjs/economy_catalog.mjs';
 import { engineFixture } from './helpers/riichi-fixtures.mjs';
 
 for (const players of [3, 4]) for (const matchLength of ['east', 'hanchan']) {
-  test(`${players}人${matchLength === 'east' ? '东风' : '半庄'}末局未达必要点加赛，延长场末局封顶且不再进入下一风`, async () => {
+  test(`${players}p ${matchLength === 'east' ? 'east-only' : 'hanchan'} final round without the required points goes to extension; the extension final round is capped and never enters the next wind`, async () => {
     const { engine } = engineFixture({ players, matchLength });
     engine.roundWind = engine.regularWinds;
     engine.juNum = players - 1;
@@ -22,14 +22,14 @@ for (const players of [3, 4]) for (const matchLength of ['east', 'hanchan']) {
     assert.equal(engine.decideGameOver(false, scores), false);
     engine.juNum = players - 1;
     assert.equal(engine.decideGameOver(false, scores), true);
-    assert.equal(engine.decideGameOver(true, scores), false, '未达必要点且庄家连庄不得强行终局');
+    assert.equal(engine.decideGameOver(true, scores), false, 'without the required points, a dealer on renchan must not be forced into ending the match');
     await engine.finishHand(true, false, scores);
     assert.equal(engine.matchOver, true);
     assert.equal(engine.finished, true);
   });
 }
 
-test('All Last 庄家同分时依起亲顺位决定和了止，零点继续而负点立即飞人', () => {
+test('All Last: on a tie, the starting-seat order decides the win-stop; zero points continue, while negative points end the match immediately by tobi', () => {
   for (const players of [3, 4]) {
     const { engine } = engineFixture({ players });
     engine.juNum = players - 1;
@@ -38,7 +38,7 @@ test('All Last 庄家同分时依起亲顺位决定和了止，零点继续而�
     scores[0] = threshold;
     scores[players - 1] = threshold;
     engine.dealerSeat = players - 1;
-    assert.equal(engine.decideGameOver(true, scores), false, '同分起亲领先，末位庄家不是一位');
+    assert.equal(engine.decideGameOver(true, scores), false, 'tied on points, the starting seat leads, so the last-place dealer is not first place');
     engine.dealerSeat = 0;
     assert.equal(engine.decideGameOver(true, scores), true);
     engine.juNum = 0;
@@ -50,7 +50,7 @@ test('All Last 庄家同分时依起亲顺位决定和了止，零点继续而�
   }
 });
 
-test('三四麻终局成绩按起亲打破同分，顺位点与净分变化逐席正确', () => {
+test('3p/4p final results break ties by starting seat, and placement points and net score changes are correct for every seat', () => {
   for (const [players, scores, ranks, jing] of [
     [4, [35_000, 35_000, 15_000, 15_000], [1, 2, 3, 4], [25, 15, -15, -25]],
     [3, [40_000, 40_000, 25_000], [1, 2, 3], [20, 5, -25]],
@@ -65,7 +65,7 @@ test('三四麻终局成绩按起亲打破同分，顺位点与净分变化逐�
   }
 });
 
-test('三四麻流局终局供托归同分起亲一位，回调成绩与结算帧一致且仅调用一次', async () => {
+test('3p/4p exhaustive-draw final round: riichi sticks go to the tied first place by starting seat; the callback result matches the settlement frame and is called exactly once', async () => {
   for (const players of [3, 4]) {
     const start = players === 3 ? 35_000 : 25_000;
     const { engine, frames } = engineFixture({ players, maxHands: 1,
@@ -89,7 +89,7 @@ test('三四麻流局终局供托归同分起亲一位，回调成绩与结算�
   }
 });
 
-test('延长场终局门槛不预收未领取供托，正式必要点边界精确', () => {
+test('the extension final-round threshold does not pre-collect unclaimed riichi sticks, and the official required-points boundary is exact', () => {
   for (const players of [3, 4]) {
     const { engine } = engineFixture({ players });
     engine.roundWind = 2;
@@ -104,7 +104,7 @@ test('延长场终局门槛不预收未领取供托，正式必要点边界精�
 });
 
 for (const players of [3, 4]) for (const matchLength of ['east', 'hanchan']) {
-  test(`${players}人${matchLength === 'east' ? '东风' : '半庄'}原段位表逐档逐顺位校验PT、精确升降边界与模式隔离`, () => {
+  test(`${players}p ${matchLength === 'east' ? 'east-only' : 'hanchan'} original rank table: PT is checked per tier and per seat, with exact promotion/demotion boundaries and mode isolation`, () => {
     const key = players === 3 ? 'sanma' : 'yonma';
     const other = players === 3 ? 'yonma' : 'sanma';
     const table = C[`${key}Ranks`];
@@ -151,7 +151,7 @@ for (const players of [3, 4]) for (const matchLength of ['east', 'hanchan']) {
   });
 }
 
-test('原段位结算采用同分起亲顺位且只更新对应三四麻及长度战绩', () => {
+test('original rank settlement uses starting-seat order for ties and only updates the matching 3p/4p and length records', () => {
   for (const players of [3, 4]) for (const matchLength of ['east', 'hanchan']) {
     const profile = createDefaultProfile();
     const key = players === 3 ? 'sanma' : 'yonma';

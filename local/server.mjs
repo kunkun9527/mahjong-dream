@@ -18,7 +18,7 @@ if (process.env.MJ_LOG_FILE) {
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
   logStream = fs.createWriteStream(logPath, { flags: 'a' });
   const report = console.error.bind(console);
-  logStream.on('error', (error) => report('[local] 日志写入失败：' + error.message));
+  logStream.on('error', (error) => report('[local] Failed to write log: ' + error.message));
 }
 for (const name of ['log', 'warn', 'error']) {
   const original = console[name].bind(console);
@@ -42,7 +42,7 @@ const requiredResources = ['index.html', 'game.html', 'Build_intl/mj-h5.loader.j
   'Build_intl/mj-h5.data.unityweb', 'Build_intl/mj-h5.framework.js.unityweb', 'Build_intl/mj-h5.wasm.unityweb'];
 for (const resource of requiredResources) {
   try { await fsp.access(path.join(root, resource)); }
-  catch { throw new Error(`[local] 缺少游戏资源：${resource}。请重新解压完整游戏目录。`); }
+  catch { throw new Error(`[local] Missing game resource: ${resource}. Re-extract the complete game folder.`); }
 }
 const userdataDirectory = process.env.MJ_USERDATA_DIR ? path.resolve(process.env.MJ_USERDATA_DIR) : path.join(root, 'userdata');
 const profile = await loadProfile(userdataDirectory);
@@ -70,7 +70,7 @@ function saveNow() {
 function persistSoon() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    saveNow().catch((error) => console.error('[local] 存档失败:', error));
+    saveNow().catch((error) => console.error('[local] Save failed:', error));
   }, 50);
 }
 
@@ -94,14 +94,14 @@ function armAwayTimer(ms) {
     if (activeSocket || !engine || session.riichi.matchOver) return;
     engine.speed = 0;
     engine.setHumanAutoplay(true);
-    console.log('[local] 玩家离开超过 %d 分钟，AI 已代打并完成本场比赛', AWAY_LIMIT_MS / 60_000);
+    console.log('[local] Player away for more than %d minutes; AI auto-played this match to the end', AWAY_LIMIT_MS / 60_000);
   }, Math.max(0, ms));
 }
 // A match left unfinished by the previous run: finish it if the player has been away too long, otherwise rebuild it frozen.
 const recovered = await profileHost.recoverMatch({ session });
 if (recovered?.restored) {
   armAwayTimer(recovered.remainingMs);
-  console.log('[local] 已恢复上次未完成的对局，等待玩家重连');
+  console.log('[local] Restored the unfinished match from last session; waiting for the player to reconnect');
 }
 
 const MIME = new Map([
@@ -245,7 +245,7 @@ const server = http.createServer((request, response) => {
   }
   if (pathname === '/api/profile') {
     void handleProfileApi(request, response).catch((error) => {
-      console.error('[local] 存档接口错误:', error);
+      console.error('[local] Save API error:', error);
       if (!response.headersSent) response.writeHead(500);
       response.end();
     });
@@ -261,7 +261,7 @@ const server = http.createServer((request, response) => {
     return;
   }
   void sendStatic(request, response).catch((error) => {
-    console.error('[local] 静态文件错误:', error);
+    console.error('[local] Static file error:', error);
     if (!response.headersSent) response.writeHead(500);
     response.end();
   });
@@ -330,7 +330,7 @@ websocketServer.on('connection', (websocket) => {
   publishHumanClock();
   // The frozen turn resumes its clock once the client has re-synced the table (mock/server.js playerBack).
   profileHost.touch();
-  console.log('[local] 游戏页面已连接');
+  console.log('[local] Game page connected');
 
   websocket.on('message', (data, isBinary) => {
     if (!isBinary) {
@@ -351,7 +351,7 @@ websocketServer.on('connection', (websocket) => {
     persistSoon();
   });
   websocket.on('close', (code, reason) => {
-    console.log('[local] WebSocket 关闭：' + JSON.stringify({
+    console.log('[local] WebSocket closed: ' + JSON.stringify({
       time: new Date().toISOString(), code, reason: reason.toString(),
       source: serverClose ? 'server' : 'peer-or-transport', serverClose,
       connectedMs: Date.now() - connectedAt, recentRequests,
@@ -374,9 +374,9 @@ websocketServer.on('connection', (websocket) => {
     if (session.riichi?.engine && !session.riichi.matchOver) {
       session.riichi.engine.setHumanPresent(false);
       armAwayTimer(AWAY_LIMIT_MS);
-      console.log('[local] 页面断开，牌桌停在你的回合；%d 分钟内未重连则由 AI 代打完成本场', AWAY_LIMIT_MS / 60_000);
+      console.log('[local] Page disconnected; the table is waiting on your turn. If not reconnected within %d minutes, AI will auto-play this match', AWAY_LIMIT_MS / 60_000);
     } else {
-      console.log('[local] 游戏页面已断开');
+      console.log('[local] Game page disconnected');
     }
     persistSoon();
   });
@@ -387,8 +387,8 @@ const host = '127.0.0.1';
 const port = Number(process.env.MJ_PORT || 8765);
 server.once('error', (error) => {
   const detail = error.code === 'EADDRINUSE'
-    ? `端口 ${port} 已被占用，请关闭旧的游戏服务或设置其他 MJ_PORT。`
-    : `本地服务启动失败：${error.message}`;
+    ? `Port ${port} is already in use. Close the old game server or set another MJ_PORT.`
+    : `Local server failed to start: ${error.message}`;
   console.error(`[local] ${detail}`);
   if (process.send) process.send({ type: 'startup-error', detail });
   process.exitCode = 1;
@@ -396,12 +396,12 @@ server.once('error', (error) => {
 server.listen(port, host, () => {
   const actualPort = server.address().port;
   const url = `http://${host}:${actualPort}/`;
-  console.log(`[local] 激情麻将已启动：${url}（pid ${process.pid}；日志里没有这行说明你看的是别的进程）`);
+  console.log(`[local] Mahjong Dream started: ${url} (pid ${process.pid}; if this line is missing from the log, you are looking at another process)`);
   if (process.send) process.send({ type: 'ready', url });
 });
 
 async function shutdown() {
-  await saveNow().catch((error) => console.error('[local] 存档失败:', error));
+  await saveNow().catch((error) => console.error('[local] Save failed:', error));
   server.close();
   websocketServer.close();
   if (logStream && !logStream.destroyed) await new Promise((resolve) => logStream.end(resolve));

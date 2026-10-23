@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { ECONOMY_CATALOG as C } from '../mockjs/economy_catalog.mjs';
 import { applyRankResult, createDefaultProfile } from '../local/profile.mjs';
 
-test('商品目录绑定原始bundle，关键字段不是FlatBuffers地址或排序号', async () => {
+test('the item catalog binds to the original bundle, and key fields are not FlatBuffers addresses or sort numbers', async () => {
   const bytes = await fs.readFile(new URL('../' + C.source, import.meta.url));
   assert.equal(createHash('sha256').update(bytes).digest('hex'), C.sha256);
   const protocol = await fs.readFile(new URL('../' + C.protocolSource, import.meta.url));
@@ -21,7 +21,7 @@ test('商品目录绑定原始bundle，关键字段不是FlatBuffers地址或排
   assert.equal(C.gifts.find((item) => item.id === 71019).price, 150000);
 });
 
-test('新档案三四麻均为七段2300PT，按原上下限开放乘风和御龙', () => {
+test('new profiles in 3p and 4p are both 7th Dan at 2300 PT, and Chengfeng and Yulong open by the original bounds', () => {
   const profile = createDefaultProfile();
   assert.deepEqual(profile.ranks, { yonma: { level: 17, point: 2300 }, sanma: { level: 17, point: 2300 } });
   assert.equal(profile.coins, 999999);
@@ -30,7 +30,7 @@ test('新档案三四麻均为七段2300PT，按原上下限开放乘风和御�
   assert.equal(C.sanmaRanks[16].up, 4600);
 });
 
-test('初始PT不是降段底线，七段在4600PT才升八段', () => {
+test('starting PT is not the demotion floor, and 7th Dan only promotes to 8th Dan at 4600 PT', () => {
   const profile = createDefaultProfile();
   profile.ranks.yonma.point = 2000;
   const loss = applyRankResult(profile, { players: 4, matchLength: 'east', placement: 4 });
@@ -49,7 +49,7 @@ test('初始PT不是降段底线，七段在4600PT才升八段', () => {
   assert.equal(demoted.point, 1800);
 });
 
-test('乘风与御龙使用各自原表PT，三四麻和东风半庄不混用', () => {
+test('Chengfeng and Yulong use their own original PT tables, and 3p/4p and east-only/hanchan are not mixed', () => {
   for (const [players, matchLength, roomId, expected] of [
     [4, 'east', 3, 130], [4, 'east', 4, 200],
     [4, 'hanchan', 3, 195], [4, 'hanchan', 4, 300],
@@ -60,7 +60,7 @@ test('乘风与御龙使用各自原表PT，三四麻和东风半庄不混用', 
   }
 });
 
-test('雀梦之巅过渡段继承PT，进入和退出最高档按原表转换', () => {
+test('the Quemeng Peak transition tier inherits PT, and entering and leaving the top tier converts per the original table', () => {
   const profile = createDefaultProfile();
   profile.ranks.yonma = { level: 20, point: 7599 };
   const inherited = applyRankResult(profile, { players: 4, matchLength: 'east', placement: 1 });

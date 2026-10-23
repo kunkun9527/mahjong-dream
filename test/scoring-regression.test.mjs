@@ -39,7 +39,7 @@ function stopped(frames) {
   return frames.find(({ event }) => event === RiichiMsg.ENtfGameStop).payload;
 }
 
-test('无其他役的拔北岭上允许自摸，入口与终局只计算一次岭上役', async () => {
+test('a North-pull rinshan win with no other yaku allows tsumo, and rinshan yaku is counted only once at entry and in final settlement', async () => {
   const { engine, frames } = fixture();
   const p = kitaPlayer(engine);
   const win = calcWin(p.hand, p.melds, engine.akaSet, engine.winOpts(p, false));
@@ -59,7 +59,7 @@ test('无其他役的拔北岭上允许自摸，入口与终局只计算一次�
   assert.equal(info.fu, 30);
 });
 
-test('拔北岭上适配仍计算宝牌且不污染普通自摸、荣和及未完成手牌', () => {
+test('North-pull rinshan adaptation still counts dora and does not pollute ordinary tsumo, ron or unfinished hands', () => {
   const { engine } = fixture();
   const p = kitaPlayer(engine);
   const opts = { ...engine.winOpts(p, false), doraTiles: [291] };
@@ -75,7 +75,7 @@ test('拔北岭上适配仍计算宝牌且不污染普通自摸、荣和及未�
   assert.equal(calcWin(p.hand.slice(0, -1), p.melds, engine.akaSet, opts).isAgari, false);
 });
 
-test('常规杠岭上不重复加番，岭上不兼计海底，役满不混入普通岭上役', () => {
+test('rinshan after a regular kan does not add han twice, rinshan does not also count haitei, and yakuman does not mix in ordinary rinshan yaku', () => {
   const { engine } = fixture();
   const p = kitaPlayer(engine);
   p.melds[0] = { type: 'kan', tiles: [211, 212, 213, 214], from: 0 };
@@ -95,7 +95,7 @@ test('常规杠岭上不重复加番，岭上不兼计海底，役满不混入�
   assert.equal(yakuman.yaku['嶺上開花'], undefined);
 });
 
-test('暗杠红宝不依赖四张实体牌的数组顺序且不修改输入', () => {
+test('closed-kan aka dora does not depend on the array order of the four physical tiles and does not modify the input', () => {
   const hand = [321, 331, 341, 361, 371, 381, 332, 342, 351, 221, 222];
   const aka = new Set([251]);
   const first = { type: 'ankan', tiles: [251, 252, 253, 254] };
@@ -123,7 +123,7 @@ function setPao(engine, winner, responsible) {
   engine.honba = 2;
 }
 
-test('四麻和三麻包牌自摸的本场棒全部由责任者支付，庄闲与混合役满守恒', async () => {
+test('four- and three-player pao tsumo: all honba is paid by the liable player, and dealer/non-dealer and mixed yakuman totals are conserved', async () => {
   for (const n of [3, 4]) for (const winner of [0, 1]) for (const units of [1, 2]) {
     const { engine } = fixture(n);
     setPao(engine, winner, 2);
@@ -144,7 +144,7 @@ test('四麻和三麻包牌自摸的本场棒全部由责任者支付，庄闲�
   }
 });
 
-test('包牌荣和的本场由责任者承担，同一责任放铳者不重复扣款', async () => {
+test('pao ron honba is borne by the liable player, and the same liable discarder is not charged twice', async () => {
   for (const n of [3, 4]) for (const loser of [0, 2]) for (const units of [1, 2]) {
     const { engine } = fixture(n);
     setPao(engine, 1, 2);
@@ -162,7 +162,7 @@ test('包牌荣和的本场由责任者承担，同一责任放铳者不重复�
   }
 });
 
-test('多响只有上家赢家收本场，后位包牌赢家不会另收本场', async () => {
+test('in multi-ron, only the winner nearest the discarder collects honba, and a pao winner in a later seat does not collect honba separately', async () => {
   const { engine } = fixture(4);
   setPao(engine, 2, 3);
   const ordinary = { isAgari: true, hasYaku: true, han: 1, fu: 30, ten: 1000,

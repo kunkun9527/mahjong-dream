@@ -17,7 +17,7 @@ export async function loadProfile(directory) {
     if (!(error instanceof SyntaxError)) throw error;
     const backup = path.join(directory, `profile.corrupt-${Date.now()}.json`);
     await fs.rename(file, backup).catch(() => {});
-    console.warn(`[local] 存档损坏，已保留为 ${backup} 并创建新档案`);
+    console.warn(`[local] Save file corrupt, kept as ${backup} and created a new profile`);
     return createDefaultProfile();
   }
 }

@@ -57,7 +57,7 @@ function makeEngine(players) {
   return engine;
 }
 
-test('防守模型把现物判为零风险，并降低筋与壁外侧风险', () => {
+test('the defense model treats genbutsu as zero risk and lowers suji and kabe risk', () => {
   const players = [makePlayer(0), makePlayer(1), makePlayer(2), makePlayer(3)];
   players[1].riichi = true;
   players[1].discardKinds = new Set([15, 19]);
@@ -71,7 +71,7 @@ test('防守模型把现物判为零风险，并降低筋与壁外侧风险', ()
   assert.ok(danger.riskByKind.get(16) < danger.riskByKind.get(14));
 });
 
-test('AI 不为无役路线开门，但会碰役牌', () => {
+test('the AI does not open a hand for a yakuless route, but it does pon yakuhai', () => {
   const hand = makeTiles([
     [1, [2, 2, 5, 5, 8]],
     [2, [1, 4, 7]],
@@ -86,7 +86,7 @@ test('AI 不为无役路线开门，但会碰役牌', () => {
   assert.equal(engine.worthOpening(p, tileId(4, 5, 1), 'pon'), true);
 });
 
-test('All Last 大幅领先且默听有役时选择默听而非立直', () => {
+test('All Last with a large lead and a yaku on dama: it chooses dama over riichi', () => {
   const hand = makeTiles([
     [1, [1, 2, 3, 4, 5, 6, 7, 8, 9]],
     [2, [2, 3, 9]],
@@ -102,7 +102,7 @@ test('All Last 大幅领先且默听有役时选择默听而非立直', () => {
   assert.equal(Math.floor(decision.card / 10), 29);
 });
 
-test('AI 决策确定且远低于两秒硬预算', () => {
+test('AI decisions are deterministic and far below the two-second hard budget', () => {
   const hand = makeTiles([
     [1, [1, 2, 3, 4, 6]],
     [2, [2, 3, 5, 7, 8]],
@@ -119,10 +119,10 @@ test('AI 决策确定且远低于两秒硬预算', () => {
   const elapsed = performance.now() - start;
 
   assert.ok(decisions.every((decision) => decision.action === decisions[0].action && decision.card === decisions[0].card));
-  assert.ok(elapsed < 2_000, `30 次决策耗时 ${elapsed.toFixed(1)}ms`);
+  assert.ok(elapsed < 2_000, `30 decisions took ${elapsed.toFixed(1)}ms`);
 });
 
-test('AI 弃牌、立直和鸣牌评估不读取对手暗手、未来牌山或里宝牌', () => {
+test('AI discard, riichi, and call evaluation do not read the concealed hands of opponents, the future wall, or ura dora', () => {
   const hand = makeTiles([
     [1, [1, 2, 3, 4, 5, 6, 7, 8, 9]],
     [2, [2, 3, 9]],
@@ -149,7 +149,7 @@ test('AI 弃牌、立直和鸣牌评估不读取对手暗手、未来牌山或�
   };
   const expected = evaluate();
   const denyRead = (object, key) => Object.defineProperty(object, key, {
-    get() { assert.fail(`AI 读取了隐藏字段 ${key}`); },
+    get() { assert.fail(`AI read hidden field ${key}`); },
   });
   for (const opponent of engine.players.slice(1)) {
     for (const key of ['hand', 'drawnTile', 'waits', 'waitTiles', 'shanten']) denyRead(opponent, key);

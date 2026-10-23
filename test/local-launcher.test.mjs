@@ -35,7 +35,7 @@ async function launch({ env = {}, args = [] } = {}) {
   return { forkOptions, browser };
 }
 
-test('单入口默认使用固定来源，重启不因随机端口丢失 Unity 语言偏好', async () => {
+test('single entry uses a fixed origin by default, and a restart does not lose the Unity language preference because of a random port', async () => {
   const first = await launch(), second = await launch();
   assert.equal(first.forkOptions.env.MJ_PORT, '8765');
   assert.equal(first.browser.args[0], 'http://127.0.0.1:8765/');
@@ -43,7 +43,7 @@ test('单入口默认使用固定来源，重启不因随机端口丢失 Unity �
   assert.equal(first.browser.options.detached, true);
 });
 
-test('启动器保留显式端口及三四麻/局长参数，不再强制写入语言参数', async () => {
+test('the launcher keeps explicit port and three-/four-player and match-length parameters, and no longer forces a language parameter', async () => {
   const { forkOptions, browser } = await launch({ env: { MJ_PORT: '8790', MJ_USERDATA_DIR: 'M:/isolated' }, args: ['--players=3', '--length=hanchan', '--lang=en'] });
   const url = new URL(browser.args[0]);
   assert.equal(forkOptions.env.MJ_USERDATA_DIR, 'M:/isolated');
@@ -54,7 +54,7 @@ test('启动器保留显式端口及三四麻/局长参数，不再强制写入�
   assert.equal((await launch({ env: { MJ_PORT: '0' } })).forkOptions.env.MJ_PORT, '0');
 });
 
-test('发布启动入口仅保留 start-game.bat 与 npm start', () => {
+test('the release launch entries keep only start-game.bat and npm start', () => {
   const root = new URL('../', import.meta.url);
   const bats = fs.readdirSync(root).filter(name => /^start-game.*\.bat$/i.test(name));
   assert.deepEqual(bats, ['start-game.bat']);

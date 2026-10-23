@@ -11,7 +11,7 @@ const stableEvents = new Set([
   RiichiMsg.ENtfQiangCard, RiichiMsg.ENtfQiangCardEnd,
 ]);
 
-test('四模式多种子自战在通知边界保持实体牌唯一、牌数和点棒守恒', async () => {
+test('four-mode multi-seed self-play keeps physical tiles unique and tile count and points conserved at notification boundaries', async () => {
   for (const players of [3, 4]) for (const matchLength of ['east', 'hanchan']) {
     for (const seed of [31, 32, 33, 34, 35]) {
       const sanma = players === 3;
@@ -29,22 +29,22 @@ test('四模式多种子自战在通知边界保持实体牌唯一、牌数和�
             ...p.hand, ...p.discards, ...p.melds.flatMap((meld) => meld.tiles),
           ]);
           const live = [...owned, ...engine.wall, ...engine.replacements];
-          assert.equal(new Set(live).size, live.length, `实体牌重复：${label}`);
-          assert.ok(live.every((id) => legalIds.has(id)), `非法实体牌：${label}`);
+          assert.equal(new Set(live).size, live.length, `Duplicate physical tile: ${label}`);
+          assert.ok(live.every((id) => legalIds.has(id)), `Illegal physical tile: ${label}`);
           // The engine keeps ten dora / ura-dora indicator tiles; each replacement draw seals one wall-tail tile.
           const sealedTail = replacementCount - engine.replacements.length;
-          assert.equal(live.length + 10 + sealedTail, legalIds.size, `实体牌数：${label}`);
-          assert.equal(engine.remain, engine.wall.length, `余牌：${label}`);
+          assert.equal(live.length + 10 + sealedTail, legalIds.size, `Physical tile count: ${label}`);
+          assert.equal(engine.remain, engine.wall.length, `Remaining wall tiles: ${label}`);
           assert.equal(engine.players.reduce((sum, p) => sum + p.score, 0)
-            + engine.riichiSticks * 1000, players * startScore, `点棒：${label}`);
-          assert.ok(!(engine._expectedDraw && engine._expectedClaim), `同时存在两种动作窗口：${label}`);
+            + engine.riichiSticks * 1000, players * startScore, `Points plus riichi sticks: ${label}`);
+          assert.ok(!(engine._expectedDraw && engine._expectedClaim), `Both action windows open at once: ${label}`);
           checked++;
         },
       });
       await engine.start();
       assert.ok(checked > 0);
       assert.ok(engine.matchOver);
-      assert.ok(engine.handIndex < 64, '不得靠调试局数上限结束正式比赛');
+      assert.ok(engine.handIndex < 64, 'must not end the official match by hitting the debug hand cap');
       assert.equal(engine.scores.reduce((sum, score) => sum + score, 0)
         + engine.riichiSticks * 1000, players * startScore);
     }

@@ -28,7 +28,7 @@ async function playMatch(players, seed, matchLength = 'east') {
   };
 }
 
-test('固定种子对局可复现且点棒守恒', async () => {
+test('a fixed-seed match is reproducible and points are conserved', async () => {
   for (const [players, seed, initialTotal] of [[4, 7, 100_000], [3, 7, 105_000]]) {
     const first = await playMatch(players, seed);
     const second = await playMatch(players, seed);
@@ -38,7 +38,7 @@ test('固定种子对局可复现且点棒守恒', async () => {
   }
 });
 
-test('四种正式模式都能固定种子打到终局且点棒守恒', async () => {
+test('all four official modes reach the end with a fixed seed and points are conserved', async () => {
   const modes = [
     [4, 'east', 100_000],
     [4, 'hanchan', 100_000],
@@ -53,14 +53,14 @@ test('四种正式模式都能固定种子打到终局且点棒守恒', async ()
   }
 });
 
-test('三麻牌山移除二万至八万但保留北风', () => {
+test('sanma wall removes 2m through 8m but keeps north wind', () => {
   const { tiles } = buildWall({ sanma: true, akaCount: 1 });
   const decoded = tiles.map(decodeId);
   assert.equal(decoded.some(({ suit, rank }) => suit === 1 && rank >= 2 && rank <= 8), false);
   assert.equal(decoded.filter(({ suit, rank }) => suit === 4 && rank === 4).length, 4);
 });
 
-test('三麻受入只排除二万至八万', () => {
+test('sanma ukeire only excludes 2m through 8m', () => {
   const engine = new GameEngine({ players: 3 });
   engine.players = [];
   engine.doraIndicators = [];
@@ -70,7 +70,7 @@ test('三麻受入只排除二万至八万', () => {
   assert.equal(remain(30), 4);
 });
 
-test('暗杠按门清格式交给计分库', () => {
+test('closed kan is passed to the scoring library in closed-hand format', () => {
   const ankan = {
     type: 'ankan',
     tiles: [1, 2, 3, 4].map((copy) => tileId(1, 1, copy)),
@@ -88,7 +88,7 @@ test('暗杠按门清格式交给计分库', () => {
   assert.equal(result.hasYaku, true);
 });
 
-test('计分库接收双立直与天地和上下文', () => {
+test('the scoring library receives double riichi and tenhou/chiihou context', () => {
   const hand = [
     [1, 1], [1, 2], [1, 3],
     [2, 1], [2, 2], [2, 3],

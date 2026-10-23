@@ -63,7 +63,7 @@ function basicRon(points = 1_000) {
   };
 }
 
-test('双响分别结算，供托与本场棒归放铳者下家侧赢家', async () => {
+test('double ron settles separately; riichi sticks and honba go to the winner nearest the discarder next seat', async () => {
   const { engine, frames } = scoringEngine([23_000, 25_000, 25_000, 25_000]);
   await engine.endHand({
     type: 'ron',
@@ -81,7 +81,7 @@ test('双响分别结算，供托与本场棒归放铳者下家侧赢家', async
   assert.equal(stop.userInfos.find(({ seat }) => seat === 2).totalFan, 1);
 });
 
-test('立直宣言牌放铳时撤销立直并退回宣言棒', async () => {
+test('dealing in on the riichi declaration tile revokes riichi and returns the declaration stick', async () => {
   const { engine } = scoringEngine([24_000, 25_000, 25_000, 25_000]);
   engine.riichiSticks = 1;
   const loser = engine.players[0];
@@ -110,13 +110,13 @@ test('立直宣言牌放铳时撤销立直并退回宣言棒', async () => {
   assert.deepEqual(result.winners, [1]);
 });
 
-test('四麻终局顺位点采用雀魂 5-15', () => {
+test('four-player final placement points use the Majsoul 5-15 scheme', () => {
   const { engine } = scoringEngine([40_000, 30_000, 20_000, 10_000]);
   const infos = engine.buildStopUserInfos([40_000, 30_000, 20_000, 10_000], null, null, null, true);
   assert.deepEqual(infos.map(({ jingSuanScore }) => jingSuanScore), [30, 10, -10, -30]);
 });
 
-test('流局终局时未领取的立直棒归第一名', async () => {
+test('unclaimed riichi sticks at an exhaustive-draw finish go to first place', async () => {
   const { engine } = scoringEngine([23_000, 30_000, 25_000, 20_000]);
   await engine.endHand({
     type: 'draw',
@@ -128,7 +128,7 @@ test('流局终局时未领取的立直棒归第一名', async () => {
   assert.equal(engine.riichiSticks, 0);
 });
 
-test('流局满贯按满贯自摸结算且不附加本场棒', async () => {
+test('nagashi mangan settles as a mangan tsumo and adds no honba', async () => {
   const { engine, frames } = scoringEngine([25_000, 25_000, 25_000, 25_000]);
   engine.honba = 3;
   engine.riichiSticks = 0;
@@ -143,7 +143,7 @@ test('流局满贯按满贯自摸结算且不附加本场棒', async () => {
   assert.deepEqual(stop.liuJuManGuanSeats, [1]);
 });
 
-test('流局满贯要求所有舍牌都是幺九牌且没有被鸣', async () => {
+test('nagashi mangan requires all discards to be terminals or honors and none to be called', async () => {
   const { engine } = scoringEngine([25_000, 25_000, 25_000, 25_000]);
   engine.players[0].discards = [tileId(1, 1, 1), tileId(4, 1, 1), tileId(3, 9, 1)];
   engine.players[1].discards = [tileId(1, 1, 2)];
@@ -165,7 +165,7 @@ function daisangen() {
   };
 }
 
-test('大三元包牌在荣和时由放铳者与责任者分担', async () => {
+test('big three dragons pao on ron is split between the discarder and the liable player', async () => {
   const { engine } = scoringEngine([25_000, 25_000, 25_000, 25_000]);
   engine.honba = 0;
   engine.riichiSticks = 0;
@@ -177,7 +177,7 @@ test('大三元包牌在荣和时由放铳者与责任者分担', async () => {
   assert.deepEqual(engine.scores, [25_000, 57_000, 9_000, 9_000]);
 });
 
-test('大三元包牌在自摸时由责任者包付', async () => {
+test('big three dragons pao on tsumo is paid in full by the liable player', async () => {
   const { engine } = scoringEngine([25_000, 25_000, 25_000, 25_000]);
   engine.honba = 0;
   engine.riichiSticks = 0;
@@ -186,7 +186,7 @@ test('大三元包牌在自摸时由责任者包付', async () => {
   assert.deepEqual(engine.scores, [25_000, 57_000, 25_000, -7_000]);
 });
 
-test('荣和完成第三副三元牌时记下放铳者为责任者，包牌标记随结算下发', async () => {
+test('a ron completing the third dragon meld records the discarder as the liable player, and the pao flag is sent with the settlement', async () => {
   const { engine, frames } = scoringEngine([25_000, 25_000, 25_000, 25_000]);
   engine.honba = 0;
   engine.riichiSticks = 0;
@@ -196,14 +196,14 @@ test('荣和完成第三副三元牌时记下放铳者为责任者，包牌标�
     type: 'ron', winners: [1], loser: 2, card: tileId(4, 1, 1),
     wins: new Map([[1, daisangen()]]),
   });
-  // 责任者就是放铳者本人，金额与普通荣和一致，不分摊
+  // The liable player is the discarder; the amount matches a normal ron and is not split
   assert.deepEqual(engine.scores, [25_000, 57_000, -7_000, 25_000]);
   const stop = frames.filter((frame) => frame.event === RiichiMsg.ENtfGameStop).at(-1).payload;
   assert.equal(stop.userInfos[1].isBaoPai, true);
   assert.equal(stop.userInfos[2].isBaoPai, false);
 });
 
-test('自摸包牌也在结算里标记 isBaoPai', async () => {
+test('tsumo pao is also flagged as isBaoPai in the settlement', async () => {
   const { engine, frames } = scoringEngine([25_000, 25_000, 25_000, 25_000]);
   engine.honba = 0;
   engine.riichiSticks = 0;
@@ -214,7 +214,7 @@ test('自摸包牌也在结算里标记 isBaoPai', async () => {
   assert.equal(stop.userInfos[0].isBaoPai, false);
 });
 
-test('第三副三元牌和第四副风牌副露会记录包牌责任者', () => {
+test('an open third dragon meld and fourth wind meld record the pao liable player', () => {
   const { engine } = scoringEngine([25_000, 25_000, 25_000, 25_000]);
   const player = engine.players[1];
   player.pao = {};
@@ -226,7 +226,7 @@ test('第三副三元牌和第四副风牌副露会记录包牌责任者', () =>
   assert.equal(player.pao.daisuushi, 3);
 });
 
-test('终局结算把本地段位变化写入原客户端字段', () => {
+test('final settlement writes local rank changes into the original client fields', () => {
   const { engine } = scoringEngine([30_000, 25_000, 23_000, 22_000]);
   engine._finalResult = { rank: { oldLevel: 11, oldPoint: 390, level: 12, point: 400, change: 40 } };
   const info = engine.buildStopUserInfos([30_000, 25_000, 23_000, 22_000], null, null, [false, false, false, false], true)[0];

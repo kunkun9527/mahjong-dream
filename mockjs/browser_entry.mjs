@@ -10,7 +10,7 @@ import { createDefaultProfile, normalizeProfile } from './profile.mjs';
 import * as npc from './npc_roster.mjs';
 
 // Claim actions as they read in the log ([claim] lines); numeric codes alone make a stuck window hard to spot.
-var CLAIM_NAME = { 1: "过", 2: "吃", 3: "碰", 4: "明杠", 8: "荣和" };
+var CLAIM_NAME = { 1: "pass", 2: "chi", 3: "pon", 4: "open kan", 8: "ron" };
 var claimText = (action) => CLAIM_NAME[action] || action;
 
 var MSG_NAME = {
@@ -98,7 +98,7 @@ var RiichiSession = class {
     if (this.stopped) return;
     const name = MSG_NAME[ev];
     if (!name) {
-      this.log("[riichi] \u672A\u77E5\u4E8B\u4EF6\u53F7 " + ev);
+      this.log("[riichi] Unknown event number " + ev);
       return;
     }
     let bytes;
@@ -114,7 +114,7 @@ var RiichiSession = class {
     try {
       bytes = encodeMsg(name, payload);
     } catch (e) {
-      this.log("[riichi] \u7F16\u7801\u5931\u8D25 " + name + ": " + e.message);
+      this.log("[riichi] Encode failed " + name + ": " + e.message);
       return;
     }
     this.onFrame(ev, bytes);
@@ -154,7 +154,7 @@ var RiichiSession = class {
       },
       onReplayDone: (clean) => {
         this.onRecord(eng.matchRecord());
-        this.log("[riichi] " + (clean ? "对局记录重演完成" : "对局记录重演分叉，已按当前局面继续"));
+        this.log("[riichi] " + (clean ? "match record replay complete" : "match record replay diverged, continuing from current state"));
         this._replayDone(clean);
       },
       onFinalResult: (scores, engine, humanWin) => this.onFinalResult(scores, engine, humanWin),
@@ -163,7 +163,7 @@ var RiichiSession = class {
       onFinish: (scores) => {
         this.matchOver = true;
         this.onFinish(scores.slice(), eng);
-        this.log("[riichi] 终局，引擎停止；等客户端 20102 收场或 20403 重新匹配");
+        this.log("[riichi] match over, engine stopped; waiting for client 20102 (match closed) or 20403 (re-match)");
       }
     });
     this.engine = eng;
@@ -172,8 +172,8 @@ var RiichiSession = class {
       this._replayDone(true);
       this.onRecord(eng.matchRecord());
     }
-    this.log("[riichi] \u65B0\u5BF9\u5C40 players=" + o.players + " seed=" + seed + " maxHands=" + o.maxHands);
-    eng.start().catch((e) => this.log("[riichi] \u5F15\u64CE\u5F02\u5E38: " + (e && e.stack || e)));
+    this.log("[riichi] New round players=" + o.players + " seed=" + seed + " maxHands=" + o.maxHands);
+    eng.start().catch((e) => this.log("[riichi] Engine error: " + (e && e.stack || e)));
     return eng;
   }
   /** Handle one inner message uplinked by the client */
@@ -181,7 +181,7 @@ var RiichiSession = class {
     if (this.matchOver) {
       if (!this._mutedLogged) {
         this._mutedLogged = true;
-        this.log("[riichi] \u7EC8\u5C40\u540E\u5FFD\u7565\u5BA2\u6237\u7AEF\u4E0A\u884C\uFF08\u5BF9\u9F50\u771F\u5B9E\u670D\uFF1A\u96F6\u54CD\u5E94\uFF09\uFF0C\u7B49 20102/20403");
+        this.log("[riichi] Ignoring client uplink after game end (matches real server: no response), waiting for 20102/20403");
       }
       return;
     }
@@ -191,7 +191,7 @@ var RiichiSession = class {
       try {
         payload = decodeMsg(name, innerBytes);
       } catch (e) {
-        this.log("[riichi] \u89E3\u7801\u5931\u8D25 mt=" + msgType + ": " + e.message);
+        this.log("[riichi] Decode failed mt=" + msgType + ": " + e.message);
       }
     }
     switch (msgType) {
@@ -248,7 +248,7 @@ var RiichiSession = class {
         this.send(RiichiMsg.ERspClickUI, { result: 0 });
         break;
       default:
-        this.log("[riichi] \u672A\u5904\u7406\u7684\u5BA2\u6237\u7AEF\u6D88\u606F mt=" + msgType);
+        this.log("[riichi] Unhandled client message mt=" + msgType);
     }
   }
   /** Reconnect snapshot: fold this hand's cached frames [ev, bytes][] into Offline2OnlineGameScene bytes; return null if it cannot be restored safely. */
@@ -256,17 +256,17 @@ var RiichiSession = class {
     if (!this.engine || this.matchOver) return null;
     try {
       const scene = buildRiichiReloadScene(frames, this.engine, 0);
-      this.log(`[reload] 快照构造${scene ? "成功" : "放弃，改用整手重放"} frames=${frames.length}`);
+      this.log(`[reload] snapshot build ${scene ? "succeeded" : "abandoned, falling back to full-hand replay"} frames=${frames.length}`);
       return scene ? encodeMsg("Offline2OnlineGameScene", scene) : null;
     } catch (e) {
-      this.log("[riichi] 重连快照构造失败，改用整手重放: " + (e && e.message || e));
+      this.log("[riichi] reconnect snapshot build failed, falling back to full-hand replay: " + (e && e.message || e));
       return null;
     }
   }
   /** Connection dropped: let the engine stop naturally and stop pushing */
   stop() {
     this.stopped = true;
-    this.log("[riichi] 会话停止（连接断开或重新匹配）");
+    this.log("[riichi] session stopped (connection lost or re-matched)");
     const eng = this.engine;
     this.engine = null;
     if (!eng) return;

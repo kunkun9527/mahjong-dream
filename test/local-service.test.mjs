@@ -11,7 +11,7 @@ await import('../mock/proto.js');
 const P = globalThis.__mj.proto;
 
 
-test('本地档案原子写入并保留设置与累计成绩', async () => {
+test('local profile is written atomically and keeps settings and cumulative results', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mj-profile-'));
   try {
     const profile = createDefaultProfile();
@@ -41,7 +41,7 @@ test('本地档案原子写入并保留设置与累计成绩', async () => {
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
-test('损坏存档会保留备份并回退到新档案', async () => {
+test('a corrupted save keeps a backup and falls back to a new profile', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mj-corrupt-profile-'));
   try {
     await fs.writeFile(path.join(directory, 'profile.json'), '{broken', 'utf8');
@@ -54,7 +54,7 @@ test('损坏存档会保留备份并回退到新档案', async () => {
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
-test('旧默认昵称存档迁移为 player，自定义昵称保留', async () => {
+test('old default-nickname saves migrate to player, and custom nicknames are kept', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mj-nickname-migrate-'));
   try {
     await fs.writeFile(path.join(directory, 'profile.json'), JSON.stringify({ nickname: '离线玩家' }), 'utf8');
@@ -68,15 +68,15 @@ test('旧默认昵称存档迁移为 player，自定义昵称保留', async () =
 
 
 
-test('段位 PT 使用资源表并正确升降段', () => {
+test('rank PT uses the resource table and correctly promotes and demotes ranks', () => {
   const profile = createDefaultProfile();
   profile.ranks.yonma = { level: 11, point: 390 };
   assert.deepEqual(applyRankResult(profile, { players: 4, matchLength: 'east', placement: 1 }), {
-    oldLevel: 11, oldPoint: 390, level: 12, point: 400, change: 70, name: '二段',
+    oldLevel: 11, oldPoint: 390, level: 12, point: 400, change: 70, name: '2nd Dan',
   });
   profile.ranks.yonma = { level: 12, point: 5 };
   assert.deepEqual(applyRankResult(profile, { players: 4, matchLength: 'east', placement: 4 }), {
-    oldLevel: 12, oldPoint: 5, level: 11, point: 200, change: -40, name: '初段',
+    oldLevel: 12, oldPoint: 5, level: 11, point: 200, change: -40, name: '1st Dan',
   });
   profile.ranks.sanma = { level: 20, point: 2_100 };
   assert.equal(applyRankResult(profile, { players: 3, matchLength: 'hanchan', placement: 3 }).change, -270);
@@ -103,7 +103,7 @@ async function startServiceOnce(directory, env) {
     stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
   });
   const url = await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('本地服务启动超时')), 10_000);
+    const timer = setTimeout(() => reject(new Error('local service start timed out')), 10_000);
     child.once('error', reject);
     child.on('message', (message) => {
       if (message?.type !== 'ready') return;
@@ -120,7 +120,7 @@ async function stopService(child, directory) {
   await fs.rm(directory, { recursive: true, force: true });
 }
 
-test('loopback 服务提供静态文件、WebSocket，并拒绝第二活动页面', async () => {
+test('loopback service serves static files and WebSocket, and rejects a second active page', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mj-service-'));
   const { child, url } = await startService(directory);
   let output = '';
@@ -168,15 +168,15 @@ test('loopback 服务提供静态文件、WebSocket，并拒绝第二活动页�
       first.once('error', reject);
     });
     first.send(P.W().v(2, 100141).v(11, 7).s(3, new Uint8Array(0)).bytes());
-    assert.deepEqual(await initialClock, { mjClock: null }, '宿主计时侧带与Unity二进制协议隔离');
+    assert.deepEqual(await initialClock, { mjClock: null }, 'host clock side-band is isolated from the Unity binary protocol');
     const responseFields = P.dict(await reply);
     assert.equal(responseFields[2], 100142);
     assert.equal(responseFields[11], 7);
     assert.ok(responseFields[3] instanceof Uint8Array && responseFields[3].length > 0);
     const burst = new Promise((resolve, reject) => {
       const received = new Set();
-      const timer = setTimeout(() => { cleanup(); reject(new Error('资料查询响应超时')); }, 5_000);
-      const onClose = () => { cleanup(); reject(new Error('资料查询导致连接被关闭')); };
+      const timer = setTimeout(() => { cleanup(); reject(new Error('profile query response timed out')); }, 5_000);
+      const onClose = () => { cleanup(); reject(new Error('profile query closed the connection')); };
       const onMessage = (data) => {
         const fields = P.dict(new Uint8Array(data));
         if (fields[2] !== 100142 || fields[11] < 100 || fields[11] >= 120) return;
@@ -200,16 +200,16 @@ test('loopback 服务提供静态文件、WebSocket，并拒绝第二活动页�
     });
     assert.equal(secondStatus, 409);
     const closeLogged = new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { child.stdout.off('data', check); reject(new Error('未记录连接关闭原因')); }, 5_000);
+      const timer = setTimeout(() => { child.stdout.off('data', check); reject(new Error('connection close reason was not logged')); }, 5_000);
       const check = () => {
-        if (!output.split('\n').slice(0, -1).some((line) => line.includes('WebSocket 关闭：') && line.includes('"reason":"test-close"'))) return;
+        if (!output.split('\n').slice(0, -1).some((line) => line.includes('WebSocket closed: ') && line.includes('"reason":"test-close"'))) return;
         clearTimeout(timer); child.stdout.off('data', check); resolve();
       };
       child.stdout.on('data', check);
     });
     first.close(1000, 'test-close');
     await closeLogged;
-    const line = output.split('\n').find((line) => line.includes('WebSocket 关闭：'));
+    const line = output.split('\n').find((line) => line.includes('WebSocket closed: '));
     const diagnostic = JSON.parse(line.slice(line.indexOf('{')));
     assert.equal(diagnostic.code, 1000);
     assert.equal(diagnostic.source, 'peer-or-transport');
@@ -219,7 +219,7 @@ test('loopback 服务提供静态文件、WebSocket，并拒绝第二活动页�
   }
 });
 
-test('本地诊断收集前端异常、导出并直接落盘，拒绝跨站和无界输入', async () => {
+test('local diagnostics collect frontend errors, export and write them to disk directly, and reject cross-site and unbounded input', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mj-diagnostics-'));
   const logPath = path.join(directory, 'game.log');
   const { child, url } = await startService(directory, { MJ_LOG_FILE: logPath });
@@ -251,7 +251,7 @@ test('本地诊断收集前端异常、导出并直接落盘，拒绝跨站和�
   }
 });
 
-test('本地服务声明 node 宿主，存档编辑接口立即写盘并拒绝跨站或非 JSON 请求', async () => {
+test('the local service declares the node host; the save-edit API writes to disk immediately and rejects cross-site or non-JSON requests', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mj-service-'));
   const { child, url } = await startService(directory);
   child.stdout.resume();

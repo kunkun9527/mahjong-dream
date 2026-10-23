@@ -11,35 +11,35 @@ function evaluate(player, card, kind = 'pon', used = []) {
   const engine = new GameEngine({ players: 3 });
   const before = structuredClone(player);
   const result = engine.hasOpenYakuRoute(player, card, kind, used);
-  assert.deepEqual(player, before, '评估不能修改实体牌或副露');
+  assert.deepEqual(player, before, 'evaluation must not modify physical tiles or melds');
   return result;
 }
 
-test('拔北不应把全中张的开门路线误判为含幺九牌', () => {
+test('nukidora should not mistake an open route made of all simples for one containing terminals', () => {
   const hand = [221, 222, 231, 241, 251, 261, 271, 281, 321, 331, 341, 361, 371];
   assert.equal(evaluate(makePlayer(hand), 223), true);
   assert.equal(evaluate(makePlayer(hand, [{ type: 'babei', tiles: [441] }]), 223), true);
 });
 
-test('拔北次数不能充当对对和的已完成面子数', () => {
+test('nukidora count must not stand in for completed sets in toitoi', () => {
   const hand = [211, 212, 231, 241, 261, 281, 291, 311, 331, 351, 371, 391, 411];
   const norths = [441, 442, 443].map((tile) => ({ type: 'babei', tiles: [tile] }));
   assert.equal(evaluate(makePlayer(hand), 213), false);
   assert.equal(evaluate(makePlayer(hand, norths), 213), false);
 });
 
-test('拟碰的对子不能同时计入剩余暗手和已完成面子', () => {
+test('a pair being considered for pon must not count both toward remaining concealed tiles and completed sets', () => {
   const hand = [111, 112, 221, 222, 331, 332, 191, 241, 261, 381, 411, 421, 431];
   assert.equal(evaluate(makePlayer(hand), 113), false);
 });
 
-test('真实役牌与足够的剩余对子仍能提供开门路线', () => {
+test('real yakuhai and enough remaining pairs still provide an open route', () => {
   const hand = [111, 112, 221, 222, 331, 332, 411, 412, 191, 241, 261, 381, 431];
   assert.equal(evaluate(makePlayer(hand), 113), true);
   assert.equal(evaluate(makePlayer([451, 452, 111, 191, 211, 221, 231, 311, 321, 331, 411, 421, 431]), 453), true);
 });
 
-test('三次拔北不能诱使 AI 为无役的表面听牌而碰幺九牌', () => {
+test('three nukidora must not lure the AI into pon-ing terminals for a no-yaku apparent tenpai', () => {
   const engine = new GameEngine({ players: 3, speed: 0 });
   engine.players = [0, 1, 2].map((seat) => ({
     seat, isHuman: false, score: 35_000, hand: [], melds: [],

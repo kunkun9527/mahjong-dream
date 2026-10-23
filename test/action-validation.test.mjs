@@ -39,7 +39,7 @@ function engineWith(players) {
   return engine;
 }
 
-test('未下发的自摸动作会被拒绝且不消费等待状态', () => {
+test('a tsumo action that was not issued is rejected and does not consume the wait state', () => {
   const hand = [1, 2, 3, 4].map((copy) => tileId(1, 1, copy));
   const engine = engineWith([player(0, hand), player(1), player(2), player(3)]);
   engine.expectDraw(0, true, [PlayAction.Normal], []);
@@ -50,7 +50,7 @@ test('未下发的自摸动作会被拒绝且不消费等待状态', () => {
   assert.deepEqual(engine.players[0].hand, hand);
 });
 
-test('暗杠必须提交实际的四张同种牌', () => {
+test('closed kan must submit the actual four identical tiles', () => {
   const quad = [1, 2, 3, 4].map((copy) => tileId(1, 1, copy));
   const wrong = tileId(2, 2, 1);
   const engine = engineWith([player(0, [...quad, wrong]), player(1), player(2), player(3)]);
@@ -60,7 +60,7 @@ test('暗杠必须提交实际的四张同种牌', () => {
   assert.deepEqual(engine.players[0].hand, [...quad, wrong]);
 });
 
-test('非法吃牌不会先移除供牌者牌河', async () => {
+test('an illegal chi does not first remove the tile from the discarder river', async () => {
   const claimed = tileId(1, 1, 1);
   const two = tileId(1, 2, 1);
   const three = tileId(1, 3, 1);
@@ -77,7 +77,7 @@ test('非法吃牌不会先移除供牌者牌河', async () => {
   assert.deepEqual(players[1].melds, []);
 });
 
-test('过荣振听区分同巡与立直后永久状态', () => {
+test('pass-ron furiten distinguishes same-turn from permanent state after riichi', () => {
   const p = player(0);
   p.waits = [11];
   const engine = engineWith([p, player(1), player(2), player(3)]);
@@ -93,7 +93,7 @@ test('过荣振听区分同巡与立直后永久状态', () => {
   assert.deepEqual(engine.furitenTypes(p), [0]);
 });
 
-test('弃牌评估不会选择食替禁止牌', () => {
+test('discard evaluation does not pick a kuikae-forbidden tile', () => {
   const hand = [
     tileId(1, 1, 1), tileId(1, 2, 1), tileId(1, 3, 1),
     tileId(2, 2, 1), tileId(2, 3, 1), tileId(2, 4, 1),
@@ -106,7 +106,7 @@ test('弃牌评估不会选择食替禁止牌', () => {
   assert.equal(chosen.discardId, hand.at(-1));
 });
 
-test('立直后只允许不改变等待牌种的摸入暗杠', () => {
+test('after riichi, only a closed kan from the draw that keeps the waits unchanged is allowed', () => {
   const hand13 = [
     tileId(1, 1, 1), tileId(1, 1, 2), tileId(1, 1, 3),
     tileId(1, 2, 1), tileId(1, 3, 1), tileId(1, 4, 1),
@@ -126,7 +126,7 @@ test('立直后只允许不改变等待牌种的摸入暗杠', () => {
   assert.equal(engine.turnActions(0, true).includes(PlayAction.AnGang), true);
 });
 
-test('加杠被抢时不会提前修改手牌、副露或杠数', async () => {
+test('when an added kan is robbed, the hand, melds and kan count are not modified early', async () => {
   const engine = new GameEngine({ players: 4, speed: 0 });
   engine.akaSet = new Set();
   engine.doraIndicators = [];
@@ -156,7 +156,7 @@ test('加杠被抢时不会提前修改手牌、副露或杠数', async () => {
   assert.equal(engine.kanCount, 0);
 });
 
-test('暗杠只有国士无双可以抢杠', () => {
+test('only kokushi musou can rob a closed kan', () => {
   const engine = new GameEngine({ players: 4 });
   engine.akaSet = new Set();
   engine.doraIndicators = [];
@@ -173,7 +173,7 @@ test('暗杠只有国士无双可以抢杠', () => {
   assert.equal(engine.canRobKan(kokushi, tileId(1, 1, 1), 'ankan'), true);
 });
 
-test('真人出牌超时自动摸切，鸣牌超时自动跳过', async () => {
+test('a human discard timeout auto-tsumogiri, and a claim timeout auto-passes', async () => {
   const drawn = tileId(2, 5, 1);
   const engine = new GameEngine({ players: 4, baseTime: 0.01, extraTime: 0 });
   engine.akaSet = new Set();
@@ -192,7 +192,7 @@ test('真人出牌超时自动摸切，鸣牌超时自动跳过', async () => {
   assert.deepEqual(await engine.waitHuman('claim'), { action: PlayAction.Guo, otherCards: [] });
 });
 
-test('自动和牌与跳过鸣牌状态会直接执行', async () => {
+test('automatic win and skip-claim states are executed directly', async () => {
   const engine = new GameEngine({ players: 4, baseTime: 5, extraTime: 20 });
   engine.players = [player(0), player(1), player(2), player(3)];
   engine.setInternalState({ 1: 1, 2: 1 });
@@ -203,7 +203,7 @@ test('自动和牌与跳过鸣牌状态会直接执行', async () => {
   assert.deepEqual(await engine.waitHuman('claim'), { action: PlayAction.Guo, otherCards: [] });
 });
 
-test('拔北被抢时不会提前移除北牌或增加拔北副露', async () => {
+test('when nukidora is robbed, the north tile is not removed early and no nukidora meld is added', async () => {
   const north = tileId(4, 4, 1);
   const engine = new GameEngine({ players: 3, speed: 0 });
   engine.players = [player(0, [north]), player(1), player(2)];
@@ -224,7 +224,7 @@ test('拔北被抢时不会提前移除北牌或增加拔北副露', async () =>
   assert.equal(engine.players[0].melds.length, 0);
 });
 
-test('页面断开后 AI 会立即接管正在等待的真人动作', async () => {
+test('after the page disconnects, the AI immediately takes over the human action being awaited', async () => {
   const drawn = tileId(3, 6, 1);
   const engine = new GameEngine({ players: 4, baseTime: 5, extraTime: 20 });
   engine.players = [player(0, [drawn]), player(1), player(2), player(3)];
@@ -237,7 +237,7 @@ test('页面断开后 AI 会立即接管正在等待的真人动作', async () =
   assert.equal(engine.autoHuman, false);
 });
 
-test('形式听牌允许无役和场上空听，但手持四张单骑等待牌不算听牌', () => {
+test('formal tenpai allows no-yaku and board-empty waits, but holding four copies of a tanki wait is not tenpai', () => {
   const makeRun = (suit, ranks) => ranks.map((rank) => tileId(suit, rank, 1));
   const deadSingle = [
     ...[1, 2, 3, 4].map((copy) => tileId(1, 1, copy)),
@@ -259,7 +259,7 @@ test('形式听牌允许无役和场上空听，但手持四张单骑等待牌�
   assert.equal(engine.isTenpai(engine.players[0]), true);
 });
 
-test('暗杠立即翻杠宝，加杠延迟到弃牌或下一次杠前', async () => {
+test('closed kan flips the kan dora immediately; added kan is delayed until the discard or the next kan', async () => {
   const indicator1 = tileId(2, 1, 1);
   const indicator2 = tileId(2, 2, 1);
   const setup = (engine) => {

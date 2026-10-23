@@ -30,23 +30,23 @@ function checkScene(scene, engine, frames) {
   assert.equal(scene.gameID, decodeMsg('NtfGameStart', frames.find(([ev]) => ev === RiichiMsg.ENtfGameStart)[1]).gameID);
   for (const user of scene.offline2OnlineUserInfos) {
     const p = engine.players[user.seat];
-    assert.equal(user.handCardsNum, p.hand.length, `seat ${user.seat} 手牌数`);
+    assert.equal(user.handCardsNum, p.hand.length, `seat ${user.seat} hand count`);
     if (user.seat === 0) {
       assert.deepEqual(sorted(user.handCards), sorted(p.hand));
       if (engine._expectedDraw && p.drawnTile != null && scene.currentSeat === 0) assert.equal(user.handCards.at(-1), p.drawnTile);
     } else {
-      assert.deepEqual(user.handCards, [], '不能泄漏他家暗牌');
+      assert.deepEqual(user.handCards, [], 'must not leak other players concealed tiles');
     }
     const river = [...user.playedCards];
     for (const tile of user.PlayedCardsOtherTake) river.splice(river.indexOf(tile), 1);
-    assert.deepEqual(river, p.discards, `seat ${user.seat} 牌河`);
+    assert.deepEqual(river, p.discards, `seat ${user.seat} discard river`);
     assert.equal(user.alreadyRiichi, !!p.riichi);
-    if (p.riichi) assert.ok(user.playedCards.includes(user.riichiTagCard), '立直宣言牌在牌河历史中');
+    if (p.riichi) assert.ok(user.playedCards.includes(user.riichiTagCard), 'the riichi declaration tile is in the discard history');
     const melds = p.melds.filter((meld) => meld.type !== 'babei');
     assert.equal(user.doorCardsInfos.length, melds.length);
     for (const door of user.doorCardsInfos) {
       const meld = melds.find((item) => item.tiles.includes(door.cards[0]));
-      assert.ok(meld, '副露实体来自权威副露');
+      assert.ok(meld, 'meld tiles come from the authoritative meld');
       assert.deepEqual(sorted(door.cards), sorted(meld.tiles));
       if (door.action === PlayAction.Chi || door.action === PlayAction.Peng) {
         assert.ok(engine.players[door.qiangSeat].discardClaimed !== undefined);
@@ -60,7 +60,7 @@ function checkScene(scene, engine, frames) {
 }
 
 for (const players of [3, 4]) {
-  test(`${players === 3 ? '三麻' : '四麻'}：每个真人动作窗口都能生成与权威局面一致、不泄漏暗牌的重连快照`, { timeout: 120000 }, async (t) => {
+  test(`${players === 3 ? 'sanma' : 'four-player'}: every human action window can produce a reconnect snapshot that matches the authoritative state and does not leak concealed tiles`, { timeout: 120000 }, async (t) => {
     const frames = [];
     const session = new RiichiSession({ players, speed: 0, seed: 20261017 + players, maxHands: 3,
       onFrame: (ev, bytes) => {
@@ -87,13 +87,13 @@ for (const players of [3, 4]) {
       if (engine._pending.kind === 'claim') session.handleClient(RiichiMsg.EReqQiangCard, encodeMsg('ReqQiangCard', answer));
       else session.handleClient(RiichiMsg.EReqPlayCard, encodeMsg('ReqPlayCard', answer));
     }
-    assert.ok(session.matchOver, '脚本应能打完整场');
-    assert.ok(windows > 30, `快照窗口 ${windows}`);
-    assert.ok([PlayAction.Peng, PlayAction.Chi].some((action) => seen.has(action)), `副露类型 ${[...seen]}`);
+    assert.ok(session.matchOver, 'the script should be able to play a full match');
+    assert.ok(windows > 30, `snapshot windows ${windows}`);
+    assert.ok([PlayAction.Peng, PlayAction.Chi].some((action) => seen.has(action)), `meld types ${[...seen]}`);
   });
 }
 
-test('切点在准备阶段、本手已结束或余牌为0时不给快照，调用方退回整手重放', () => {
+test('a cut point during preparation, after the hand has ended, or with 0 tiles left yields no snapshot, and the caller falls back to a full-hand replay', () => {
   const engine = { players: [{ hand: [] }], handEnded: false };
   assert.equal(buildRiichiReloadScene([], engine, 0), null);
   const start = encodeMsg('NtfGameStart', { changWind: 0, juNum: 1, benChangNum: 0, zhuangSeat: 0, baoPreCard: 111,
@@ -102,7 +102,7 @@ test('切点在准备阶段、本手已结束或余牌为0时不给快照，调�
   assert.equal(foldRiichiFrames([[RiichiMsg.ENtfGameStart, start], [RiichiMsg.ENtfGameStop, new Uint8Array()]], 0), null);
 });
 
-test('吃副露按原 Reload 约定排列：两张己方贡献在前、被吃牌在后，被鸣牌记入出牌者 PlayedCardsOtherTake', () => {
+test('chi meld is ordered per the original Reload convention: two own contributed tiles first, then the called tile; the called tile is recorded under the discarder PlayedCardsOtherTake', () => {
   const start = encodeMsg('NtfGameStart', { zhuangSeat: 3, baoPreCard: 111, remainDuiCardNum: 50, gameID: 'g',
     userInfos: [0, 1, 2, 3].map((seat) => ({ seat, score: 25000, initScore: 25000,
       handCards: seat === 0 ? [121, 131, 211, 221, 231, 241, 251, 261, 271, 281, 291, 311, 321] : [] })) });

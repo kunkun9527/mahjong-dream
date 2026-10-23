@@ -17,11 +17,11 @@ const CRYSTAL = 60002;
 const COIN = 60001;
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-test('一局战奖励档按原 EnumItemRewardLevel 映射番数与满贯档', () => {
+test('one-round reward tiers map han and mangan tiers from the original EnumItemRewardLevel', () => {
   assert.equal(oneRoundRewardLevel(null), 0);
   assert.equal(oneRoundRewardLevel({ totalFan: 1, manType: 0 }), 1);
   assert.equal(oneRoundRewardLevel({ totalFan: 4, manType: 0, fu: 30 }), 4);
-  assert.equal(oneRoundRewardLevel({ totalFan: 4, manType: 1 }), 5, '4 番 40 符为满贯');
+  assert.equal(oneRoundRewardLevel({ totalFan: 4, manType: 1 }), 5, '4 han 40 fu is mangan');
   assert.equal(oneRoundRewardLevel({ totalFan: 6, manType: 2 }), 6);
   assert.equal(oneRoundRewardLevel({ totalFan: 8, manType: 3 }), 7);
   assert.equal(oneRoundRewardLevel({ totalFan: 11, manType: 4 }), 8);
@@ -29,18 +29,18 @@ test('一局战奖励档按原 EnumItemRewardLevel 映射番数与满贯档', ()
   assert.equal(oneRoundRewardLevel({ totalFan: 26, manType: 5, yakuman: 2 }), 10);
 });
 
-test('一局战房间与奖励取自原客户端配置', () => {
+test('one-round rooms and rewards come from the original client config', () => {
   const crystal = oneRoundRoom(1, 5);
   assert.deepEqual(crystal.cost, [{ id: CRYSTAL, count: 350 }]);
   assert.deepEqual(crystal.rewards[0], [{ id: CRYSTAL, count: 175 }]);
-  assert.deepEqual(crystal.rewards[8], [{ id: CRYSTAL, count: 6125 }], '役满 = 界面 Jackpot');
-  assert.deepEqual(crystal.rewards[9], [{ id: CRYSTAL, count: 12250 }], '双倍役满 = Super Jackpot');
+  assert.deepEqual(crystal.rewards[8], [{ id: CRYSTAL, count: 6125 }], 'yakuman = UI Jackpot');
+  assert.deepEqual(crystal.rewards[9], [{ id: CRYSTAL, count: 12250 }], 'double yakuman = Super Jackpot');
   assert.deepEqual(oneRoundRoom(2, 1).cost, [{ id: COIN, count: 25000 }]);
   assert.equal(oneRoundRoom(3, 1), null);
   assert.equal(oneRoundRoom(1, 6), null);
 });
 
-test('一局战结算一次扣报名费并按档位发奖，余额不足时整体不变', () => {
+test('one-round charges the entry fee once and pays rewards by tier; when the balance is insufficient, everything stays unchanged', () => {
   const user = mock.userdata;
   const room = oneRoundRoom(1, 2);
   const before = user.inventoryCount(6, CRYSTAL);
@@ -73,7 +73,7 @@ function riichiFrames(frames) {
   });
 }
 
-test('一局战组桌回显 YiJu/OneGame，只打一手，按奖励结算且不写段位战绩', async (t) => {
+test('one-round matchmaking echoes YiJu/OneGame, plays one hand, settles rewards, and writes no rank records', async (t) => {
   const old = { ...mock.config };
   // seed 2: the human seat ron-wins a haneman on the only hand, covering the reward payout path.
   Object.assign(mock.config, { seed: 2, matchDelay: 0, engineStartDelay: 0, speed: 0, autoHuman: true });
@@ -91,7 +91,7 @@ test('一局战组桌回显 YiJu/OneGame，只打一手，按奖励结算且不�
   rpc(session, 20403, 3, oneRoundRequest(2, 1));
   const end = Date.now() + 15_000;
   while (!riichiFrames(frames).some((f) => f.name === 'NtfGameStop')) {
-    if (Date.now() > end) throw new Error('等待终局超时');
+    if (Date.now() > end) throw new Error('timed out waiting for the match to end');
     await wait(10);
   }
   await wait(50);
@@ -110,7 +110,7 @@ test('一局战组桌回显 YiJu/OneGame，只打一手，按奖励结算且不�
   assert.equal(stops[0].payload.isFinal, true);
   const self = stops[0].payload.userInfos.find((u) => u.seat === 0);
   assert.equal(Number(self.changePT || 0), 0);
-  assert.equal(rankWrites, 0, '一局战不写段位与战绩');
+  assert.equal(rankWrites, 0, 'one-round does not write rank or records');
 
   const room = oneRoundRoom(2, 1);
   assert.equal(self.itemRewardLevel, 6);
@@ -119,10 +119,10 @@ test('一局战组桌回显 YiJu/OneGame，只打一手，按奖励结算且不�
   assert.deepEqual(self.itemRewards.map((item) => [Number(item.itemId), Number(item.itemCount)]), [[COIN, reward]]);
   const finish = rpc(session, 20102, 4, new Uint8Array(0));
   assert.equal(mock.userdata.inventoryCount(6, COIN), before - 25000 + reward);
-  assert.ok(finish[0][24] instanceof Uint8Array, '离桌应答携带雀币 DataChange');
+  assert.ok(finish[0][24] instanceof Uint8Array, 'the leave response carries the crystal DataChange');
 });
 
-test('一局战未知档位或报名费不足时拒绝匹配', (t) => {
+test('one-round rejects matchmaking for an unknown tier or insufficient entry fee', (t) => {
   const session = mock.createSession();
   t.after(() => session.destroy());
   const unknown = rpc(session, 20403, 1, oneRoundRequest(1, 9));

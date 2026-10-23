@@ -35,7 +35,7 @@ function changedRows(frame, dtype) {
   return rows;
 }
 
-test('段位战终局：段位与金币变更随 20102 离桌应答 f24 下发', async (t) => {
+test('rank match finish: rank and coin changes are delivered in f24 of the 20102 leave response', async (t) => {
   const old = { ...mock.config };
   Object.assign(mock.config, { seed: 7, matchDelay: 0, engineStartDelay: 0, speed: 0, autoHuman: true });
   const session = mock.createSession();
@@ -64,17 +64,17 @@ test('段位战终局：段位与金币变更随 20102 离桌应答 f24 下发',
   rpc(session, 20403, 3, P.W().s(1, P.W().v(1, 4001).v(3, 7).v(4, 1).v(6, 1).bytes()).bytes());
   const end = Date.now() + 60_000;
   while (!riichiNames(frames).includes('NtfGameStop') || calls === 0) {
-    if (Date.now() > end) throw new Error('等待终局超时');
+    if (Date.now() > end) throw new Error('timed out waiting for the match to end');
     await wait(10);
   }
   await wait(50);
   assert.equal(calls, 1);
 
   const finish = rpc(session, 20102, 9, new Uint8Array(0));
-  assert.ok(finish[0][24] instanceof Uint8Array, '离桌应答携带数据变更');
+  assert.ok(finish[0][24] instanceof Uint8Array, 'the leave response carries data changes');
   const rank = changedRows(finish[0], 41).map((row) => P.dict(row[2]));
   const yonma = rank.find((row) => row[1] === 17 && row[2] === 1234);
-  assert.ok(yonma, '下发四麻段位 PT');
+  assert.ok(yonma, 'send 4p rank PT');
   const coin = changedRows(finish[0], 6).map((row) => P.dict(row[2])).find((row) => row[1] === 60001);
   assert.equal(coin[2], coinsBefore + 100);
   // Sent only once: later leave-table replies do not carry it again.

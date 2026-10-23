@@ -54,7 +54,7 @@ function claimEngine() {
   return { engine, players, card, actions };
 }
 
-test('awaitTurn 延迟期间断线后由 AI 接管且清理输入窗口', async () => {
+test('a disconnect during the awaitTurn delay is taken over by the AI, and the input window is cleared', async () => {
   const drawn = tileId(2, 5, 1);
   const engine = engineWith([player(0, [drawn]), player(1), player(2), player(3)], { baseTime: 0, extraTime: 0 });
   engine.players[0].timeBank = 0;
@@ -81,7 +81,7 @@ test('awaitTurn 延迟期间断线后由 AI 接管且清理输入窗口', async 
   assert.equal(engine._bufferedDraw, null);
 });
 
-test('awaitTurn 延迟期间重连后补建输入窗口并等待真人', async () => {
+test('reconnecting during the awaitTurn delay rebuilds the input window and waits for the human', async () => {
   const drawn = tileId(2, 6, 1);
   const engine = engineWith([player(0, [drawn]), player(1), player(2), player(3)], { autoHuman: true });
   const gate = deferred();
@@ -107,7 +107,7 @@ test('awaitTurn 延迟期间重连后补建输入窗口并等待真人', async (
   assert.equal(engine._expectedDraw, null);
 });
 
-test('awaitTurn 保留延迟期间已接受的唯一真人输入且不污染下巡', async () => {
+test('awaitTurn keeps the single human input accepted during the delay and does not pollute the next turn', async () => {
   const drawn = tileId(2, 7, 1);
   const engine = engineWith([player(0, [drawn]), player(1), player(2), player(3)]);
   const gate = deferred();
@@ -134,7 +134,7 @@ test('awaitTurn 保留延迟期间已接受的唯一真人输入且不污染下�
   assert.equal(engine._bufferedDraw, null);
 });
 
-test('托管完成 pending 后重复提交失败且 waitHuman 不遗留计时器', async () => {
+test('after autoplay completes the pending action, a repeated submit fails and waitHuman leaves no timer behind', async () => {
   const drawn = tileId(1, 8, 1);
   const engine = engineWith([player(0, [drawn]), player(1), player(2), player(3)], { baseTime: 5, extraTime: 20 });
   engine.players[0].drawnTile = drawn;
@@ -156,7 +156,7 @@ test('托管完成 pending 后重复提交失败且 waitHuman 不遗留计时器
   }
 });
 
-test('resolveClaims 等待中切托管后真人过和不会再由 AI 胡牌', async () => {
+test('switching to autoplay while resolveClaims waits: a human pass on ron is not later won by the AI', async () => {
   const { engine, players, card, actions } = claimEngine();
   let winners = null;
   engine.aiClaim = (seat) => seat === 0 ? { action: PlayAction.Hu } : null;
@@ -172,7 +172,7 @@ test('resolveClaims 等待中切托管后真人过和不会再由 AI 胡牌', as
   assert.equal(engine._expectedClaim, null);
 });
 
-test('resolveClaims 真人胡牌后切托管不会生成重复赢家', async () => {
+test('switching to autoplay after a human ron in resolveClaims does not create a duplicate winner', async () => {
   const { engine, card, actions } = claimEngine();
   let winners = null;
   engine.aiClaim = (seat) => seat === 0 ? { action: PlayAction.Hu } : null;
@@ -188,7 +188,7 @@ test('resolveClaims 真人胡牌后切托管不会生成重复赢家', async () 
   assert.equal(engine._bufferedClaim, null);
 });
 
-test('resolveClaims 保留等待前已接受的真人过和输入', async () => {
+test('resolveClaims keeps the human pass input accepted before waiting', async () => {
   const { engine, players, card, actions } = claimEngine();
   let winners = null;
   engine.aiClaim = (seat) => seat === 0 ? { action: PlayAction.Hu } : null;
@@ -206,7 +206,7 @@ test('resolveClaims 保留等待前已接受的真人过和输入', async () => 
   assert.equal(engine._expectedClaim, null);
 });
 
-test('AI 转回真人时 resolveKanRob 补建输入窗口', async () => {
+test('when the AI hands back to the human, resolveKanRob rebuilds the input window', async () => {
   const { engine, card, actions } = claimEngine();
   engine.setHumanAutoplay(true);
   engine._expectedClaim = null;
@@ -222,7 +222,7 @@ test('AI 转回真人时 resolveKanRob 补建输入窗口', async () => {
   assert.equal(engine._expectedClaim, null);
 });
 
-test('resolveKanRob 等待中切托管后过和不再胡，真人胡不重复', async () => {
+test('switching to autoplay while resolveKanRob waits: a pass no longer wins, and a human win is not duplicated', async () => {
   {
     const { engine, players, card, actions } = claimEngine();
     let winners = null;

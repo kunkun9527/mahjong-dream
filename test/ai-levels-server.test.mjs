@@ -16,7 +16,7 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function until(predicate, timeout = 15_000) {
   const end = Date.now() + timeout;
   while (!predicate()) {
-    if (Date.now() > end) throw new Error('等待超时');
+    if (Date.now() > end) throw new Error('timed out waiting');
     await wait(5);
   }
 }
@@ -37,19 +37,19 @@ async function aiLevelsForRoom(t, roomId) {
 }
 
 for (const roomId of [1, 2]) {
-  test(`段位战启航/逐梦间（roomID=${roomId}）用低级 AI`, async (t) => {
+  test(`rank rooms Qihang/Zhumeng (roomID=${roomId}) use basic AI`, async (t) => {
     assert.deepEqual(await aiLevelsForRoom(t, roomId), Array(4).fill('basic'));
   });
 }
 
-test('未知房间默认中级 AI', async (t) => {
+test('unknown room defaults to intermediate AI', async (t) => {
   assert.deepEqual(await aiLevelsForRoom(t, 999), Array(4).fill('intermediate'));
 });
 
-test('段位战御龙间（roomID=4）用高级 AI', async (t) => {
+test('rank room Yulong (roomID=4) uses advanced AI', async (t) => {
   assert.deepEqual(await aiLevelsForRoom(t, 4), Array(4).fill('advanced'));
 });
 
-test('段位战乘风间（roomID=3）用中级 AI', async (t) => {
+test('rank room Chengfeng (roomID=3) uses intermediate AI', async (t) => {
   assert.deepEqual(await aiLevelsForRoom(t, 3), Array(4).fill('intermediate'));
 });

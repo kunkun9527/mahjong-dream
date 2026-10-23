@@ -724,7 +724,7 @@ function chooseDiscardCandidates(ctx, forbiddenKinds) {
       tie: tieBreak(ctx, id, p.hand),
     });
   }
-  if (!candidates.length) throw new Error('没有合法的可打牌');
+  if (!candidates.length) throw new Error('No legal discard');
   const minShanten = Math.min(...candidates.map((c) => c.shanten));
   // At 2-shanten, use second-order ukeire to correct the win probability (only the top few by rough estimate, to control time).
   if (ctx.advanced && minShanten === 2) {

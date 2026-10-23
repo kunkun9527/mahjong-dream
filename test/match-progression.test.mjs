@@ -12,7 +12,7 @@ function engineFor(matchLength = 'east') {
   return engine;
 }
 
-test('东风战东四无人达到必要点时南入', async () => {
+test('east-only: if no one reaches the required points by East 4, move on to South', async () => {
   const engine = engineFor('east');
   engine.roundWind = 1;
   engine.juNum = 3;
@@ -25,7 +25,7 @@ test('东风战东四无人达到必要点时南入', async () => {
   assert.equal(engine.dealerSeat, 0);
 });
 
-test('半庄东四不会提前终局并正常进入南一', async () => {
+test('hanchan: East 4 does not end the match early and proceeds normally to South 1', async () => {
   const engine = engineFor('hanchan');
   engine.roundWind = 1;
   engine.juNum = 3;
@@ -38,7 +38,7 @@ test('半庄东四不会提前终局并正常进入南一', async () => {
   assert.equal(engine.dealerSeat, 0);
 });
 
-test('常规最终局支持庄家和了止', () => {
+test('the regular final round supports dealer win-stop', () => {
   const engine = engineFor('east');
   engine.roundWind = 1;
   engine.juNum = 3;
@@ -47,7 +47,7 @@ test('常规最终局支持庄家和了止', () => {
   assert.equal(engine.decideGameOver(true, [35_000, 20_000, 20_000, 25_000]), false);
 });
 
-test('延长场达到必要点立即终局，最后一局仍未达到则强制结束', () => {
+test('in extension play, reaching the required points ends the match immediately; if the last round still does not reach them, the match is forced to end', () => {
   const east = engineFor('east');
   east.roundWind = 2;
   east.juNum = 0;
@@ -61,7 +61,7 @@ test('延长场达到必要点立即终局，最后一局仍未达到则强制�
   assert.equal(hanchan.decideGameOver(false, [29_000, 25_000, 24_000, 22_000]), true);
 });
 
-test('三麻与四麻分别采用四万和三万的一位必要点', () => {
+test('3p and 4p use first-place required points of 40,000 and 30,000 respectively', () => {
   const yonma = engineFor('east');
   yonma.roundWind = 1;
   yonma.juNum = 3;

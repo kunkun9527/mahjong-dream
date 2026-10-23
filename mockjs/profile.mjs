@@ -3,7 +3,7 @@ import { ECONOMY_CATALOG as C } from './economy_catalog.mjs';
 
 export const PROFILE_VERSION = 1;
 
-const RANK_NAMES = ['新人', 'D3', 'D2', 'D1', 'C2', 'C1', 'B2', 'B1', 'A2', 'A1', '初段', '二段', '三段', '四段', '五段', '六段', '七段', '八段', '九段', '十段', '雀梦之巅', '雀梦之巅'];
+const RANK_NAMES = ['Novice', 'D3', 'D2', 'D1', 'C2', 'C1', 'B2', 'B1', 'A2', 'A1', '1st Dan', '2nd Dan', '3rd Dan', '4th Dan', '5th Dan', '6th Dan', '7th Dan', '8th Dan', '9th Dan', '10th Dan', 'Legend', 'Legend+'];
 
 export function applyRankResult(profile, { players, matchLength, placement, roomId = null }) {
   const key = players === 3 ? 'sanma' : 'yonma';
@@ -117,7 +117,7 @@ export function normalizeProfile(value) {
   return {
     ...defaults,
     ...profile,
-    // Migrate the old default nickname to the new default nickname; nicknames the player changed are left untouched.
+    // Migrate the old default nickname (the legacy Chinese literal below) to the new default nickname; nicknames the player changed are left untouched.
     nickname: profile.nickname === '离线玩家' ? defaults.nickname : (profile.nickname ?? defaults.nickname),
     version: PROFILE_VERSION,
     ranks: {

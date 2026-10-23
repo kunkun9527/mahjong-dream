@@ -210,14 +210,14 @@
       }
       mod.version = (mod.version || 0) + 1 + Math.max(0, gap);
       for (var r = 0; r < report.length; r++) {
-        log('[mock] DT39 刷新点修正(%s)：key=%s %s  refreshTime %s -> %s  (DT39 v%d)',
-          why, report[r].key, Number(report[r].rtype) === 2 ? '每周' : '每日',
+        log('[mock] DT39 refresh point corrected (%s): key=%s %s  refreshTime %s -> %s  (DT39 v%d)',
+          why, report[r].key, Number(report[r].rtype) === 2 ? 'weekly' : 'daily',
           tsText(report[r].from), tsText(report[r].to), mod.version);
       }
     }
     return changed;
   }
-  fixTaskRefreshTime('启动');
+  fixTaskRefreshTime('startup');
 
   function uuid4() {
     if (global.crypto && global.crypto.randomUUID) return global.crypto.randomUUID();
@@ -334,8 +334,8 @@
     if (this._resyncTimer) { clearTimeout(this._resyncTimer); this._resyncTimer = null; }
     // Timing marks for the reconnect chain: WS back -> login/userdata -> 20162 -> replay done. They show where the wait comes from.
     this._reconnectAt = nowMs();
-    if (this.liveMatch()) stampLog('[mock] 重连：会话已接管，下推暂停，等待客户端 20162');
-    else stampLog('[mock] 连接：会话已接管，无进行中对局');
+    if (this.liveMatch()) stampLog('[mock] reconnect: session taken over, push paused, waiting for client 20162');
+    else stampLog('[mock] connect: session taken over, no match in progress');
 
     // After reconnecting, the client must first log in and pull user data before it sends 20162 to ask "am I still in a match?";
     // in the captures this gap is about 4 seconds. During this time the engine keeps running, and if pushes went live, the client would
@@ -349,7 +349,7 @@
       this._resyncTimer = setTimeout(function () {
         self._resyncTimer = null;
         if (!self.replaying) return;
-        stampLog('[mock] 重连后 10s 未收到 20162，保持冻结并重试连接');
+        stampLog('[mock] no 20162 within 10s after reconnect; staying frozen and retrying connection');
         if (self.socket && self.socket.readyState === OPEN) self.socket.close(1012, 'resync-timeout');
       }, 10000);
     }
@@ -408,7 +408,7 @@
     var pkt = USERDATA.changeNotify(changes);
     for (var dt in changes) {
       if (!Object.prototype.hasOwnProperty.call(changes, dt)) continue;
-      log('     [DataChange] %s(%s) v=%d %d 行',
+      log('     [DataChange] %s(%s) v=%d %d rows',
         U.DT_NAMES[dt] || '?', dt, USERDATA.modules[dt].version, changes[dt].length);
     }
     return [[midRsp, body || new Uint8Array(0), 1, { 24: pkt }]];
@@ -428,7 +428,7 @@
     }
     var response;
     try {
-      if (!MJ.shop) throw new Error('商店模块未加载');
+      if (!MJ.shop) throw new Error('shop module not loaded');
       var result = perform();
       var body = P.W().v(1, result.error);
       if (!result.error && result.rewards) {
@@ -437,7 +437,7 @@
       }
       response = withChange(mid + 1, result.changes, body.bytes());
     } catch (error) {
-      log('  [shop] 拒绝请求: %s', error.message);
+      log('  [shop] request rejected: %s', error.message);
       response = [[mid + 1, P.W().v(1, 1).bytes(), 1, null]];
     }
     if (seq) {
@@ -452,11 +452,11 @@
       var fields = P.parse(payload), d = {}, seen = new Set();
       for (var field of fields) {
         if (![1, 2, 3, 4, 7].includes(field[0])) continue;
-        if (field[1] !== 0 || seen.has(field[0])) throw new Error('非法购买字段');
+        if (field[1] !== 0 || seen.has(field[0])) throw new Error('invalid purchase field');
         seen.add(field[0]); d[field[0]] = field[2];
       }
       if (fields.some(function (field) { return (field[0] === 6 || field[0] === 8) && field[2].length; })) {
-        throw new Error('不支持模组或付费换装购买');
+        throw new Error('mod and paid outfit purchases are not supported');
       }
       return MJ.shop.purchase(USERDATA, {
         shopType: d[1], itemId: d[2], quantity: d[3], exchangeCount: d[4], gearIndex: d[7] || 0
@@ -555,7 +555,7 @@
         var hv = (cliVer > 0 && cliVer < 1e18) ? cliVer : 0;
         w.s(3, P.W().v(1, dt).v(2, hv).bytes());
         missCount++;
-        details.push(dt + '(缺失)cli=' + cliVer + '->' + hv);
+        details.push(dt + '(missing)cli=' + cliVer + '->' + hv);
         continue;
       }
 
@@ -563,23 +563,23 @@
       if (isFull) {
         w.s(3, mod.serialize());                        // Whole module (with the server's current version)
         dataCount++;
-        details.push(dt + ':全量->v' + mod.version);
+        details.push(dt + ':full->v' + mod.version);
       } else if (cliVer < mod.version) {
         w.s(3, mod.serialize());                        // Client is behind -> give the whole module, one-shot sync
         dataCount++;
-        details.push(dt + ':cli=' + cliVer + '<srv=' + mod.version + '->下发整模块');
+        details.push(dt + ':cli=' + cliVer + '<srv=' + mod.version + '->send whole module');
       } else {
         // Already up to date / ahead: echo the client version with 0 rows (consistent with the official server, which also echoes the client version)
         w.s(3, P.W().v(1, dt).v(2, cliVer).bytes());
-        details.push(dt + ':cli=' + cliVer + '=srv->0行');
+        details.push(dt + ':cli=' + cliVer + '=srv->0 rows');
       }
     }
     var mode = (queries.length && (queries[0][1] >= 1e18 || queries[0][1] < 0))
-      ? '全量' : '增量';
+      ? 'full' : 'incremental';
     if (queries.length <= 4) {
-      log('  [100141] %s：%s', mode, details.join('  '));
+      log('  [100141] %s: %s', mode, details.join('  '));
     } else {
-      log('  [100141] %s：%d 个 dt 请求，%d 个带数据下发，缺失=%d',
+      log('  [100141] %s: %d dt requests, %d with data sent, missing=%d',
         mode, queries.length, dataCount, missCount);
     }
     return [[100142, w.bytes(), 1, null]];
@@ -646,7 +646,7 @@
     var gs = (d[2] instanceof Uint8Array) ? d[2] : null;
     var changes = gs ? USERDATA.updateGameSetting(gs) : null;
     log('     [setting] ModifyGameSetting -> DT2 %s',
-      changes ? 'OK v' + USERDATA.modules[2].version : '（无 GameSetting 字段）');
+      changes ? 'OK v' + USERDATA.modules[2].version : '(no GameSetting field)');
     return withChange(100004, changes);
   };
 
@@ -656,8 +656,8 @@
     var d = P.dict(payload);
     var sculptId = d[1] || 0, warriorId = d[2] || 0;
     var changes = USERDATA.wearSculpt(warriorId, sculptId);
-    log('     雀士 %s 换皮肤 -> %s %s', warriorId, sculptId,
-      changes ? 'OK' : '（找不到该雀士）');
+    log('     warrior %s skin change -> %s %s', warriorId, sculptId,
+      changes ? 'OK' : '(warrior not found)');
     return withChange(100205, changes);
   };
 
@@ -681,7 +681,7 @@
       }
       if (dt !== null) pairs.push([dt, val]);
     }
-    log('     使用中装备 -> %s', pairs.map(function (p) {
+    log('     equipped items -> %s', pairs.map(function (p) {
       return (U.DT_NAMES[p[0]] || '?') + '(' + p[0] + ')=' + p[1];
     }).join(', '));
 
@@ -722,7 +722,7 @@
   /** 100620 KclientSignInReq -> 100621 */
   HANDLERS[100620] = function (sess, payload) {
     var changes = USERDATA.dailySignIn();
-    log('     跨日签到 -> SignIn 时间戳刷新%s', changes ? ' OK' : '（无 SignIn 模块）');
+    log('     cross-day sign-in -> SignIn timestamp refreshed%s', changes ? ' OK' : '(no SignIn module)');
     return withChange(100621, changes);
   };
 
@@ -730,7 +730,7 @@
   // The original client does not automatically turn business error codes into prompt text; the peripheral request explicitly fails
   // (LobbyStatusCode 10 CommandServiceNotAvailable), then the native 20106
   // DisplayDebugLogNotify{1:Log} triggers the client's built-in ShowTips toast.
-  var OFFLINE_UNAVAILABLE_TEXT = '离线模式下此功能不可用';
+  var OFFLINE_UNAVAILABLE_TEXT = 'This feature is unavailable in offline mode';
   var OFFLINE_UNAVAILABLE_IDS = [
     // Friends, viewing others' profiles
     100040, 100042, 100046, 100047, 100048, 100143,
@@ -800,7 +800,7 @@
     if (sess.riichi) return sess.riichi;
     var R = MJ.riichi;
     if (!R || !R.RiichiSession) {
-      console.error('[mock] 未加载 mock/riichi.js，20018 对局通道不可用');
+      console.error('[mock] mock/riichi.js not loaded; 20018 match channel unavailable');
       return null;
     }
     // Seat → uid; must exactly match the uids sent in 20408 TableInfo / 20014 EnterSeatBc:
@@ -922,8 +922,8 @@
     }
     var live = !!(sess.table && sess.liveMatch());
     if (live) { sess._needsResync = true; sess.updateHumanPresence(); }
-    stampLog('  [resync] 收到 20162，距 WS 恢复 ' + (sess._reconnectAt == null ? -1 : nowMs() - sess._reconnectAt) +
-      'ms，进行中=' + (live ? 1 : 0));
+    stampLog('  [resync] got 20162, time since WS restore ' + (sess._reconnectAt == null ? -1 : nowMs() - sess._reconnectAt) +
+      'ms, in progress=' + (live ? 1 : 0));
 
     var w = P.W();
     w.v(1, sess.uid);
@@ -948,8 +948,8 @@
       sess._replayStarted = true;
       var pendingSync = sess.beginClientSync(cut >= 0);
       pendingSync.waitingTable = !sess._canReload;
-      stampLog('  [resync] 有进行中对局，回 TableInfo，' + (cut >= 0
-        ? '附局面快照，只补发其后的新帧' : '准备重放本局 ' + sess.handFrames.length + ' 帧'));
+      stampLog('  [resync] match in progress, returning TableInfo, ' + (cut >= 0
+        ? 'with position snapshot, only resending newer frames' : 'preparing to replay this match ' + sess.handFrames.length + ' frames'));
       // After 20163 the official server actively pushes NtfPrepare/NtfGameStart to resync the match.
       // We have no "arbitrary position snapshot", so we use an equivalent: replay all notification frames of this hand from NtfToPrepare onward in order,
       // and the client walks through them to reach the current position itself.
@@ -974,11 +974,11 @@
           }
           var prepareFrame = sess.handFrames.find(function (frame) { return frame[0] === RIICHI_NTF_TO_PREPARE; });
           if (prepareFrame) sess.push(20018, encodeKRiichi(prepareFrame[0], prepareFrame[1]), 1, null);
-          stampLog('[resync] 新页面等待牌桌准备，再重放本局');
+          stampLog('[resync] new page waiting for table to be ready, then replaying this match');
         } else replayHand(sess, sess.handFrames === cutFrames ? cut : 0);
       }, 150);
     } else if (!live) {
-      stampLog('  [resync] 无进行中对局');
+      stampLog('  [resync] no match in progress');
     }
     return [[20163, w.bytes(), 1, null]];
   };
@@ -994,10 +994,10 @@
     if (socket && socket._sync) socket._sync({ phase: 'start', id: sync.id, reload: !!reload });
     sync.timer = setTimeout(function () {
       if (self._clientSync !== sync || self.socket !== socket) return;
-      stampLog('[resync] 客户端未确认恢复完成，保持冻结并重试 id=' + sync.id);
+      stampLog('[resync] client has not confirmed recovery complete; staying frozen and retrying id=' + sync.id);
       if (socket.close) socket.close(1012, 'client recovery confirmation timeout');
     }, 30000);
-    stampLog('[resync] 等待客户端消费确认 id=' + sync.id + ' snapshot=' + !!reload);
+    stampLog('[resync] waiting for client consume confirmation id=' + sync.id + ' snapshot=' + !!reload);
     return sync;
   };
   Session.prototype.ackClientSync = function (ack, socket) {
@@ -1015,7 +1015,7 @@
     this.replaying = false; this._replayStarted = false;
     playerBack(this);
     if (socket._sync) socket._sync({ phase: 'complete', id: sync.id });
-    stampLog('[resync] 客户端消费完成 id=' + sync.id + ' counter=' + sync.counter);
+    stampLog('[resync] client consume complete id=' + sync.id + ' counter=' + sync.counter);
     return true;
   };
 
@@ -1030,7 +1030,7 @@
     if (!sess.socket || sess.socket.readyState !== OPEN || sess.replaying) return;
     sess._needsResync = false;
     sess.updateHumanPresence();
-    stampLog("[resync] 同步门禁解除：" + JSON.stringify({ present: !!sess.riichi?.engine?.humanPresent }));
+    stampLog("[resync] sync gate released: " + JSON.stringify({ present: !!sess.riichi?.engine?.humanPresent }));
   }
 
   function replayHand(sess, from) {
@@ -1041,7 +1041,7 @@
     function finishDelivery() {
       if (sess._clientSync !== sync || sess.socket !== syncSocket || !sync.caught || sync.pending) return;
       sync.end = true;
-      stampLog('[resync] 重放已投递，等待客户端完成 id=' + sync.id + ' counter=' + sync.counter);
+      stampLog('[resync] replay delivered, waiting for client to finish id=' + sync.id + ' counter=' + sync.counter);
       if (syncSocket._sync) syncSocket._sync({ phase: 'end', id: sync.id, counter: sync.counter });
     }
 
@@ -1053,7 +1053,7 @@
       if (frames[k][0] === RIICHI_NTF_GAME_START) { skipToPrepare = true; break; }
     }
 
-    stampLog('  [resync] 开始重放（已开牌=' + skipToPrepare + ' 起点=' + from + '/' + frames.length + ' 帧）');
+    stampLog('  [resync] starting replay (dealt=' + skipToPrepare + ' start=' + from + '/' + frames.length + ' frames)');
     var replayStart = nowMs();
     // Batch push: send BATCH frames per batch with BATCH_GAP ms between batches. The client queues consumption in the main-thread Update,
     // handling only a few frames per tick so it does not time out again (Bye!); batching also cuts the whole hand's replay time
@@ -1079,7 +1079,7 @@
       }
       if (i >= sess.handFrames.length) {
         sync.index = i; sync.frames = sess.handFrames; sync.caught = true;
-        stampLog('  [resync] 重放已排队，历史进度 ' + i + '/' + sess.handFrames.length + ' 帧，耗时 ' + (nowMs() - replayStart) + 'ms，计时仍冻结');
+        stampLog('  [resync] replay queued, history progress ' + i + '/' + sess.handFrames.length + ' frames, took ' + (nowMs() - replayStart) + 'ms, clock still frozen');
         finishDelivery();
         return;
       }
@@ -1146,7 +1146,7 @@
         }
       }
     } catch (e) {
-      log('  [profile] 读取用户装备失败，使用默认值: ' + e.message);
+      log('  [profile] failed to read user equipment, using defaults: ' + e.message);
     }
     return profile;
   }
@@ -1232,7 +1232,7 @@
 
     // This project only supports single-player riichi: Sichuan, Dou Dizhu, Guandan and other games show "offline unavailable"
     if (!RIICHI_GAME_TYPES[srm[1]]) {
-      log('  [match] gameType=%s 非立直，离线不可用', srm[1]);
+      log('  [match] gameType=%s is not Riichi; unavailable offline', srm[1]);
       return offlineUnavailable(sess, 20404);
     }
 
@@ -1245,16 +1245,16 @@
     if (Number(srm[3]) === MJ.oneRound.ONE_ROUND_ROOM_TYPE) {
       var orRoom = MJ.oneRound.oneRoundRoom(Number(srm[4] || 0), Number(srm[5] || 0));
       if (!orRoom || !MJ.oneRound.canAffordOneRound(USERDATA, orRoom)) {
-        log('  [match] 一局战 roomID=%s roomLevel=%s 拒绝：配置不存在或报名费不足', srm[4], srm[5]);
+        log('  [match] 1-Round roomID=%s roomLevel=%s rejected: config not found or entry fee insufficient', srm[4], srm[5]);
         return [[20404, P.W().v(1, 1).bytes(), 1, null]];
       }
       oneRound = { id: orRoom.id, cost: orRoom.cost, rewards: orRoom.rewards };
     }
     sess.rankRoomId = !oneRound && [1, 2, 3, 4].includes(Number(srm[4])) ? Number(srm[4]) : null;
 
-    log('  [match] gameType=%s roomType=%s roomID=%s -> %s麻%s',
-      srm[1], srm[3], srm[4], sanma ? '三' : '四',
-      oneRound ? '一局战(' + oneRound.id + ')' : CONFIG.matchLength === 'hanchan' ? '半庄' : '东风');
+    log('  [match] gameType=%s roomType=%s roomID=%s -> %s-player %s',
+      srm[1], srm[3], srm[4], sanma ? '3' : '4',
+      oneRound ? '1-Round(' + oneRound.id + ')' : CONFIG.matchLength === 'hanchan' ? 'Hanchan' : 'East');
 
     sess.tableId = 1;
     sess.seat = 0;
@@ -1367,11 +1367,11 @@
       result = MJ.oneRound.settleOneRound(USERDATA, room, humanWin);
     } catch (e) {
       // If the balance is spent elsewhere after the match starts, no debt is recorded and no reward is paid.
-      log('  [oneRound] 结算失败：%s', e.message);
+      log('  [oneRound] settlement failed: %s', e.message);
       return null;
     }
     if (result.changes) sess.walletChanges = result.changes;
-    log('  [oneRound] %s 结算：奖励档 %d，报名费 %s，奖励 %s', room.id, result.itemRewardLevel,
+    log('  [oneRound] %s settlement: reward tier %d, entry fee %s, rewards %s', room.id, result.itemRewardLevel,
       JSON.stringify(room.cost), JSON.stringify(result.itemRewards));
     return { itemRewardLevel: result.itemRewardLevel, itemRewards: result.itemRewards };
   }
@@ -1417,7 +1417,7 @@
 
   /** 20405 cancel matchmaking -> 20406 */
   HANDLERS[20405] = function (sess) {
-    log('  [match] 取消匹配');
+    log('  [match] matchmaking cancelled');
     if (sess.matchTimer) { clearTimeout(sess.matchTimer); sess.matchTimer = null; }
     if (sess.engineStartTimer) { clearTimeout(sess.engineStartTimer); sess.engineStartTimer = null; }
     sess.matchToken += 1;
@@ -1429,7 +1429,7 @@
 
   /** 20025 LeaveTable -> 20026: the player clicks "return to lobby" during the match or on the settlement screen */
   HANDLERS[20025] = function (sess) {
-    log('  [leave] 离桌');
+    log('  [leave] left table');
     clearMatchRecord(sess);
     if (sess.matchTimer) { clearTimeout(sess.matchTimer); sess.matchTimer = null; }
     if (sess.engineStartTimer) { clearTimeout(sess.engineStartTimer); sess.engineStartTimer = null; }
@@ -1443,7 +1443,7 @@
   /** 20102 ClientFinishGameStopRequest -> 20103
    *  Real capture: after isFinal settlement the client sends this message to confirm exit; the server replies 20103 and then returns to the lobby. */
   HANDLERS[20102] = function (sess) {
-    log('  [finish] 客户端确认结算完成，退出对局');
+    log('  [finish] client confirmed settlement complete, leaving match');
     clearMatchRecord(sess);
     if (sess.matchTimer) { clearTimeout(sess.matchTimer); sess.matchTimer = null; }
     if (sess.engineStartTimer) { clearTimeout(sess.engineStartTimer); sess.engineStartTimer = null; }
@@ -1459,7 +1459,7 @@
     // If already left the table (tableId=0 after the 20102 settlement confirmation / 20025 return to lobby), do not lazily create a session again,
     // otherwise the ReqPrepare left on the settlement screen would spawn a new match out of nowhere.
     // The real server gives zero response to 20018 uplinks in this state (see the final section of capture/dongfeng1/ws.jsonl).
-    if (!sess.tableId) { log('  <riichi> 已离桌，忽略 20018 上行'); return []; }
+    if (!sess.tableId) { log('  <riichi> left table, ignoring 20018 uplink'); return []; }
     var r = getRiichi(sess);
     if (!r) return [];
     var d = P.dict(payload);
@@ -1483,7 +1483,7 @@
     try {
       fields = P.parse(raw);
     } catch (e) {
-      console.warn('[mock] 无法解析的帧 %dB: %s', raw.length, e.message);
+      console.warn('[mock] unparseable frame %dB: %s', raw.length, e.message);
       return [];
     }
     var d = {};
@@ -1521,7 +1521,7 @@
         out = fn(sess, payload, seq);
         tag = 'handled';
       } catch (e) {
-        console.error('[mock] handler 异常 (mid=%s):', mid, e);
+        console.error('[mock] handler error (mid=%s):', mid, e);
         out = [[mid + 1, new Uint8Array(0), 1, null]];
         tag = 'error';
       }
@@ -1566,7 +1566,7 @@
       this._session = _lastSession;
       this._session.resume(this);
       _lastSession = null;
-      log('[mock] 重连复用旧会话（保留对局引擎） %s', this.url);
+      log('[mock] reconnect reused old session (match engine kept) %s', this.url);
     } else {
       if (_lastSession) { _lastSession.destroy(); _lastSession = null; }
       this._session = new Session();
@@ -1575,7 +1575,7 @@
     }
     this._session.socket = this;
 
-    log('[mock] 建立虚拟连接 %s', this.url);
+    log('[mock] opening virtual connection %s', this.url);
     // Trigger open asynchronously to simulate the real handshake timing (a synchronous trigger would fire before the caller has bound onopen)
     setTimeout(function () {
       if (self.readyState !== CONNECTING) return;
@@ -1652,7 +1652,7 @@
       bytes = P.utf8(payload);
     }
     else {
-      console.warn('[mock] 不支持的发送类型', payload);
+      console.warn('[mock] unsupported send type', payload);
       return;
     }
     // Copy it, to prevent the caller from reusing the same buffer, which would make later parsing read dirty data
@@ -1684,7 +1684,7 @@
           type: 'close', code: code || 1000, reason: reason || '',
           wasClean: true, target: self
         });
-        log('[mock] 虚拟连接已关闭 code=%s reason=%s', code || 1000, reason || '');
+        log('[mock] virtual connection closed code=%s reason=%s', code || 1000, reason || '');
       }, 0);
       return;
     }
@@ -1700,7 +1700,7 @@
     self._session.suspend();
     self._emit('error', { type: 'error', message: 'simulated network drop', target: self });
     self._emit('close', { type: 'close', code: 1006, reason: '', wasClean: false, target: self });
-    log('[mock] 虚拟连接已关闭（对局中·模拟掉线）code=1006 wasClean=false（引擎已保留）');
+    log('[mock] virtual connection closed (match in progress, simulated drop) code=1006 wasClean=false (engine kept)');
   };
 
   FakeWebSocket.CONNECTING = CONNECTING;
@@ -1737,7 +1737,7 @@
     /** Restore to the initial snapshot */
     reset: function () {
       USERDATA = new U.UserData(P.b64decode(DATA.userdataB64), UID);
-      console.log('[mock] 用户数据已重置');
+      console.log('[mock] user data reset');
     },
 
     /** Turn off the spam log */

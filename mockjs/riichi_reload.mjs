@@ -13,7 +13,7 @@ const kindOf = (tile) => Math.floor(tile / 10);
 const removeTiles = (hand, tiles) => {
   for (const tile of tiles) {
     const index = hand.indexOf(tile);
-    if (index < 0) throw new Error(`重连快照：手牌缺少 ${tile}`);
+    if (index < 0) throw new Error(`Reconnect snapshot: hand is missing ${tile}`);
     hand.splice(index, 1);
   }
 };
@@ -75,7 +75,7 @@ export function foldRiichiFrames(frames, mySeat) {
       } else if (msg.action === PlayAction.PengGang) {
         // The original Reload takes cards[0] as the added-kan tile and re-adds the rest after restoring the pon.
         const pon = player.melds.find((meld) => meld.action === PlayAction.Peng && kindOf(meld.cards[0]) === kindOf(msg.card));
-        if (!pon) throw new Error('重连快照：加杠找不到对应的碰');
+        if (!pon) throw new Error('Reconnect snapshot: added kan has no matching pon');
         pon.action = PlayAction.PengGang;
         pon.cards = [msg.card, ...pon.cards];
         player.count -= 1;

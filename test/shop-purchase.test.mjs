@@ -27,13 +27,13 @@ function wire(session, type, id, count = 1, seq = 1, raw = null, mid = 100500) {
 }
 
 for (const [name, type, id, currency, price, dtype, count] of [
-  ['杂货铺改名卡', 2, 60007, 60002, 500, 6, 2],
-  ['杂货铺每日招募卡', 2, 60008, 60001, 50, 6, 1],
-  ['招募商店六德之证', 1, 80001, 60009, 1, 8, 3],
-  ['招募商店雀士碎片', 1, 80009, 60009, 15, 8, 2],
-  ['荣耀积分礼物', 7, 70018, 60012, 10, 7, 2],
+  ['general store rename card', 2, 60007, 60002, 500, 6, 2],
+  ['general store daily recruit card', 2, 60008, 60001, 50, 6, 1],
+  ['recruit shop Six Virtues certificate', 1, 80001, 60009, 1, 8, 3],
+  ['recruit shop warrior shard', 1, 80009, 60009, 15, 8, 2],
+  ['honor points gift', 7, 70018, 60012, 10, 7, 2],
 ]) {
-  test(`${name}按真实单价和数量扣款发货并返回完整协议增量`, () => {
+  test(`${name} charges the real unit price and quantity, delivers, and returns the full protocol delta`, () => {
     const user = fresh(Math.floor(Date.now() / 1000));
     server.setUserdata(user.serialize());
     const beforeMoney = server.userdata.inventoryCount(6, currency);
@@ -56,7 +56,7 @@ for (const [name, type, id, currency, price, dtype, count] of [
   });
 }
 
-test('雀币商店八槽位遵守原稀有度和单价，售罄后拒绝多买', () => {
+test('the eight slots of the crystal shop follow the original rarity and unit price, and extra purchases are rejected once sold out', () => {
   const user = fresh();
   const items = stock(user);
   assert.equal(items.length, 8);
@@ -77,7 +77,7 @@ test('雀币商店八槽位遵守原稀有度和单价，售罄后拒绝多买',
   assert.deepEqual(user.serialize(), saved);
 });
 
-test('非法商品、数量、份数、档位和余额不足均不改变任何模块', () => {
+test('illegal items, quantities, batch counts, tiers, and insufficient balances all leave every module unchanged', () => {
   const user = fresh();
   const money = user.inventoryCount(6, 60002);
   user.changeInventory([{ dtype: 6, id: 60002, count: -money }]);
@@ -95,7 +95,7 @@ test('非法商品、数量、份数、档位和余额不足均不改变任何�
   }
 });
 
-test('唯一角色与装扮已拥有时不重复扣钱，缺少时正确发放且可再次判重', () => {
+test('unique characters and outfits already owned are not charged again; missing ones are granted correctly and can be deduplicated again', () => {
   for (const [type, id, dtype] of [[1, 1, 26], [1, 140002, 14], [7, 150007, 15], [1, 170002, 17]]) {
     const user = fresh();
     const saved = user.serialize();
@@ -118,7 +118,7 @@ test('唯一角色与装扮已拥有时不重复扣钱，缺少时正确发放�
   }
 });
 
-test('杂货每日限购与荣耀每月限购分别重置，重启不重置同周期消费', () => {
+test('general store daily limits and honor monthly limits reset separately, and a restart does not reset purchases within the same period', () => {
   let user = fresh();
   assert.equal(purchase(user, request(2, 60008), NOW).error, 0);
   assert.equal(purchase(user, request(7, 70018, 5), NOW).error, 0);
@@ -130,7 +130,7 @@ test('杂货每日限购与荣耀每月限购分别重置，重启不重置同�
   assert.equal(purchase(user, request(7, 70018), nextMonth).error, 0);
 });
 
-test('刷新首笔免费，然后5000雀币、10梦石，日界后恢复免费额度', () => {
+test('the first refresh is free, then 5000 crystal and 10 dream stones; the free quota is restored after the day boundary', () => {
   const user = fresh();
   const coin = user.inventoryCount(6, 60001), stone = user.inventoryCount(6, 60002);
   assert.equal(refreshShop(user, NOW).error, 0);
@@ -146,7 +146,7 @@ test('刷新首笔免费，然后5000雀币、10梦石，日界后恢复免费�
   assert.equal(synchronizeShop(user, NOW + 86400), null);
 });
 
-test('同连接相同RPC重试不重复扣款，序号冲突拒绝，新连接可复用序号', () => {
+test('the same RPC retried on the same connection is not charged twice, sequence conflicts are rejected, and a new connection may reuse the sequence number', () => {
   server.setUserdata(fresh(Math.floor(Date.now() / 1000)).serialize());
   const session = server.createSession();
   const coin = server.userdata.inventoryCount(6, 60009);
@@ -161,7 +161,7 @@ test('同连接相同RPC重试不重复扣款，序号冲突拒绝，新连接�
   assert.equal(server.userdata.inventoryCount(6, 60009), coin - 6);
 });
 
-test('恶意wire字段返回非零结果，不触发通用异常路径的假成功', () => {
+test('malicious wire fields return a non-zero result and do not trigger a false success through the generic exception path', () => {
   server.setUserdata(fresh().serialize());
   const saved = server.userdata.serialize();
   const malformedWrapper = P.W().v(2, 100500).v(11, 1).v(3, 123).bytes();

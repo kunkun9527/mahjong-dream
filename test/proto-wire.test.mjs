@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 await import('../mock/proto.js');
 const P = globalThis.__mj.proto;
 
-test('schema-less protobuf 精确往返 int64、fixed64 与 uint32', () => {
+test('schema-less protobuf exactly round-trips int64, fixed64 and uint32', () => {
   const negativeOne = P.W().v(1, -1).bytes();
   const negativeTwo = P.W().v(1, -2).bytes();
   assert.notDeepEqual([...negativeOne], [...negativeTwo]);
@@ -14,7 +14,7 @@ test('schema-less protobuf 精确往返 int64、fixed64 与 uint32', () => {
   assert.equal(P.parse(P.W().f32(3, 0xffff_ffff).bytes())[0][2], 0xffff_ffff);
 });
 
-test('setVarint 与 setBytes 会替换全部旧标量而不被 last-one-wins 覆盖', () => {
+test('setVarint and setBytes replace all old scalars without being overwritten by last-one-wins', () => {
   const source = P.W().v(1, 1).v(1, 2).s(2, 'old-a').s(2, 'old-b').bytes();
   const changedVarint = P.setVarint(source, 1, 9);
   assert.deepEqual(P.parse(changedVarint).filter(([field]) => field === 1).map(([, , value]) => value), [9]);

@@ -5,7 +5,7 @@ import vm from 'node:vm';
 
 import { encodeMsg, decodeMsg } from '../mockjs/pb.mjs';
 
-test('恢复后的 Protobuf 源码可往返编码动作消息', () => {
+test('restored Protobuf source can round-trip encode action messages', () => {
   const bytes = encodeMsg('ReqPlayCard', { card: 115, action: 7, isTimeout: false });
   const decoded = decodeMsg('ReqPlayCard', bytes);
   assert.equal(decoded.card, 115);
@@ -13,7 +13,7 @@ test('恢复后的 Protobuf 源码可往返编码动作消息', () => {
   assert.equal(decoded.isTimeout, false);
 });
 
-test('生成的浏览器 bundle 保持原全局导出契约', async () => {
+test('the generated browser bundle keeps the original global export contract', async () => {
   globalThis.__mj = {};
   await import(`../mock/riichi.js?smoke=${Date.now()}`);
   assert.deepEqual(
@@ -26,7 +26,7 @@ test('生成的浏览器 bundle 保持原全局导出契约', async () => {
   );
 });
 
-test('浏览器 bundle 在没有 Node process 的环境里可加载并导出档案宿主', () => {
+test('the browser bundle loads and exports the profile host in an environment without a Node process', () => {
   const source = readFileSync(new URL('../mock/riichi.js', import.meta.url), 'utf8');
   const context = vm.createContext({ console, TextEncoder, TextDecoder, setTimeout, clearTimeout, __mj: {} });
   context.globalThis = context;

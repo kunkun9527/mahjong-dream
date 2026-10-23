@@ -2,7 +2,7 @@
 
 ## Purpose
 关服前的 Unity WebGL 客户端快照，修复为单机版。原客户端只负责界面；本地后端负责协议、权威牌局、AI、商店和档案，运行时不访问外网。后端两种宿主（ADR 0007）：静态托管（GitHub Pages）时在页面内运行、存 `localStorage`；Node.js 回环服务（127.0.0.1）存 `userdata/profile.json`。
-范围：只做单机立直麻将——四麻/三麻东风、半庄、一局战，四类商店。四川、斗地主、掼蛋及好友/抽卡等外围入口一律提示“离线模式下此功能不可用”（四川后端已于 2026-10-18 删除，见 git 历史 `a469df1`）。
+范围：只做单机立直麻将——四麻/三麻东风、半庄、一局战，四类商店。四川、斗地主、掼蛋及好友/抽卡等外围入口一律提示“This feature is unavailable in offline mode”（离线不可用）（四川后端已于 2026-10-18 删除，见 git 历史 `a469df1`）。
 
 ## Entry points
 - `start-game.bat` / `local/launcher.mjs` — 启动服务并打开浏览器。

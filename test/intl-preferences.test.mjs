@@ -23,7 +23,7 @@ const setInt = context.setPrefsInt;
 
 function intOf(bytes, key) {
   const at = Buffer.from(bytes).indexOf(Buffer.from([key.length, ...Buffer.from(key), 0xfe]));
-  assert.ok(at >= 16, `${key} 应存在`);
+  assert.ok(at >= 16, `${key} should exist`);
   return new DataView(bytes.buffer, bytes.byteOffset).getInt32(at + key.length + 2, true);
 }
 
@@ -88,7 +88,7 @@ async function boot(fake) {
   await ctx.preparePlayerPrefs();
 }
 
-test('国际版偏好补丁仅改语言与条款整数，保留其他字节且不修改输入', () => {
+test('the international preferences patch changes only the language and terms integers, keeps other bytes, and does not modify the input', () => {
   let before = setInt(header(), 'Volume', 37);
   before = setInt(setInt(before, 'LanguageID', 6), 'user_terms', 0);
   const copy = before.slice();
@@ -102,7 +102,7 @@ test('国际版偏好补丁仅改语言与条款整数，保留其他字节且�
   assert.strictEqual(setInt(after, 'user_terms', 1), after);
 });
 
-test('首次国际版启动创建正确 IDBFS 目录与偏好，条款默认同意，二次启动不重复写入', async () => {
+test('the first international launch creates the correct IDBFS directory and preferences, accepts the terms by default, and a second launch does not write again', async () => {
   const fake = fakeIDB([], { upgrade: true });
   await boot(fake);
   assert.deepEqual(fake.opened, ['/idbfs', 21]);
@@ -119,7 +119,7 @@ test('首次国际版启动创建正确 IDBFS 目录与偏好，条款默认同�
   assert.deepEqual(second.writes, []);
 });
 
-test('已有国际版偏好补充条款且保留目录、音量、未知文件及其他站点路径', async () => {
+test('existing international preferences gain the terms and keep the directory, volume, unknown files, and other site paths', async () => {
   const otherPath = '/idbfs/other/PlayerPrefs';
   const old = setInt(setInt(header(), 'Volume', 91), 'LanguageID', 6);
   const parent = { timestamp: new Date(0), mode: 16877 };
@@ -136,7 +136,7 @@ test('已有国际版偏好补充条款且保留目录、音量、未知文件�
   assert.deepEqual(fake.writes, [prefsPath]);
 });
 
-test('国际版重复启动保留所有内置语言选择，不被英文默认值覆盖', async () => {
+test('repeated international launches keep all built-in language choices instead of overwriting them with the English default', async () => {
   for (const language of [1, 2, 3, 4, 5, 6]) {
     const contents = setInt(setInt(header(), 'LanguageID', language), 'user_terms', 1);
     const fake = fakeIDB([[prefsPath, { contents, mode: 33206 }]]);
@@ -146,7 +146,7 @@ test('国际版重复启动保留所有内置语言选择，不被英文默认�
   }
 });
 
-test('修复上一版误写的两字节配额，已同意条款时也不能跳过修复', async () => {
+test('fixes the two-byte quota mis-written by the previous version, and the fix must not be skipped even when the terms are already accepted', async () => {
   const old = setInt(setInt(header(), 'LanguageID', 4), 'user_terms', 1);
   new DataView(old.buffer).setUint32(12, 2, true);
   const before = old.slice();
@@ -161,7 +161,7 @@ test('修复上一版误写的两字节配额，已同意条款时也不能跳�
   assert.deepEqual(fake.writes, [prefsPath]);
 });
 
-test('完整启动链无查询串也加载国际版，先提交偏好再启动 Unity，并保留查询串和 hash', async () => {
+test('the full launch chain loads the international build even without a query string, commits preferences before starting Unity, and keeps the query string and hash', async () => {
   const bootstrap = html.slice(html.indexOf('      var container ='), html.indexOf('      function receiveOrientationFromUnity'));
   for (const suffix of ['', '#anchor', '?uid=7&mjPlayers=3#anchor', '?sign=custom', '?mjLang=zh']) {
     const fake = fakeIDB([], { upgrade: true });
@@ -175,7 +175,7 @@ test('完整启动链无查询串也加载国际版，先提交偏好再启动 U
       fetch: () => Promise.resolve({ ok: true }),
       __mjHost: { ready: Promise.resolve() },
       __mjClock: { async configure(config) {
-        assert.equal(fake.closed, true, '计时配置也不得早于偏好提交');
+        assert.equal(fake.closed, true, 'the clock config must also not be committed before the preferences');
         await Promise.resolve();
         config.codeUrl = 'Build_intl/' + clockManifest.codeFile;
         config.instantiateWasm = () => {};
@@ -192,7 +192,7 @@ test('完整启动链无查询串也加载国际版，先提交偏好再启动 U
         } },
       },
       createUnityInstance(_canvas, config) {
-        assert.equal(clockReady, true, 'Unity必须等待派生客户端与计时桥接配置完成');
+        assert.equal(clockReady, true, 'Unity must wait for the derived client and clock-bridge config to finish');
         assert.equal(typeof config.instantiateWasm, 'function');
         const contents = fake.records.get(prefsPath).contents;
         assert.equal(intOf(contents, 'user_terms'), 1);
@@ -213,7 +213,7 @@ test('完整启动链无查询串也加载国际版，先提交偏好再启动 U
   }
 });
 
-test('损坏偏好不被重写，IndexedDB 不可用或事务中止时仍能结束启动准备', async () => {
+test('corrupt preferences are not rewritten, and launch preparation still finishes when IndexedDB is unavailable or the transaction aborts', async () => {
   const invalid = Uint8Array.from([1, 2, 3]);
   assert.strictEqual(setInt(invalid, 'user_terms', 1), invalid);
   const fake = fakeIDB([[prefsPath, { contents: invalid, mode: 33188 }]]);

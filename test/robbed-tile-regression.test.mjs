@@ -49,12 +49,12 @@ function setup(kind, multiRon = false) {
   engine.finishHand = async () => {}; // Keeps the real settlement and protocol construction; only prevents the next hand from starting.
   for (const p of engine.players) engine.updateWaits(p);
   const physical = engine.players.flatMap((p) => p.hand.concat(p.melds.flatMap((m) => m.tiles)));
-  assert.equal(new Set(physical).size, physical.length, '测试手牌不能重复实体牌');
+  assert.equal(new Set(physical).size, physical.length, 'test hand must not repeat a physical tile');
   return { engine, donor, card, events };
 }
 
-for (const [kind, label] of [['kakan', '抢加杠'], ['ankan', '国士抢暗杠'], ['babei', '抢北']]) {
-  test(`${label}结算时从放铳者暗手移除被抢的实体牌，但不完成杠或拔北`, async () => {
+for (const [kind, label] of [['kakan', 'added kan robbery'], ['ankan', 'kokushi robbing closed kan'], ['babei', 'nukidora robbery']]) {
+  test(`${label} settlement removes the robbed physical tile from the discarder concealed hand, but does not complete the kan or nukidora`, async () => {
     const { engine, donor, card, events } = setup(kind);
     const before = structuredClone(donor);
     let sawDeclaration = false;
@@ -62,7 +62,7 @@ for (const [kind, label] of [['kakan', '抢加杠'], ['ankan', '国士抢暗杠'
     engine.emit = (id, data) => {
       if (id === RiichiMsg.ENtfPlayCard) {
         sawDeclaration = true;
-        assert.deepEqual(donor.hand, before.hand, '抢牌窗口开始前不能移除宣告牌');
+        assert.deepEqual(donor.hand, before.hand, 'the declared tile must not be removed before the robbery window opens');
         assert.ok(data.userInfos[1].canQiangActions.includes(PlayAction.Hu));
       }
       emit(id, data);
@@ -71,7 +71,7 @@ for (const [kind, label] of [['kakan', '抢加杠'], ['ankan', '国士抢暗杠'
     else await engine.doKan(0, card, kind);
     assert.ok(sawDeclaration);
     const stop = events.find((event) => event.id === RiichiMsg.ENtfGameStop)?.data;
-    assert.ok(stop, '必须走到真实和牌结算');
+    assert.ok(stop, 'must reach the real win settlement');
     assert.deepEqual(stop.huSeats, [1]);
     assert.equal(stop.huCard, card);
     assert.deepEqual(donor.hand, before.hand.filter((tile) => tile !== card));
@@ -83,7 +83,7 @@ for (const [kind, label] of [['kakan', '抢加杠'], ['ankan', '国士抢暗杠'
   });
 }
 
-test('抢北多响只移除一次被抢牌', async () => {
+test('nukidora multi-ron removes the robbed tile only once', async () => {
   const { engine, donor, card, events } = setup('babei', true);
   const before = donor.hand.slice();
   await engine.doBaBei(0, card);
@@ -91,7 +91,7 @@ test('抢北多响只移除一次被抢牌', async () => {
   assert.deepEqual(donor.hand, before.filter((tile) => tile !== card));
 });
 
-test('普通荣和不再移除放铳者手牌', async () => {
+test('a normal ron no longer removes tiles from the discarder hand', async () => {
   const { engine, donor, card } = setup('babei');
   donor.hand.splice(donor.hand.indexOf(card), 1);
   donor.discards.push(card);
@@ -101,19 +101,19 @@ test('普通荣和不再移除放铳者手牌', async () => {
   assert.deepEqual(donor, before);
 });
 
-test('抢牌的任一赢家不合法时，不能提交手牌或撤销立直状态', async () => {
+test('if any robbery winner is illegal, neither the hand nor the riichi state can be committed', async () => {
   const { engine, donor, card } = setup('babei');
   donor.riichi = true;
   donor.riichiPending = true;
   donor.score -= 1_000;
   engine.riichiSticks = 1;
   const before = structuredClone(donor);
-  await assert.rejects(engine.winRons([1, 2], 0, card, {}, { robbed: true }), /非法荣和/);
+  await assert.rejects(engine.winRons([1, 2], 0, card, {}, { robbed: true }), /invalid ron/);
   assert.deepEqual(donor, before);
   assert.equal(engine.riichiSticks, 1);
 });
 
-test('多响中后续赢家非法时，先前赢家的包牌标记也不能被修改', async () => {
+test('when a later winner in a multi-ron is illegal, the earlier winner pao flag also cannot be changed', async () => {
   const { engine, donor, events } = setup('kakan');
   const winner = engine.players[1];
   winner.hand = [471, 472, 111, 112, 113, 211, 212];
@@ -123,16 +123,16 @@ test('多响中后续赢家非法时，先前赢家的包牌标记也不能被�
   ];
   winner.menzen = false;
   const before = structuredClone(engine.players);
-  await assert.rejects(engine.winRons([1, 2], donor.seat, 473), /非法荣和 seat=2/);
+  await assert.rejects(engine.winRons([1, 2], donor.seat, 473), /invalid ron seat=2/);
   assert.deepEqual(engine.players, before);
   assert.equal(events.length, 0);
 });
 
-test('被抢的实体牌不在手中时拒绝结算，不能误删末张手牌', async () => {
+test('settlement is rejected when the robbed physical tile is not in hand, so the last hand tile is not deleted by mistake', async () => {
   const { engine, donor, card, events } = setup('babei');
   donor.hand.splice(donor.hand.indexOf(card), 1);
   const before = structuredClone(donor);
-  await assert.rejects(engine.winRons([1], 0, card, {}, { robbed: true }), /被抢牌不在手中/);
+  await assert.rejects(engine.winRons([1], 0, card, {}, { robbed: true }), /robbed tile not in hand/);
   assert.deepEqual(donor, before);
   assert.equal(events.length, 0);
 });

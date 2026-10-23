@@ -67,20 +67,20 @@ const WHITE_TANKI = [[1, [1, 2, 3, 4, 5, 6]], [2, [7, 8, 9]], [3, [2, 3, 4]], [4
 // 123m 456m 789p 24s 99s: kanchan wait on 3s; menzen with no yaku (only riichi or tsumo wins).
 const KANCHAN_NO_YAKU = [[1, [1, 2, 3, 4, 5, 6]], [2, [7, 8, 9]], [3, [2, 4, 9, 9]]];
 
-test('搜索：路径上假想摸入的牌从待牌剩余枚数中扣除，缓存键区分已摸牌', () => {
+test('search: hypothetically drawn tiles on the path are deducted from the remaining wait count; the cache key distinguishes drawn tiles', () => {
   const hand = makeTiles(WHITE_TANKI);
   const engine = makeEngine([makePlayer(0, hand), makePlayer(1), makePlayer(2), makePlayer(3)]);
   const search = makeSearch(publicContext(engine, 0, null, 'advanced'), [], 900);
   const root = search.tenpaiProfile(hand);
   const after = search.tenpaiProfile(hand, [], [idx(45)]);
   assert.equal(root.ukeire, 3);
-  assert.equal(after.ukeire, 2, '白已被摸走一张');
-  assert.equal(search.tenpaiProfile(hand).ukeire, 3, '同一手牌不同 drawn 不共用缓存');
+  assert.equal(after.ukeire, 2, 'one white has already been drawn');
+  assert.equal(search.tenpaiProfile(hand).ukeire, 3, 'the same hand with a different drawn tile does not share the cache');
   // Counter-example: drawing a tile unrelated to the waits does not change the ukeire.
   assert.equal(search.tenpaiProfile(hand, [], [idx(11)]).ukeire, 3);
 });
 
-test('估值：立直不合法（点棒不足）时荣和受入不按立直计，合法时才计', () => {
+test('valuation: when riichi is illegal (insufficient points), ron ukeire is not counted as riichi; it is counted only when legal', () => {
   const hand = makeTiles(KANCHAN_NO_YAKU);
   const profileOf = (score) => {
     const engine = makeEngine([makePlayer(0, hand, score), makePlayer(1), makePlayer(2), makePlayer(3)]);
@@ -89,19 +89,19 @@ test('估值：立直不合法（点棒不足）时荣和受入不按立直计�
   };
   const legal = profileOf(25_000);
   const illegal = profileOf(500);
-  assert.ok(legal.ronUkeire > 0, '合法立直：嵌张无役听牌可荣和');
-  assert.equal(illegal.ronUkeire, 0, '立直不合法且默听无役：只剩自摸，不计荣和');
-  assert.ok(illegal.ukeire > 0, '门清自摸仍可和');
-  assert.ok(legal.points > illegal.points, '合法立直的打点更高');
+  assert.ok(legal.ronUkeire > 0, 'legal riichi: kanchan no-yaku tenpai can ron');
+  assert.equal(illegal.ronUkeire, 0, 'illegal riichi with no-yaku dama: only tsumo is left, ron is not counted');
+  assert.ok(illegal.ukeire > 0, 'closed-hand tsumo can still win');
+  assert.ok(legal.points > illegal.points, 'legal riichi scores higher');
 });
 
-test('读牌：国士区分单面与十三面振听；舍过幺九或拔北不代表不可能国士', () => {
+test('read tells: kokushi distinguishes single-wait and 13-sided furiten; having discarded a terminal or nukidora does not mean kokushi is impossible', () => {
   const avail = new Array(34).fill(3);
   const furiten = new Set([idx(25)]);
   const model = kokushiModel({ riichi: true, melds: [], discardKinds: new Set([25]) }, furiten, avail);
   assert.ok(model && model.prior > 0);
-  assert.ok(model.hit[idx(41)] > 0 && model.hit[idx(19)] > 0, '未见幺九牌有放铳可能');
-  assert.equal(model.hit[idx(15)], 0, '中张不可能放国士');
+  assert.ok(model.hit[idx(41)] > 0 && model.hit[idx(19)] > 0, 'unseen terminal tiles may be a deal-in risk');
+  assert.equal(model.hit[idx(15)], 0, 'a middle tile cannot deal in kokushi');
   // An open or closed-kan hand truly cannot be kokushi; North pull is not a meld.
   assert.equal(kokushiModel({ riichi: true, melds: [{ type: 'chi', tiles: [] }], discardKinds: new Set() }, new Set(), avail), null);
   assert.equal(kokushiModel({ riichi: true, melds: [{ type: 'ankan', tiles: [] }], discardKinds: new Set() }, new Set(), avail), null);
@@ -110,7 +110,7 @@ test('读牌：国士区分单面与十三面振听；舍过幺九或拔北不�
   const discarded = kokushiModel({ riichi: true, melds: [], discardKinds: new Set([11, 41]) }, two, avail);
   assert.ok(discarded.prior > 0 && discarded.prior < model.prior);
   assert.equal(discarded.hit[idx(11)], 0);
-  assert.ok(discarded.hit[idx(19)] > 0 && discarded.hit[idx(19)] < model.hit[idx(19)], '十三面因振听排除，但单面仍可能');
+  assert.ok(discarded.hit[idx(19)] > 0 && discarded.hit[idx(19)] < model.hit[idx(19)], 'the 13-sided wait is excluded by furiten, but the single wait is still possible');
   // A tile with zero unseen count may still be in our own hand: the opponent lacks this kind, yet can still ron the last copy we discard.
   const none = avail.slice();
   none[idx(41)] = 0;
@@ -122,12 +122,12 @@ test('读牌：国士区分单面与十三面振听；舍过幺九或拔北不�
   const engine = makeEngine(players);
   discard(engine, 1, 25, { riichi: true });
   const t = readThreats(engine, 0, () => 3).threats.find((x) => x.seat === 1);
-  assert.ok(t.lossHit, '立直者带国士混合损失');
+  assert.ok(t.lossHit, 'riichi loss includes the kokushi component');
   assert.equal(t.hit[idx(25)], 0);
   assert.ok(t.hit[idx(41)] > 0);
 });
 
-test('预算：耗尽后确定性回退，仍返回手中的合法弃牌，且不触发搜索', () => {
+test('budget: after exhaustion, falls back deterministically, still returns a legal discard from hand, and triggers no search', () => {
   const hand = makeTiles([[1, [1, 2, 3, 4, 6]], [2, [2, 3, 5, 7, 8]], [3, [3, 4, 5, 9]]]);
   const run = (budget) => {
     const engine = makeEngine([makePlayer(0, hand), makePlayer(1), makePlayer(2), makePlayer(3)]);
@@ -147,13 +147,13 @@ test('预算：耗尽后确定性回退，仍返回手中的合法弃牌，且�
   assert.ok(hand.includes(normal.discardId));
 });
 
-test('预算：整次决策共享——立直评估与鸣牌各选项不超出预算，耗尽时立直评估返回空', () => {
+test('budget: shared across the whole decision; riichi evaluation and each claim option do not exceed the budget; riichi evaluation returns null when exhausted', () => {
   const hand = makeTiles([...KANCHAN_NO_YAKU, [4, [5]]]);
   const engine = makeEngine([makePlayer(0, hand), makePlayer(1), makePlayer(2), makePlayer(3)]);
   const kinds = engine.formalTenpaiDiscards(engine.players[0]);
   assert.ok(kinds.length > 0);
   const tiny = createDecisionBudget({ calc: 0, work: 100_000 });
-  assert.equal(riichiPolicy(engine, 0, kinds, 'advanced', tiny), null, '一个候选都没评估完则不宣告');
+  assert.equal(riichiPolicy(engine, 0, kinds, 'advanced', tiny), null, 'no candidate fully evaluated, so no riichi is declared');
   assert.equal(tiny.exhausted, true);
   const ok = riichiPolicy(engine, 0, kinds, 'advanced', createDecisionBudget());
   assert.equal(ok.action, 'riichi');
@@ -170,24 +170,24 @@ test('预算：整次决策共享——立直评估与鸣牌各选项不超出�
   ];
   const budget = createDecisionBudget({ calc: 20, work: 6_000 });
   const first = claimPolicy(claimEngine, 1, card, options, 'advanced', budget);
-  assert.ok(budget.calcUsed <= 20, `calcWin 次数 ${budget.calcUsed} 不超过整次预算`);
+  assert.ok(budget.calcUsed <= 20, `calcWin count ${budget.calcUsed} does not exceed the whole-decision budget`);
   const again = claimPolicy(claimEngine, 1, card, options, 'advanced', createDecisionBudget({ calc: 20, work: 6_000 }));
   assert.deepEqual(again && { a: again.action, u: again.used }, first && { a: first.action, u: first.used });
 });
 
-test('预算：零预算与鸣牌分片不允许负预算或超支', () => {
+test('budget: zero budget and claim slices never allow negative budget or overspend', () => {
   const hand = makeTiles([[1, [1, 2, 3, 4, 6]], [2, [2, 3, 5, 7, 8]], [3, [3, 4, 5, 9]]]);
   const engine = makeEngine([makePlayer(0, hand), makePlayer(1), makePlayer(2), makePlayer(3)]);
   for (const work of [0, 35, 500]) {
     const budget = createDecisionBudget({ calc: 0, work });
     const result = chooseDiscardByPolicy(engine, 0, { level: 'advanced', budget });
     assert.ok(hand.includes(result.discardId));
-    assert.ok(budget.workUsed <= work, `${budget.workUsed} 超出 ${work}`);
+    assert.ok(budget.workUsed <= work, `${budget.workUsed} exceeds ${work}`);
     assert.ok(budget.workUsed >= 0 && budget.calcUsed === 0);
   }
 });
 
-test('搜索：相同牌种但保留赤宝不同的手牌不能共用打点缓存', () => {
+test('search: hands with the same tile kinds but different red-five retention cannot share the points cache', () => {
   const hand = makeTiles([[1, [1, 2, 3, 4, 5, 6]], [2, [7, 8, 9]], [3, [2, 3, 4]], [4, [5]]]);
   const engine = makeEngine([makePlayer(0, hand), makePlayer(1), makePlayer(2), makePlayer(3)]);
   engine.akaSet.add(tileId(1, 5, 1));
@@ -195,10 +195,10 @@ test('搜索：相同牌种但保留赤宝不同的手牌不能共用打点缓�
   const search = makeSearch(publicContext(engine, 0, null, 'advanced'), [], 900);
   const red = search.tenpaiProfile(hand);
   const plain = search.tenpaiProfile(normal);
-  assert.ok(red.points > plain.points, `${red.points} 应高于 ${plain.points}`);
+  assert.ok(red.points > plain.points, `${red.points} should be higher than ${plain.points}`);
 });
 
-test('搜索：立直漏和振听不能计荣和，余牌不足不能假设未来立直', () => {
+test('search: riichi furiten cannot count ron, and with too few tiles left, a future riichi cannot be assumed', () => {
   const hand = makeTiles(KANCHAN_NO_YAKU);
   const engine = makeEngine([makePlayer(0, hand), makePlayer(1), makePlayer(2), makePlayer(3)]);
   engine.players[0].riichi = true;
@@ -210,7 +210,7 @@ test('搜索：立直漏和振听不能计荣和，余牌不足不能假设未�
   assert.equal(makeSearch(publicContext(engine, 0, null, 'advanced'), []).tenpaiProfile(hand).ronUkeire, 0);
 });
 
-test('三麻估值：拔北按真实符数补番，北同时为宝牌时逐张指示牌叠加', () => {
+test('sanma valuation: nukidora adds han per actual fu count; when north is also dora, each indicator stacks', () => {
   const hand = makeTiles([[2, [1, 2, 3, 4, 5, 6]], [3, [7, 8, 9, 2, 3, 4]], [4, [5]]]);
   const engine = makeEngine([makePlayer(0, hand), makePlayer(1), makePlayer(2)]);
   engine.players[0].melds = [{ type: 'babei', tiles: [tileId(4, 4, 1)] }];
@@ -222,11 +222,11 @@ test('三麻估值：拔北按真实符数补番，北同时为宝牌时逐张�
       ronTile: tileId(4, 5, 2), riichi: true, doraTiles: ctx.doraTiles, roundWind: 1, seatWind: engine.seatWindOf(0),
     });
     const expected = engine.applyExtraFan(raw, 1 + indicators.length, true).ten * 1.3;
-    assert.equal(profile.points, expected, `拔北与 ${indicators.length} 张西指示牌`);
+    assert.equal(profile.points, expected, `nukidora with ${indicators.length} West dora indicator(s)`);
   }
 });
 
-test('三麻高级：北是国士必需牌或唯一雀头时保留，闲张北仍拔出', () => {
+test('sanma advanced: north is kept when it is a required kokushi tile or the only pair; an isolated north is still pulled', () => {
   const shapes = [
     [[1, [1, 9]], [2, [1, 9, 5]], [3, [1, 9]], [4, [1, 2, 3, 4, 5, 6, 7]]],
     [[2, [1, 2, 3, 4, 5, 6, 7, 8, 9]], [3, [2, 3, 4]], [4, [4, 4]]],
@@ -237,7 +237,7 @@ test('三麻高级：北是国士必需牌或唯一雀头时保留，闲张北�
     const before = structuredClone(engine.players[0]);
     const result = engine.aiTurn(0, true, [PlayAction.Normal, PlayAction.BaBei]);
     assert.notEqual(result.action, PlayAction.BaBei);
-    assert.deepEqual(engine.players[0], before, '假想拔北不改变实体手牌');
+    assert.deepEqual(engine.players[0], before, 'hypothetical nukidora does not change the real hand');
   }
   const hand = makeTiles([[2, [1, 2, 3, 4, 5, 6]], [3, [1, 2, 3, 5, 6, 8, 8]], [4, [4]]]);
   const engine = makeEngine([makePlayer(0, hand), makePlayer(1), makePlayer(2)]);
@@ -247,7 +247,7 @@ test('三麻高级：北是国士必需牌或唯一雀头时保留，闲张北�
 // Install the hidden-field trap before the first evaluation: opponents' hand / draw / tenpai, the wall / rinshan / ura dora.
 function installTraps(engine, seat) {
   const deny = (object, key) => Object.defineProperty(object, key, {
-    get() { assert.fail(`AI 读取了隐藏字段 ${key}`); },
+    get() { assert.fail(`AI read hidden field ${key}`); },
   });
   for (const q of engine.players) {
     if (q.seat === seat) continue;
@@ -256,7 +256,7 @@ function installTraps(engine, seat) {
   for (const key of ['wall', 'replacements', 'uraIndicators']) deny(engine, key);
 }
 
-test('隐藏信息：首次评估前安装陷阱，立直、鸣牌、预算耗尽三种情形都不读取', () => {
+test('hidden information: traps are installed before the first evaluation; none are read in riichi, call, or budget-exhausted cases', () => {
   // Riichi
   const riichiHand = makeTiles([...KANCHAN_NO_YAKU, [4, [5]]]);
   const a = makeEngine([makePlayer(0, riichiHand), makePlayer(1), makePlayer(2), makePlayer(3)]);

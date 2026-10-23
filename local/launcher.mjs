@@ -9,7 +9,7 @@ const directory = path.dirname(fileURLToPath(import.meta.url));
 const logDirectory = path.join(directory, '..', 'logs');
 const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*/, '').replace('T', '-');
 const logPath = path.join(logDirectory, `game-${stamp}.log`);
-console.log(`[local] 本次日志：${logPath}`);
+console.log(`[local] Log for this run: ${logPath}`);
 function tee(stream, target) {
   // A forked child under the launcher test is a bare mock without stdio pipes.
   if (!stream || typeof stream.setEncoding !== 'function') return;
@@ -27,7 +27,7 @@ let opened = false;
 
 const startupTimer = setTimeout(() => {
   if (opened) return;
-  console.error('[local] 本地服务 15 秒内未启动，请检查上方错误、端口和游戏资源。');
+  console.error('[local] Local server did not start within 15 seconds. Check the errors above, the port, and the game resources.');
   child.kill('SIGTERM');
 }, 15_000);
 const requestedPlayers = process.argv.find((arg) => arg === '--players=3' || arg === '--players=4')?.slice(-1);
@@ -89,17 +89,17 @@ child.on('message', (message) => {
   opened = true;
   clearTimeout(startupTimer);
   void openBrowser(gameUrl(message.url)).catch((error) => {
-    console.error(`[local] 无法自动打开浏览器：${error.message}`);
-    console.error(`[local] 请手动打开：${gameUrl(message.url)}`);
+    console.error(`[local] Could not open the browser automatically: ${error.message}`);
+    console.error(`[local] Open this page manually: ${gameUrl(message.url)}`);
   });
 });
 child.on('error', (error) => {
   clearTimeout(startupTimer);
-  console.error(`[local] 无法启动本地服务进程：${error.message}`);
+  console.error(`[local] Could not start the local server process: ${error.message}`);
 });
 child.on('exit', (code) => {
   clearTimeout(startupTimer);
-  if (!opened && code) console.error(`[local] 本地服务已退出（代码 ${code}），请根据上方信息修复后重试。`);
+  if (!opened && code) console.error(`[local] Local server exited (code ${code}). Fix the issue shown above and try again.`);
   process.exit(code ?? 0);
 });
 process.once('SIGINT', () => child.kill('SIGINT'));

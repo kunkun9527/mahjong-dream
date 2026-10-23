@@ -20,7 +20,7 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function until(predicate, timeout = 20_000) {
   const end = Date.now() + timeout;
   while (!predicate()) {
-    if (Date.now() > end) throw new Error('等待超时');
+    if (Date.now() > end) throw new Error('wait timed out');
     await wait(2);
   }
 }
@@ -62,7 +62,7 @@ const settings = (extra = {}) => ({
 });
 const frameKey = (event, payload) => `${event}:${JSON.stringify(payload, (k, v) => (k === 'gameID' ? undefined : v))}`;
 
-test('真人决策记录可在任意切点重演到同一局面，接着打完结果一致', async () => {
+test('a human-decision record can be replayed to the same position from any cut point, and finishing the match gives the same result', async () => {
   // Original match: record frames, and how many frames had been emitted when each log entry was taken.
   const frames = [];
   const framesAtEntry = [];
@@ -70,7 +70,7 @@ test('真人决策记录可在任意切点重演到同一局面，接着打完�
   autoRespond(original);
   await original.start();
   const log = original.matchRecord();
-  assert.ok(log.length > 40, `记录条数 ${log.length}`);
+  assert.ok(log.length > 40, `record entries ${log.length}`);
   assert.ok(log.some((entry) => entry[0] === 'c') && log.some((entry) => entry[0] === 'd') && log.some((entry) => entry[0] === 'p'));
 
   for (const cut of [0, 1, 7, Math.floor(log.length / 2), log.length - 1]) {
@@ -79,13 +79,13 @@ test('真人决策记录可在任意切点重演到同一局面，接着打完�
     const replay = new GameEngine({
       ...settings({ speed: 1 }), replayLog: log.slice(0, cut), humanPresent: false,
       emit: (e, p) => replayFrames.push(frameKey(e, p)),
-      onReplayDone: (clean) => { assert.ok(clean, `cut ${cut} 分叉`); doneAt = replayFrames.length; },
+      onReplayDone: (clean) => { assert.ok(clean, `cut ${cut} diverged`); doneAt = replayFrames.length; },
     });
     const started = replay.start();
     await until(() => doneAt != null);
     // The replay stops exactly where the original was waiting for decision `cut` (AI moves after the last decision included).
     assert.deepEqual(replayFrames.slice(0, doneAt), frames.slice(0, framesAtEntry[cut]), `cut ${cut}`);
-    assert.equal(replay.speed, 1, '重演结束后恢复正常速度');
+    assert.equal(replay.speed, 1, 'speed is restored to normal after replay ends');
     // Continue live with the same player and finish identically.
     replay.speed = 0;
     replay.setHumanPresent(true); // The connection/sync gate opens before live client input resumes.
@@ -93,12 +93,12 @@ test('真人决策记录可在任意切点重演到同一局面，接着打完�
     if (replay._pending) humanMove(replay);
     if (replay._prepareWaiter) replay.submitPrepare();
     await started;
-    assert.deepEqual(replay.scores, original.scores, `cut ${cut} 终局点数`);
-    assert.deepEqual(replay.matchRecord(), log, `cut ${cut} 记录`);
+    assert.deepEqual(replay.scores, original.scores, `cut ${cut} final scores`);
+    assert.deepEqual(replay.matchRecord(), log, `cut ${cut} record`);
   }
 });
 
-test('默认精简日志不改变牌局，调试模式可还原摸牌、AI及空窗口细节', async () => {
+test('the default compact log does not change the match; debug mode restores draw, AI and empty-window details', async () => {
   const normal = [], detailed = [];
   const options = settings({ players: 3, maxHands: 1, autoHuman: true });
   const engine = new GameEngine({ ...options, log: (line) => normal.push(line) });
@@ -108,16 +108,16 @@ test('默认精简日志不改变牌局，调试模式可还原摸牌、AI及空
   assert.deepEqual(engine.scores, debug.scores);
   assert.deepEqual(engine.matchRecord(), debug.matchRecord());
   assert.ok(normal.length < detailed.length / 2, `${normal.length} < ${detailed.length}/2`);
-  assert.doesNotMatch(normal.join('\n'), /\[ai\]|\[claim\]|\[draw\].*P\d 摸/);
-  assert.match(normal.join('\n'), /\[hand\].*开局/);
+  assert.doesNotMatch(normal.join('\n'), /\[ai\]|\[claim\]|\[draw\].*P\d draw/);
+  assert.match(normal.join('\n'), /\[hand\].*hand start/);
   assert.match(normal.join('\n'), /\[discard\]/);
-  assert.match(normal.join('\n'), /\[hand\].*结束/);
+  assert.match(normal.join('\n'), /\[hand\].*end scores/);
   assert.match(detailed.join('\n'), /\[ai\]/);
   assert.match(detailed.join('\n'), /\[claim\]/);
-  assert.match(detailed.join('\n'), /\[draw\].*P\d 摸/);
+  assert.match(detailed.join('\n'), /\[draw\].*P\d draw/);
 });
 
-test('离开时真人回合冻结不超时，回来后才开始计时', async () => {
+test('the human turn freezes without timing out while away; the clock starts only after returning', async () => {
   const engine = new GameEngine({ ...settings({ baseTime: 0, extraTime: 0, speed: 0 }), humanPresent: false, emit() {} });
   let pendingSeen = false;
   const waitHuman = engine.waitHuman.bind(engine);
@@ -128,7 +128,7 @@ test('离开时真人回合冻结不超时，回来后才开始计时', async ()
   await until(() => pendingSeen && engine._pending);
   const before = engine.humanLog.length;
   await wait(60);
-  assert.ok(engine._pending, '离开期间不超时');
+  assert.ok(engine._pending, 'no timeout while away');
   assert.equal(engine.humanLog.length, before);
   engine.setHumanPresent(true);
   await until(() => engine.humanLog.length > before);
@@ -137,7 +137,7 @@ test('离开时真人回合冻结不超时，回来后才开始计时', async ()
   assert.ok(engine.matchOver);
 });
 
-test('开了摸切/不鸣牌后离开：自动动作也冻结，回来后才继续', async () => {
+test('with tsumogiri/no-claim enabled, automatic actions also freeze while away and continue only after returning', async () => {
   const engine = new GameEngine({
     ...settings({ baseTime: 0, extraTime: 0, speed: 0 }), humanPresent: false, internalState: { 2: true, 3: true }, emit() {},
   });
@@ -147,7 +147,7 @@ test('开了摸切/不鸣牌后离开：自动动作也冻结，回来后才继�
   await until(() => engine._pending);
   const before = engine.humanLog.length;
   await wait(60);
-  assert.ok(engine._pending, '离开期间自动动作不执行');
+  assert.ok(engine._pending, 'automatic actions do not run while away');
   assert.equal(engine.humanLog.length, before);
   engine.setHumanPresent(true);
   await until(() => engine.humanLog.length > before);
@@ -190,7 +190,7 @@ function withConfig(t) {
   t.after(() => { for (const key of Object.keys(config)) mock.config[key] = old[key]; });
 }
 
-test('页面重载：从记录重建对局，20162 等重演完成后回到同一局面，客户端同步后才恢复计时', async (t) => {
+test('page reload: the match is rebuilt from the record; after 20162 and replay complete, it returns to the same position; the clock resumes only after client sync', async (t) => {
   withConfig(t);
   const { session, engine, record } = await playUntil(12);
   assert.ok(record && record.table.robots.length === 3 && record.log.length >= 12);
@@ -204,7 +204,7 @@ test('页面重载：从记录重建对局，20162 等重演完成后回到同�
   const ws = socket();
   restored.resume(ws);
   const ready = mock.restoreMatch(restored, JSON.parse(JSON.stringify(record)));
-  assert.equal(restored.tableId, 1, '登录前就带对局标记');
+  assert.equal(restored.tableId, 1, 'the match marker is present before login');
   // The client asks before the replay has caught up: the answer waits.
   assert.deepEqual(mock.dispatch(restored, P.W().v(2, 20162).v(11, 3).s(3, new Uint8Array()).bytes()), []);
   await ready;
@@ -216,24 +216,24 @@ test('页面重载：从记录重建对局，20162 等重演完成后回到同�
   assert.equal(engine2._pending?.kind, expected.kind);
   await until(() => ws.frames.some((f) => f[2] === 20163));
   const reply = P.dict(ws.frames.find((f) => f[2] === 20163)[3]);
-  assert.ok(reply[4], '20163 带牌桌');
-  assert.equal(reply[100], undefined, '新页面先进入牌桌，再整手重放');
+  assert.ok(reply[4], '20163 carries the table');
+  assert.equal(reply[100], undefined, 'the new page enters the table first, then replays the whole hand');
   await until(() => ws.frames.some(f => f[2] === 20408));
   const prepare = P.W().v(1, RiichiMsg.EReqPrepare).v(3, Date.now()).s(100, new Uint8Array()).bytes();
   mock.dispatch(restored, P.W().v(2, 20018).v(11, 4).s(3, prepare).bytes());
   await until(() => ws.controls.some((message) => message.phase === 'end'));
-  assert.equal(restored.replaying, true, '发完恢复快照不是客户端已消费完成');
+  assert.equal(restored.replaying, true, 'sending the restore snapshot is not the client having consumed it');
   assert.equal(engine2.humanPresent, false);
   assert.equal(restored.ackClientSync(ws.controls.find((message) => message.phase === 'end'), ws), true);
   assert.equal(restored.replaying, false);
-  assert.equal(engine2.humanPresent, true, '客户端同步后恢复在线');
-  assert.equal(engine2.humanClockState().running, false, '重建窗口仍等待手牌可操作信号');
+  assert.equal(engine2.humanPresent, true, 'online again after client sync');
+  assert.equal(engine2.humanClockState().running, false, 'the rebuilt window still waits for the hand-actionable signal');
   assert.equal(restored.clientControl({ mjClockReady: engine2.humanClockState().id }, ws), true);
   assert.equal(engine2.humanClockState().running, true);
   restored.destroy();
 });
 
-test('离开超过 5 分钟：打开时 AI 中性代打完成上一场，计入战绩并留下英文提示；未超时则原样恢复', async (t) => {
+test('away for more than 5 minutes: on open, the neutral AI plays out the previous match, it counts toward stats and leaves a notice; if not timed out, it is restored unchanged', async (t) => {
   withConfig(t);
   const { session, record } = await playUntil(8);
   session.destroy();
@@ -248,7 +248,7 @@ test('离开超过 5 分钟：打开时 AI 中性代打完成上一场，计入�
   const settled = await host.recoverMatch({ now });
   assert.equal(settled.settled, true);
   assert.equal(stale.activeMatch, null);
-  assert.equal(stale.stats.yonma.games, games + 1, '计入战绩');
+  assert.equal(stale.stats.yonma.games, games + 1, 'counted in stats');
   assert.match(stale.notice, /^You were away for more than 5 minutes, so the AI finished your last match: \d(st|nd|rd|th) place, [+-]\d+ PT, \+\d+ coins\.$/);
   assert.ok(writes.includes(true));
   assert.equal((await host.handle({ action: 'state' })).notice, stale.notice);
@@ -266,7 +266,7 @@ test('离开超过 5 分钟：打开时 AI 中性代打完成上一场，计入�
   assert.equal(restored.remainingMs, AWAY_LIMIT_MS - 60_000);
   await restored.ready;
   assert.equal(target.tableId, 1);
-  assert.ok(fresh.activeMatch, '恢复后仍保留记录直到打完');
+  assert.ok(fresh.activeMatch, 'the record is kept after restore until the match finishes');
   assert.equal((await host2.handle({ action: 'state' })).inMatch, true);
   await assert.rejects(host2.handle({ action: 'resetStats' }), /Finish or leave the current match first/);
   // Leaving the table drops the record.

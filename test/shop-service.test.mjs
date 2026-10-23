@@ -22,9 +22,9 @@ async function launch(directory) {
   child.stderr.on('data', (chunk) => { errors += chunk; });
   child.stdout.resume();
   const url = await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`服务启动超时: ${errors}`)), 10000);
+    const timer = setTimeout(() => reject(new Error(`service startup timed out: ${errors}`)), 10000);
     child.once('error', (error) => { clearTimeout(timer); reject(error); });
-    child.once('exit', (code) => { clearTimeout(timer); reject(new Error(`服务提前退出${code}: ${errors}`)); });
+    child.once('exit', (code) => { clearTimeout(timer); reject(new Error(`service exited early ${code}: ${errors}`)); });
     child.on('message', (message) => {
       if (message?.type === 'ready') { clearTimeout(timer); resolve(message.url); }
     });
@@ -44,7 +44,7 @@ async function connect(url) {
 }
 function rpc(socket, mid, payload, seq) {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => { cleanup(); reject(new Error('购物响应超时')); }, 5000);
+    const timer = setTimeout(() => { cleanup(); reject(new Error('shop response timed out')); }, 5000);
     const receive = (bytes, isBinary) => {
       if (!isBinary) return; // JSON clock sideband for the bridge; not a protobuf reply
       const frame = P.dict(new Uint8Array(bytes));
@@ -64,7 +64,7 @@ function savedWhen(directory, predicate) {
       watcher.close();
       const latest = JSON.parse(await fs.readFile(path.join(directory, 'profile.json'), 'utf8'));
       const user = new U.UserData(Buffer.from(latest.lobbyData, 'base64'), 349804);
-      reject(new Error(`购物数据未落盘，最新余额: ${[60001, 60002, 60009, 60012].map((id) => `${id}=${user.inventoryCount(6, id)}`).join(', ')}`));
+      reject(new Error(`shop data not persisted, latest balance: ${[60001, 60002, 60009, 60012].map((id) => `${id}=${user.inventoryCount(6, id)}`).join(', ')}`));
     }, 5000);
     async function check() {
       try {
@@ -80,7 +80,7 @@ function savedWhen(directory, predicate) {
   });
 }
 
-test('真实回环服务升级旧档案，四商店购买落盘后重启不返还货币', async () => {
+test('the real loopback service upgrades an old save; after four-shop purchases are persisted, a restart does not refund currency', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mj-shop-service-'));
   let current, socket;
   try {

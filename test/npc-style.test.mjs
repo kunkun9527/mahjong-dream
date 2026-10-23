@@ -16,7 +16,7 @@ const REAL_SKINS = {
 };
 const styleOf = (nick) => NPCS.find((npc) => npc.nick === nick).style;
 
-test('19 名 NPC 各占一套真实皮肤，风格轴都在 1..5', () => {
+test('each of the 19 NPCs has its own real skin, and all style axes are within 1..5', () => {
   assert.equal(NPCS.length, 19);
   assert.equal(new Set(NPCS.map((npc) => npc.id)).size, 19);
   assert.equal(new Set(NPCS.map((npc) => npc.nick)).size, 19);
@@ -31,7 +31,7 @@ test('19 名 NPC 各占一套真实皮肤，风格轴都在 1..5', () => {
   }
 });
 
-test('配桌不撞玩家角色、同桌角色不重复，同种子结果一致', () => {
+test('seating does not collide with the player character, characters at a table are not repeated, and results match for the same seed', () => {
   for (let human = 1; human <= 10; human++) for (let seed = 1; seed <= 30; seed++) for (const count of [2, 3]) {
     const a = pickNpcs(mulberry32(seed), { count, humanWarrior: human, roomId: 4 });
     const b = pickNpcs(mulberry32(seed), { count, humanWarrior: human, roomId: 4 });
@@ -43,7 +43,7 @@ test('配桌不撞玩家角色、同桌角色不重复，同种子结果一致',
   }
 });
 
-test('NPC 显示段位在玩家段位附近，且不低于段位房间的准入下限', () => {
+test('NPC displayed rank is near the player rank and not below the entry floor of the rank room', () => {
   const rooms = { 1: [1, 13], 2: [11, 16], 3: [14, 22], 4: [17, 22] };
   for (const [roomId, [min, max]] of Object.entries(rooms)) for (let level = min; level <= max; level++) {
     for (let seed = 1; seed <= 20; seed++) {
@@ -55,7 +55,7 @@ test('NPC 显示段位在玩家段位附近，且不低于段位房间的准入�
   }
 });
 
-test('情景特性在满值基础上仍然生效（后半更敢押、追立直）', () => {
+test('situational traits still apply at full strength (bolder pushing in the second half, chasing riichi)', () => {
   const style = (nick) => NPCS.find((npc) => npc.nick === nick).style;
   const engineWith = (s, extra) => ({ aiStyles: [null, s], dealerSeat: 0, remain: 60, sanma: false, roundWind: 2, players: [], ...extra });
   const koromo = style('Koromo');
@@ -81,7 +81,7 @@ async function playMatch({ seed, styles, level = 'intermediate', players = 4, on
   return { engine, digest: hash.digest('hex') };
 }
 
-test('每名 NPC 的风格都能打完整场且点棒守恒，同种子重放完全一致', async () => {
+test('each NPC style can play a full match with points conserved, and a replay with the same seed is fully identical', async () => {
   for (let i = 0; i < NPCS.length; i += 3) {
     const styles = [null, ...[0, 1, 2].map((k) => NPCS[(i + k) % NPCS.length].style)];
     const seed = 500 + i;
@@ -145,7 +145,7 @@ async function probeStats(seeds) {
   return stats;
 }
 
-test('风格差异明显：同一局面下副露、立直、押引三项方向正确', async () => {
+test('styles differ clearly: in the same position, the direction of calls, riichi, and push/fold is correct', async () => {
   const s = await probeStats([11, 12, 13, 14, 15, 16]);
   const rate = (a, b) => (b ? a / b : 0);
   const call = (n) => rate(s[n].calls, s[n].claims);

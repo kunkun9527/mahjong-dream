@@ -31,7 +31,7 @@ async function endDraw(engine, tenpai, extra = {}) {
   await engine.endHand({ type: 'draw', liuJuType: 0, tenpai, ...extra });
 }
 
-test('荒牌流局本场增加但庄家未听仍轮庄', async () => {
+test('exhaustive draw increases honba, but a dealer who is not tenpai still rotates', async () => {
   const engine = drawEngine();
   engine.honba = 2;
 
@@ -42,7 +42,7 @@ test('荒牌流局本场增加但庄家未听仍轮庄', async () => {
   assert.equal(engine.juNum, 1);
 });
 
-test('三麻荒牌同样分离本场增加与听牌连庄', async () => {
+test('sanma exhaustive draw likewise separates honba increase from tenpai renchan', async () => {
   const engine = drawEngine({ players: 3 });
   engine.honba = 1;
   engine.dealerSeat = 1;
@@ -56,7 +56,7 @@ test('三麻荒牌同样分离本场增加与听牌连庄', async () => {
   assert.equal(engine.renchanCount, 1);
 });
 
-test('东风与半庄末局的途中流局不适用听牌止且继续连庄重打', async () => {
+test('mid-hand draws in East-only and hanchan final rounds ignore the tenpai stop and continue with renchan', async () => {
   for (const matchLength of ['east', 'hanchan']) {
     const engine = drawEngine({ matchLength, scores: [20_000, 20_000, 25_000, 35_000] });
     engine.roundWind = matchLength === 'east' ? 1 : 2;
@@ -72,7 +72,7 @@ test('东风与半庄末局的途中流局不适用听牌止且继续连庄重�
   }
 });
 
-test('延长场途中流局即使一位达到必要点也继续，击飞与maxHands仍终局', () => {
+test('mid-hand draw in extension play continues even if first place reaches the required points; tobi and maxHands still end the match', () => {
   const extension = drawEngine({ scores: [31_000, 24_000, 23_000, 22_000] });
   extension.roundWind = 2;
   extension.juNum = 0;
@@ -84,7 +84,7 @@ test('延长场途中流局即使一位达到必要点也继续，击飞与maxHa
   const capped = drawEngine({ scores: [25_000, 25_000, 25_000, 25_000], maxHands: 1 });
   assert.equal(capped.decideGameOver(true, capped.scores, { drawNoPenalty: true }), true);
 });
-test('延长场多响含庄时优先连庄，即使另一赢家达到必要点', () => {
+test('in extension play, multi-ron including the dealer prefers renchan even if the other winner reaches the required points', () => {
   const engine = drawEngine({ scores: [29_000, 29_000, 20_000, 22_000] });
   engine.roundWind = 2;
   engine.juNum = 0;
@@ -95,7 +95,7 @@ test('延长场多响含庄时优先连庄，即使另一赢家达到必要点',
 });
 
 
-test('和了止与荒牌庄家听牌止保持生效', () => {
+test('the win-stop and the exhaustive-draw dealer tenpai stop remain in effect', () => {
   const engine = drawEngine({ scores: [20_000, 20_000, 25_000, 35_000] });
   engine.roundWind = 1;
   engine.juNum = 3;
@@ -105,7 +105,7 @@ test('和了止与荒牌庄家听牌止保持生效', () => {
   assert.equal(engine.decideGameOver(true, engine.scores, { drawNoPenalty: false }), true);
 });
 
-test('个人连续连庄独立于继承本场并在轮庄时清零', async () => {
+test('personal consecutive renchan count is independent of inherited honba and resets when the dealer rotates', async () => {
   let finalStats;
   const engine = drawEngine({
     maxHands: 2,
@@ -132,24 +132,24 @@ test('个人连续连庄独立于继承本场并在轮庄时清零', async () =>
   assert.equal(finalStats.maxRenchan, 1);
 });
 
-test('听牌提示在别人行动时也带着自己的听牌信息（13 张手牌）', () => {
+test('the tenpai hint still carries own tenpai info while others act (13-tile hand)', () => {
   const engine = drawEngine();
   const human = engine.players[0];
-  // 123m456m789m 11p 34p，听 2p/5p
+  // 123m456m789m 11p 34p, waits 2p/5p
   human.hand = [110, 120, 130, 140, 150, 160, 170, 180, 190, 210, 211, 230, 240];
   human.isHuman = true;
   human.discardKinds = new Set();
   human.waits = [];
 
-  assert.deepEqual(engine.buildTingInfos(human).map((i) => i.ting), [220, 250], '13 张手牌也要给出听牌');
-  assert.deepEqual(engine.buildTingInfos(human, 250).map((i) => i.play), [250, 250], 'play 用刚打出的牌做牌种编码');
+  assert.deepEqual(engine.buildTingInfos(human).map((i) => i.ting), [220, 250], 'a 13-tile hand must also report tenpai');
+  assert.deepEqual(engine.buildTingInfos(human, 250).map((i) => i.play), [250, 250], 'play encodes the tile kind using the tile just discarded');
 
   const playCard = engine.buildPlayCard(1, 250, 0, false, []);
-  assert.deepEqual(playCard.userInfos[0].tingInfos.map((i) => i.ting), [220, 250], '别人打牌时不下发听牌信息，客户端右侧提示会被清空');
-  assert.equal(playCard.userInfos[1].tingInfos.length, 0, '不下发他人的暗手信息');
+  assert.deepEqual(playCard.userInfos[0].tingInfos.map((i) => i.ting), [220, 250], 'no tenpai info is sent when others discard, which would clear the right-side hint on the client');
+  assert.equal(playCard.userInfos[1].tingInfos.length, 0, 'concealed hands of other players are not sent');
 });
 
-test('比赛第一手和后续摸牌都只公告实际备用余量，不另加8秒', async () => {
+test('the first hand and later draws in a match only announce the actual bank remainder, without adding 8 seconds', async () => {
   const engine = drawEngine();
   const frames = [];
   engine.emit = (ev, payload) => frames.push({ ev, payload });
@@ -161,10 +161,10 @@ test('比赛第一手和后续摸牌都只公告实际备用余量，不另加8�
   engine.waitHuman = () => new Promise(() => {});
   void engine.turnDraw(0);
   const frame = (items) => items.find((item) => item.payload?.userInfos);
-  assert.equal(frame(frames).payload.userInfos[0].leftTimer, 20, '第一手：基础5秒以外只有20秒备用');
+  assert.equal(frame(frames).payload.userInfos[0].leftTimer, 20, 'first hand: only 20 seconds of bank beyond the 5-second base');
   engine.cancelPending(); // A real hand transition closes the preceding decision window.
   engine.handIndex = 1;
   frames.length = 0;
   void engine.turnDraw(0);
-  assert.equal(frame(frames).payload.userInfos[0].leftTimer, 20, '之后只公告备用余量');
+  assert.equal(frame(frames).payload.userInfos[0].leftTimer, 20, 'afterwards only the bank remainder is announced');
 });

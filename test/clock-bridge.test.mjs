@@ -40,7 +40,7 @@ function page(mode = 'node') {
 }
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
-test('Node毫秒投影在后台继续计时，只有真实断线或同步才冻结', () => {
+test('Node millisecond projection keeps counting in the background; only a real disconnect or sync freezes it', () => {
   const { bridge, advance, hide } = page();
   bridge.accept({ id: 1, baseMs: 5000, extraMs: 20000, running: true });
   advance(7000);
@@ -64,19 +64,19 @@ test('Node毫秒投影在后台继续计时，只有真实断线或同步才冻�
   assert.equal(bridge.current().baseMs, 3000);
 });
 
-test('静态宿主直接读取当前引擎；WASM三次读取使用同一毫秒样本，不把宽限计入倒计时', async () => {
+test('the static host reads the current engine directly; three WASM reads use the same millisecond sample, and the grace period is not counted in the countdown', async () => {
   const app = page('browser');
   app.engine({ id: 7, baseMs: 2999, extraMs: 18001, running: false });
   const result = await app.load();
   assert.equal(result.ok, true);
-  assert.equal(app.context.WebAssembly.instantiate, app.instantiate, '不覆写全局WebAssembly');
+  assert.equal(app.context.WebAssembly.instantiate, app.instantiate, 'does not overwrite the global WebAssembly');
   const clock = result.imports.mj.clock;
   assert.equal(clock(0), 1);
   app.engine({ id: 8, baseMs: 5000, extraMs: 0, running: true });
   assert.equal(clock(1), 3);
-  assert.equal(clock(2), 22, '基础与备用各自向上取整，+N 在基础阶段保持不变');
+  assert.equal(clock(2), 22, 'base and bank are each rounded up, and +N stays unchanged in the base phase');
   assert.equal(clock(0), 1);
-  assert.equal(clock(1), 5, '无备用时仍在基础阶段，由原生白色临时倒数显示');
+  assert.equal(clock(1), 5, 'with no bank, still in the base phase, shown by the native white temporary countdown');
   assert.equal(clock(2), 5);
   app.engine(null);
   assert.equal(clock(0), 0);
@@ -84,7 +84,7 @@ test('静态宿主直接读取当前引擎；WASM三次读取使用同一毫秒�
 });
 
 for (const mode of ['node', 'browser']) {
-  test(`${mode}庄家首手8+20、后续5+剩余；备用耗尽时基础和总截止相同，不显示+0`, async () => {
+  test(`${mode} dealer first hand 8+20, later hands 5+remaining; when the bank is exhausted, base and total deadlines are the same and +0 is not shown`, async () => {
     const app = page(mode);
     const { imports } = await app.load();
     const publish = (state) => mode === 'browser' ? app.engine(state) : app.bridge.accept(state);
@@ -97,13 +97,13 @@ for (const mode of ['node', 'browser']) {
       assert.equal(imports.mj.clock(0), 1);
       assert.equal(imports.mj.clock(1), base);
       assert.equal(imports.mj.clock(2), total);
-      assert.equal(app.bridge.current().baseMs, baseMs, '显示分支不得改动真实基础时间');
+      assert.equal(app.bridge.current().baseMs, baseMs, 'the display branch must not change the real base time');
     }
   });
 }
 
 for (const mode of ['node', 'browser']) {
-  test(mode + '只在原生倒计时真正启用并绘制后确认可操作，重复、断线和旧窗回调无效', async () => {
+  test(mode + ' only confirms actionable after the native countdown is truly enabled and drawn; duplicate, disconnect and stale-window callbacks are invalid', async () => {
     const app = page(mode);
     const { imports } = await app.load();
     const sent = [], ws = { readyState: 1, send: (value) => sent.push(JSON.parse(value)) };
@@ -111,10 +111,10 @@ for (const mode of ['node', 'browser']) {
     const publish = state => mode === 'node' ? app.bridge.accept(state) : app.engine(state);
     publish({ id: 1, baseMs: 8000, extraMs: 20000, running: false });
     imports.mj.clock(0); app.paint(); app.paint();
-    assert.equal(sent.length, 0, '单纯每帧读取投影不是手牌就绪信号');
+    assert.equal(sent.length, 0, 'merely reading the projection every frame is not a hand-ready signal');
     imports.mj.sync(7, 1234);
     app.paint(); app.paint();
-    assert.equal(sent.length, 0, '手牌呈现队列未完成时不能起表');
+    assert.equal(sent.length, 0, 'the countdown cannot start while the hand presentation queue is incomplete');
     imports.mj.sync(2, 1);
     app.paint(); assert.equal(sent.length, 0);
     app.paint(); assert.deepEqual(sent, [{ mjClockReady: 1 }]);
@@ -124,15 +124,15 @@ for (const mode of ['node', 'browser']) {
     imports.mj.sync(7, 1234);
     publish({ id: 3, baseMs: 5000, extraMs: 0, running: false });
     app.paint(); app.paint();
-    assert.equal(sent.length, 1, '旧窗口的绘制任务不得确认新窗口');
+    assert.equal(sent.length, 1, 'a draw task from an old window must not confirm the new window');
     imports.mj.sync(7, 1234);
     app.bridge.disconnect(ws); app.paint(); app.paint();
-    assert.equal(sent.length, 1, '旧连接的绘制任务失效');
+    assert.equal(sent.length, 1, 'a draw task from an old connection is invalid');
   });
 }
 
 for (const mode of ['node', 'browser']) {
-  test(mode + '后台新窗口不等待被冻结的动画帧；切后台也不让尚未起表窗口停住', async () => {
+  test(mode + ' new windows in the background do not wait for frozen animation frames; switching to background does not stall windows whose countdown has not started', async () => {
     const app = page(mode); await app.load();
     const sent = [], ws = { readyState: 1, send: value => sent.push(JSON.parse(value)) };
     app.bridge.connect(ws);
@@ -140,41 +140,41 @@ for (const mode of ['node', 'browser']) {
     publish({ id: 1, baseMs: 8000, extraMs: 20000, running: false });
     assert.equal(sent.length, 0);
     app.hide();
-    assert.deepEqual(sent, [{ mjClockReady: 1 }], '后台不等待原生绘制或rAF');
+    assert.deepEqual(sent, [{ mjClockReady: 1 }], 'background does not wait for native drawing or rAF');
     publish({ id: 2, baseMs: 5000, extraMs: 17000, running: false });
     assert.deepEqual(sent.at(-1), { mjClockReady: 2 });
     publish({ id: 2, baseMs: 5000, extraMs: 17000, running: false });
-    assert.equal(sent.length, 2, '重复投影只确认一次');
+    assert.equal(sent.length, 2, 'duplicate projection is confirmed only once');
     app.bridge.disconnect(ws);
     publish({ id: 3, baseMs: 5000, extraMs: 17000, running: false });
-    assert.equal(sent.length, 2, '真实断线仍然冻结');
+    assert.equal(sent.length, 2, 'a real disconnect still freezes');
   });
 }
 
-test('备用不足1秒时+1在基础阶段每帧都稳定，不在+1与无+之间闪烁', async () => {
+test('when the bank is under 1 second, +1 stays stable every frame in the base phase and does not flicker between +1 and no +', async () => {
   const app = page(); const { imports } = await app.load();
   app.bridge.accept({ id: 1, baseMs: 5000, extraMs: 600, running: true });
   for (let ms = 0; ms < 5000; ms += 50) {
     imports.mj.clock(0);
     const base = imports.mj.clock(1), total = imports.mj.clock(2);
     assert.equal(base, Math.ceil((5000 - ms) / 1000));
-    assert.equal(total - base, 1, `基础剩余${5000 - ms}ms时+N必须保持为1`);
+    assert.equal(total - base, 1, `with ${5000 - ms}ms of base left, +N must stay at 1`);
     app.advance(50);
   }
   imports.mj.clock(0);
-  assert.deepEqual([imports.mj.clock(1), imports.mj.clock(2)], [0, 1], '基础用完后只剩备用1秒');
+  assert.deepEqual([imports.mj.clock(1), imports.mj.clock(2)], [0, 1], 'only 1 second of bank remains after the base is used up');
 });
 
-test('备用耗尽的5秒仍是基础阶段：不显示+0，也不扣真正的基础时间', async () => {
+test('after the bank is exhausted, the 5 seconds are still the base phase: no +0 is shown and the real base time is not deducted', async () => {
   const app = page(); const { imports } = await app.load();
   app.bridge.accept({ id: 1, baseMs: 5000, extraMs: 0, running: true });
   assert.equal(imports.mj.clock(0), 1);
   assert.equal(imports.mj.clock(1), 5);
-  assert.equal(imports.mj.clock(2), 5, '总截止等于基础截止，原生不显示+0');
+  assert.equal(imports.mj.clock(2), 5, 'total deadline equals base deadline, so native shows no +0');
   assert.equal(app.bridge.current().baseMs, 5000);
 });
 
-test('拒绝未知构建、损坏派生文件和无效时钟投影，不静默降级原客户端', async () => {
+test('rejects unknown builds, corrupted derived files and invalid clock projections without silently downgrading the original client', async () => {
   const app = page();
   app.manifest.sourceHash = '0'.repeat(64);
   await assert.rejects(app.bridge.configure({}), /Unsupported Unity clock build/);
@@ -189,7 +189,7 @@ test('拒绝未知构建、损坏派生文件和无效时钟投影，不静默�
   assert.equal(app.bridge.current(), null);
 });
 
-test('交付派生文件匹配清单和固定原件哈希；仅增加时钟和同步导入，不带原型测试导出', async () => {
+test('derived files match the manifest and pinned original hash; only clock and sync imports are added, and no prototype test exports are included', async () => {
   const root = new URL('../Build_intl/', import.meta.url);
   const manifest = JSON.parse(await fs.readFile(new URL('mj-h5.clock.json', root), 'utf8'));
   const original = await fs.readFile(new URL('mj-h5.wasm.unityweb', root));
@@ -204,11 +204,11 @@ test('交付派生文件匹配清单和固定原件哈希；仅增加时钟和�
   assert.ok(derived.includes(Buffer.from([
     0x20, 0x00, 0x2d, 0x00, 0xf8, 0x02, 0x04, 0x40,
     0x20, 0x00, 0x20, 0x00, 0x10, 0xcc, 0x72, 0x0b, 0x02, 0x40,
-  ])), '原生倒计时须每帧读取权威余量，不能等一秒节拍才刷新');
+  ])), 'the native countdown must read the authoritative remainder every frame and not wait for the one-second tick to refresh');
   // UpdateTimeText colour: activeSelf(+N) OR base-phase-without-bank (local 9) -> white palette.
   // GameObject.get_activeSelf f987 shifts to 989 (call = 10 dd 07); $l2 is local 2.
   assert.ok(derived.includes(Buffer.from([0x10, 0xdd, 0x07, 0x20, 0x09, 0x72, 0x21, 0x02])),
-    '备用耗尽的基础阶段必须使用白色临时倒数样式');
+    'the base phase after the bank is exhausted must use the white temporary countdown style');
   const module = new WebAssembly.Module(derived);
   const originalModule = new WebAssembly.Module(brotliDecompressSync(original));
   assert.deepEqual(WebAssembly.Module.imports(module), [
@@ -218,7 +218,7 @@ test('交付派生文件匹配清单和固定原件哈希；仅增加时钟和�
   assert.deepEqual(WebAssembly.Module.exports(module), WebAssembly.Module.exports(originalModule));
 });
 
-test('重放投递结束不代表Unity已消费：最后一帧、渲染队列和绘制机会全部完成才确认', async () => {
+test('end of replay delivery does not mean Unity has consumed it: confirm only after the last frame, render queue and draw opportunity have all completed', async () => {
   const app = page();
   const { imports } = await app.load();
   const sent = [], ws = { readyState: 1, send: (value) => sent.push(JSON.parse(value)) };
@@ -227,15 +227,15 @@ test('重放投递结束不代表Unity已消费：最后一帧、渲染队列和
   app.bridge.synchronize({ phase: 'end', id: 'batch', counter: 42 }, ws);
   imports.mj.sync(2, 1);
   app.paint(); app.paint();
-  assert.equal(sent.length, 0, '仅服务器投递完成不能解冻');
+  assert.equal(sent.length, 0, 'server delivery completion alone cannot unfreeze');
   imports.mj.sync(1, 41);
   imports.mj.sync(2, 1);
   app.paint(); app.paint();
-  assert.equal(sent.length, 0, '必须消费指定的末帧，不是任意较早一帧');
+  assert.equal(sent.length, 0, 'must consume the specified last frame, not any earlier frame');
   imports.mj.sync(1, 42);
   imports.mj.sync(2, 0);
   app.paint(); app.paint();
-  assert.equal(sent.length, 0, '原客户端仍在处理渲染时继续冻结');
+  assert.equal(sent.length, 0, 'stays frozen while the original client is still processing rendering');
   imports.mj.sync(2, 1);
   app.paint();
   assert.equal(sent.length, 0);
@@ -243,10 +243,10 @@ test('重放投递结束不代表Unity已消费：最后一帧、渲染队列和
   assert.deepEqual(sent, [{ mjSyncAck: { id: 'batch', counter: 42 } }]);
   imports.mj.sync(2, 1);
   app.paint(); app.paint();
-  assert.equal(sent.length, 1, '同一批次只确认一次');
+  assert.equal(sent.length, 1, 'the same batch is confirmed only once');
 });
 
-test('恢复必须等真实手牌倒计时启用，不能在客户端仍处大厅时仅凭消费和空闲确认', async () => {
+test('recovery must wait for the real hand countdown to be enabled; consumption and idleness alone cannot confirm it while the client is still in the lobby', async () => {
   const app = page(); const { imports } = await app.load();
   const sent = [], ws = { readyState: 1, send: value => sent.push(JSON.parse(value)) };
   app.bridge.connect(ws);
@@ -255,7 +255,7 @@ test('恢复必须等真实手牌倒计时启用，不能在客户端仍处大�
   app.bridge.synchronize({ phase: 'end', id: 'cold', counter: 42 }, ws);
   imports.mj.sync(1, 42); imports.mj.sync(2, 1);
   app.paint(); app.paint();
-  assert.equal(sent.length, 0, '大厅的包消费和空闲不是牌桌恢复完成');
+  assert.equal(sent.length, 0, 'packet consumption and idleness in the lobby do not mean table recovery is complete');
   imports.mj.sync(7, 1234); app.paint(); app.paint();
   assert.deepEqual(sent, [{ mjSyncAck: { id: 'cold', counter: 42 } }]);
   app.bridge.synchronize({ phase: 'complete', id: 'cold' }, ws);
@@ -263,7 +263,7 @@ test('恢复必须等真实手牌倒计时启用，不能在客户端仍处大�
   assert.deepEqual(sent.at(-1), { mjClockReady: 1 });
 });
 
-test('快照必须等待原Unity退出Reload状态；后台和旧连接不能提交恢复确认', async () => {
+test('the snapshot must wait for the original Unity to exit the Reload state; background and stale connections cannot submit recovery confirmation', async () => {
   const app = page();
   const { imports } = await app.load();
   const sent = [], ws = { readyState: 1, send: (value) => sent.push(value) };
@@ -273,21 +273,21 @@ test('快照必须等待原Unity退出Reload状态；后台和旧连接不能提
   imports.mj.sync(1, 7);
   imports.mj.sync(2, 1);
   app.paint(); app.paint();
-  assert.equal(sent.length, 0, '没有Reload完成信号时不得凭空闲队列确认');
+  assert.equal(sent.length, 0, 'without a Reload-complete signal, the idle queue alone must not confirm');
   imports.mj.sync(5, 0);
   imports.mj.sync(3, 77);
   imports.mj.sync(6, 0);
   imports.mj.sync(4, 78);
   app.paint(); app.paint();
-  assert.equal(sent.length, 0, '无关状态机退出不能确认本次恢复');
+  assert.equal(sent.length, 0, 'an unrelated state machine exit cannot confirm this recovery');
   imports.mj.sync(4, 77);
   app.hide(); app.paint(); app.paint();
-  assert.equal(sent.length, 0, '隐藏时即使恢复任务完成也不确认');
+  assert.equal(sent.length, 0, 'not confirmed while hidden, even if the recovery task completes');
   app.context.document.hidden = false;
   imports.mj.sync(2, 1);
   app.bridge.disconnect(ws);
   app.paint(); app.paint();
-  assert.equal(sent.length, 0, '旧连接的绘制回调不能解冻新连接');
+  assert.equal(sent.length, 0, 'a draw callback from an old connection cannot unfreeze the new connection');
   const next = { readyState: 1, send: (value) => sent.push(value) };
   app.bridge.connect(next);
   app.bridge.synchronize({ phase: 'start', id: 'stale', reload: false }, ws);

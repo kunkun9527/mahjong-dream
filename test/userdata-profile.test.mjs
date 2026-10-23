@@ -28,7 +28,7 @@ function profileInfo(userData, topField, key) {
   return null;
 }
 
-test('本地分模式战绩写回原客户端 DT42 ProfileInfo', () => {
+test('local per-mode stats are written back to the original client DT42 ProfileInfo', () => {
   const userData = new userdata.UserData(P.b64decode(data.userdataB64), 10_000_001);
   const stats = {
     yonma: { byLength: {

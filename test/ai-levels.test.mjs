@@ -47,7 +47,7 @@ function riichiOpponent(player, discardKinds) {
   player.discards = discardKinds.map((kind) => tileId(Math.floor(kind / 10), kind % 10, 4));
 }
 
-test('难度：默认中级，可按座位指定，未知值回落中级', () => {
+test('difficulty: defaults to intermediate, can be set per seat, and unknown values fall back to intermediate', () => {
   assert.deepEqual(new GameEngine({ players: 4 }).aiLevels, Array(4).fill('intermediate'));
   assert.deepEqual(new GameEngine({ players: 3, aiLevel: 'advanced' }).aiLevels, Array(3).fill('advanced'));
   assert.deepEqual(
@@ -56,7 +56,7 @@ test('难度：默认中级，可按座位指定，未知值回落中级', () =>
   );
 });
 
-test('三档复用候选评估，高级保留搜索，中级移除搜索，低级再移除待牌质量细化', () => {
+test('the three levels reuse candidate evaluation; advanced keeps search, intermediate removes search, basic also removes wait-quality refinement', () => {
   const hand = makeTiles([[1, [2, 3, 4, 5, 5, 5]], [2, [3, 4]], [3, [6, 7, 9]], [2, [6, 6]], [4, [7]]]);
   const engine = makeEngine([makePlayer(0, hand), makePlayer(1), makePlayer(2), makePlayer(3)]);
   const results = ['basic', 'intermediate', 'advanced'].map((level) => {
@@ -79,14 +79,14 @@ test('三档复用候选评估，高级保留搜索，中级移除搜索，低�
 });
 
 for (const level of ['basic', 'intermediate', 'advanced']) {
-  test(`${level}：裁减思考仍保留禁打、振听、拔北估值与隐藏信息隔离`, () => {
+  test(`${level}: reduced thinking still keeps forbidden discards, furiten, nukidora valuation and hidden-information isolation`, () => {
     const hand = makeTiles([[2, [1, 2, 3, 4, 5, 6]], [3, [2, 3, 4, 6, 7]], [4, [5, 5]], [2, [9]]]);
     const p = makePlayer(0, hand);
     p.riichiFuriten = true;
     p.melds = [{ type: 'babei', tiles: [441] }];
     const engine = makeEngine([p, makePlayer(1), makePlayer(2)], { aiLevel: level });
     engine.doraIndicators = [431, 432];
-    const denyRead = (object, key) => Object.defineProperty(object, key, { get() { assert.fail(`AI 读取隐藏字段 ${key}`); } });
+    const denyRead = (object, key) => Object.defineProperty(object, key, { get() { assert.fail(`AI read hidden field ${key}`); } });
     for (const opponent of engine.players.slice(1)) {
       for (const key of ['hand', 'drawnTile', 'waits', 'waitTiles', 'shanten']) denyRead(opponent, key);
     }
@@ -102,7 +102,7 @@ for (const level of ['basic', 'intermediate', 'advanced']) {
     assert.ok(estimateValue(ctx, hand.slice(0, -1), p.melds) > estimateValue(ctx, hand.slice(0, -1), []));
     assert.equal(chooseDiscardByPolicy(engine, 0, { level, budget: createDecisionBudget({ work: 0, calc: 0 }) }).budget.workUsed, 0);
   });
-  test(`${level}：三麻保留国士必需北，不裁减规则安全检查`, () => {
+  test(`${level}: sanma keeps the north needed for kokushi and does not reduce rule safety checks`, () => {
     const hand = makeTiles([[1, [1, 9]], [2, [1, 9]], [3, [1, 9]], [4, [1, 2, 3, 4, 5, 6, 7]], [2, [5]]]);
     const engine = makeEngine([makePlayer(0, hand), makePlayer(1), makePlayer(2)], { aiLevel: level });
     const decision = engine.aiTurn(0, true, [PlayAction.Normal, PlayAction.BaBei]);
@@ -111,7 +111,7 @@ for (const level of ['basic', 'intermediate', 'advanced']) {
   });
 }
 
-test('和牌概率随向听下降、随受入和剩余巡数上升', () => {
+test('win probability rises as shanten falls and as ukeire and remaining turns increase', () => {
   const ctx = { unseen: 100, n: 4, survival: 0.95 };
   assert.ok(winCurve(ctx, 0, 8, 12) > winCurve(ctx, 1, 20, 12));
   assert.ok(winCurve(ctx, 1, 20, 12) > winCurve(ctx, 2, 40, 12));
@@ -120,7 +120,7 @@ test('和牌概率随向听下降、随受入和剩余巡数上升', () => {
   assert.equal(winCurve(ctx, 0, 8, 0), 0);
 });
 
-test('中级：远向听低打点面对立直时打现物弃和', () => {
+test('intermediate: far from tenpai with low value, facing riichi, discards genbutsu to fold', () => {
   // Three-shanten, no dora; the only safe tile in hand is 9p.
   const hand = makeTiles([
     [1, [1, 4, 7]],
@@ -137,7 +137,7 @@ test('中级：远向听低打点面对立直时打现物弃和', () => {
   assert.equal(decision.fold, true);
 });
 
-test('中级：一向听且宝牌多时面对立直继续进攻，不为现物拆搭子', () => {
+test('intermediate: at one-shanten with many dora, keeps attacking against riichi and does not break a taatsu for genbutsu', () => {
   // One-shanten with three dora tiles (indicator 4m → dora 5m); the floating 9s is not genbutsu, and the only genbutsu is the 3p in hand (split shape).
   const hand = makeTiles([
     [1, [2, 3, 4, 5, 5, 5]],
@@ -156,7 +156,7 @@ test('中级：一向听且宝牌多时面对立直继续进攻，不为现物�
   assert.equal(decision.shanten, 1);
 });
 
-test('中级：效率相同时保留宝牌', () => {
+test('intermediate: with equal efficiency, keeps dora', () => {
   // 1s and 9s are both isolated terminals; 9s is dora (indicator 8s).
   const hand = makeTiles([
     [1, [1, 2, 3, 5, 6, 7]],
@@ -171,7 +171,7 @@ test('中级：效率相同时保留宝牌', () => {
   assert.equal(Math.floor(decision.discardId / 10), 31);
 });
 
-test('高级：搜索按真实役种估值，开门无役的待牌不计入有效受入', () => {
+test('advanced: search values by actual yaku; open-hand waits with no yaku are not counted as effective ukeire', () => {
   // After chi 234m, the closed part 234p 456m 55p 78s waits on 6s/9s; winning on 9s forms 789s and breaks tanyao, so the open hand has no yaku.
   const concealed = makeTiles([[2, [2, 3, 4, 5, 5]], [1, [4, 5, 6]], [3, [7, 8]]]);
   const chi = { type: 'chi', tiles: [tileId(1, 2, 2), tileId(1, 3, 2), tileId(1, 4, 2)] };
@@ -181,11 +181,11 @@ test('高级：搜索按真实役种估值，开门无役的待牌不计入有�
   const engine = makeEngine([player, makePlayer(1), makePlayer(2), makePlayer(3)]);
   const search = makeSearch(publicContext(engine, 0), player.melds, 900);
   const profile = search.tenpaiProfile(concealed);
-  assert.equal(profile.ukeire, 4, '只有 6s 有役');
+  assert.equal(profile.ukeire, 4, 'only 6s has a yaku');
   assert.ok(profile.points >= 1000);
 });
 
-test('高级：决策确定、不读隐藏信息，且单次决策在 1 秒内', () => {
+test('advanced: decisions are deterministic, do not read hidden information, and a single decision takes under 1 second', () => {
   const hand = makeTiles([
     [1, [1, 2, 3, 4, 6]],
     [2, [2, 3, 5, 7, 8]],
@@ -197,9 +197,9 @@ test('高级：决策确定、不读隐藏信息，且单次决策在 1 秒内',
   const start = performance.now();
   const expected = evaluate();
   const elapsed = performance.now() - start;
-  assert.ok(elapsed < 1_000, `高级决策耗时 ${elapsed.toFixed(1)}ms`);
+  assert.ok(elapsed < 1_000, `advanced decision took ${elapsed.toFixed(1)}ms`);
   const denyRead = (object, key) => Object.defineProperty(object, key, {
-    get() { assert.fail(`AI 读取了隐藏字段 ${key}`); },
+    get() { assert.fail(`AI read hidden field ${key}`); },
   });
   for (const opponent of engine.players.slice(1)) {
     for (const key of ['hand', 'drawnTile', 'waits', 'waitTiles', 'shanten']) denyRead(opponent, key);
@@ -208,7 +208,7 @@ test('高级：决策确定、不读隐藏信息，且单次决策在 1 秒内',
   for (let i = 0; i < 5; i++) assert.deepEqual(evaluate(), expected);
 });
 
-test('中级：鸣牌与跳过同用期望值比较——门清高打点听牌不大明杠，开门役牌刻子可大明杠并提交三张实体牌', () => {
+test('intermediate: claim and pass are compared by expected value: closed high-value tenpai does not open-kan, while an open yakuhai triplet may open-kan and submit three physical tiles', () => {
   // Closed-hand tenpai (the 1m triplet is dora): an open kan would lose riichi and the menzen value.
   const closed = [111, 112, 113, 211, 212, 213, 221, 222, 223, 231, 232, 233, 241];
   const a = makeEngine([makePlayer(0), makePlayer(1, closed), makePlayer(2), makePlayer(3)]);
@@ -230,7 +230,7 @@ test('中级：鸣牌与跳过同用期望值比较——门清高打点听牌�
   assert.deepEqual([...decision.otherCards].sort(), open.slice(0, 3).sort());
 });
 
-test('AI 全自动对局：三档混合打完东风战且守恒', async () => {
+test('AI fully automated games: mixed three levels finish an east-only match and points are conserved', async () => {
   for (const players of [3, 4]) {
     let final = null;
     const engine = new GameEngine({
@@ -244,7 +244,7 @@ test('AI 全自动对局：三档混合打完东风战且守恒', async () => {
       onFinish: (scores) => { final = scores.slice(); },
     });
     await engine.start();
-    assert.ok(final, `${players} 人对局应终局`);
+    assert.ok(final, `${players}-player game should finish`);
     const sticks = engine.riichiSticks * 1000;
     assert.equal(final.reduce((a, b) => a + b, 0) + sticks, players * (players === 3 ? 35_000 : 25_000));
   }

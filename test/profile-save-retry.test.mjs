@@ -6,7 +6,7 @@ import path from 'node:path';
 import { createDefaultProfile, saveProfile } from '../local/profile.mjs';
 
 for (const permanent of [false, true]) {
-  test(permanent ? '文件持续占用只尝试三次并保留原档案' : '文件短暂占用后仍以原子替换完成存档', async (t) => {
+  test(permanent ? 'a persistently locked file is tried only three times and the original profile is kept' : 'a briefly locked file still completes the save via atomic replacement', async (t) => {
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mj-save-retry-'));
     try {
       const profile = createDefaultProfile();
@@ -18,7 +18,7 @@ for (const permanent of [false, true]) {
       t.mock.method(fs, 'rename', async (...args) => {
         attempts++;
         assert.equal(await fs.readFile(file, 'utf8'), before);
-        if (permanent || attempts < 3) throw Object.assign(new Error('mock 文件占用'), { code: 'EPERM' });
+        if (permanent || attempts < 3) throw Object.assign(new Error('mock file locked'), { code: 'EPERM' });
         return rename(...args);
       });
       profile.coins = 55;

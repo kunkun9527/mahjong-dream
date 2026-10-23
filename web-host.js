@@ -68,7 +68,7 @@
   window.addEventListener('pagehide', flushDiagnostics);
   function downloadLogs() {
     var server = mode === 'node' && diagnosticFetch ? diagnosticFetch('api/diagnostics').then(function (response) {
-      if (!response.ok) throw new Error('日志导出 HTTP ' + response.status);
+      if (!response.ok) throw new Error('Log export HTTP ' + response.status);
       return response.text();
     }).catch(function (error) { return '[server logs unavailable] ' + error.message; }) : Promise.resolve('');
     return server.then(function (serverText) {
@@ -99,7 +99,7 @@
   // Keep an unreadable save next to the new one instead of overwriting it.
   function backupCorrupt(raw) {
     localStorage.setItem(STORAGE_KEY + '.corrupt-' + Date.now(), raw);
-    console.warn('[web-host] 存档损坏，已备份并创建新档案');
+    console.warn('[web-host] Save file corrupt; backed up and created a new profile');
   }
 
   function readSaved() {
@@ -133,7 +133,7 @@
         if (urgent) return write();
         clearTimeout(timer);
         timer = setTimeout(function () {
-          try { write(); } catch (e) { console.error('[web-host] 存档失败', e); }
+          try { write(); } catch (e) { console.error('[web-host] Save failed', e); }
         }, 300);
       }
       function createHost(saved) {
@@ -164,7 +164,7 @@
         host.attach(session);
         if (!resumePending) return;
         resumePending = false;
-        host.recoverMatch({ session: session }).catch(function (e) { console.error('[web-host] 恢复对局失败', e); });
+        host.recoverMatch({ session: session }).catch(function (e) { console.error('[web-host] Failed to restore match', e); });
       };
       // Shop purchases, equipment and other lobby changes have no callback; save after each client message like the Node service.
       // Every message also proves the player is still here (the away clock of an unfinished match).
@@ -177,13 +177,13 @@
       };
       window.addEventListener('pagehide', function () {
         if (timer) {
-          try { write(); } catch (e) { console.error('[web-host] 存档失败', e); }
+          try { write(); } catch (e) { console.error('[web-host] Save failed', e); }
         }
       });
       if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {});
       // Away longer than the limit: the AI finishes the saved match before the game starts, so the lobby shows the result.
       return host.recoverMatch().then(function () { return host; }, function (e) {
-        console.error('[web-host] 代打上一场比赛失败', e);
+        console.error('[web-host] Failed to auto-play previous match', e);
         return host;
       });
     });
@@ -191,7 +191,7 @@
 
   var started = mode === 'node' ? Promise.resolve(null) : bootBrowser();
   started.catch(function (error) {
-    console.error('[web-host] 启动失败', error);
+    console.error('[web-host] Startup failed', error);
     alert('Failed to start the offline game: ' + (error && error.message || error));
   });
 

@@ -34,7 +34,7 @@ const tag = flags.tag || 'bench';
 function parseLabel(label) {
   const old = label.startsWith('old:');
   const level = old ? label.slice(4) : label;
-  if (!LEVELS.includes(level)) throw new Error(`未知等级 ${label}`);
+  if (!LEVELS.includes(level)) throw new Error(`unknown level ${label}`);
   return { label, level, old };
 }
 
@@ -108,13 +108,13 @@ function timingSummary(t) {
 // ---------- Games ----------
 let OldEngine = null;
 async function loadBaseline() {
-  if (!flags.baseline) throw new Error('使用 old: 标签需要 --baseline=旧版仓库根目录');
+  if (!flags.baseline) throw new Error('old: labels require --baseline=<old repo root>');
   const mod = await import(pathToFileURL(path.resolve(flags.baseline, 'mockjs/engine.mjs')).href);
   OldEngine = mod.GameEngine;
 }
 
 function seatLayouts(n) {
-  if (n !== 3 && n !== 4) throw new Error('players 必须为 3 或 4');
+  if (n !== 3 && n !== 4) throw new Error('players must be 3 or 4');
   return Array.from({ length: 2 ** n }, (_, mask) => Array.from({ length: n }, (_, seat) => (mask >> seat) & 1))
     .filter((layout) => Math.abs(layout.reduce((a, b) => a + b, 0) * 2 - n) <= 1);
 }
@@ -186,12 +186,12 @@ async function playOne(seed, rot, specs, timings) {
 }
 
 async function runGames() {
-  if (!Number.isSafeInteger(seeds) || seeds < 1 || !Number.isSafeInteger(Number(seedStartArg))) throw new Error('种子数必须为正整数，起始种子必须为安全整数');
-  if (!['east', 'hanchan'].includes(length)) throw new Error('比赛长度必须为 east 或 hanchan');
+  if (!Number.isSafeInteger(seeds) || seeds < 1 || !Number.isSafeInteger(Number(seedStartArg))) throw new Error('seed count must be a positive integer and start seed must be a safe integer');
+  if (!['east', 'hanchan'].includes(length)) throw new Error('match length must be east or hanchan');
   const layouts = seatLayouts(players);
   const specA = parseLabel(labelA);
   const specB = parseLabel(labelB);
-  if (specA.label === specB.label) throw new Error('A、B 标签相同，无法区分；新旧版本请用 old: 前缀');
+  if (specA.label === specB.label) throw new Error('A and B labels are the same and cannot be told apart; use the old: prefix for the old version');
   if (specA.old || specB.old) await loadBaseline();
   const timings = { [specA.label]: newTiming(), [specB.label]: newTiming() };
   const games = [];
@@ -223,7 +223,7 @@ function summarize(meta, games, timings) {
   const [la, lb] = meta.labels;
   const samples = games.flatMap((g) => g.seats.map((s) => ({ seed: g.seed, ...s })));
   const lines = [];
-  const uncertainty = (v, digits = 0) => v === null ? '不可估计' : v.toFixed(digits);
+  const uncertainty = (v, digits = 0) => v === null ? 'n/a' : v.toFixed(digits);
   const fmt = (st, digits = 0) => `${st.value.toFixed(digits)}±${uncertainty(st.se, digits)}`;
   const out = { meta, labels: {}, paired: {} };
   for (const label of meta.labels) {
@@ -243,10 +243,10 @@ function summarize(meta, games, timings) {
       timing: timingSummary(timings[label] || newTiming()),
     };
     out.labels[label] = info;
-    lines.push(`${label.padEnd(16)} 样本=${info.n} 平均得失=${fmt(info.delta)} 平均顺位=${fmt(info.place, 3)} 放铳率=${(info.dealIn.value * 100).toFixed(2)}%±${uncertainty(info.dealIn.se === null ? null : info.dealIn.se * 100, 2)} 和了率=${(info.win.value * 100).toFixed(2)}%±${uncertainty(info.win.se === null ? null : info.win.se * 100, 2)} (局数=${info.dealIn.n})`);
-    lines.push(`${''.padEnd(16)} 分座位(座位:样本:均值) ${Object.entries(bySeat).map(([s, v]) => `${s}:${v.n}:${v.delta.toFixed(0)}`).join('  ')}`);
+    lines.push(`${label.padEnd(16)} samples=${info.n} avg score delta=${fmt(info.delta)} avg place=${fmt(info.place, 3)} deal-in rate=${(info.dealIn.value * 100).toFixed(2)}%±${uncertainty(info.dealIn.se === null ? null : info.dealIn.se * 100, 2)} win rate=${(info.win.value * 100).toFixed(2)}%±${uncertainty(info.win.se === null ? null : info.win.se * 100, 2)} (hands=${info.dealIn.n})`);
+    lines.push(`${''.padEnd(16)} by seat (seat:samples:mean) ${Object.entries(bySeat).map(([s, v]) => `${s}:${v.n}:${v.delta.toFixed(0)}`).join('  ')}`);
     const t = info.timing;
-    lines.push(`${''.padEnd(16)} 单次决策耗时 n=${t.n} 均值=${t.mean.toFixed(2)}ms p99≈${t.p99.toFixed(1)}ms 最大=${t.max.toFixed(1)}ms`);
+    lines.push(`${''.padEnd(16)} decision time n=${t.n} mean=${t.mean.toFixed(2)}ms p99≈${t.p99.toFixed(1)}ms max=${t.max.toFixed(1)}ms`);
   }
   // Paired by seed: for each seed, the mean of A-label samples minus the mean of B-label samples.
   const seedList = [...new Set(games.map((g) => g.seed))].sort((a, b) => a - b);
@@ -260,7 +260,7 @@ function summarize(meta, games, timings) {
   const dDelta = pairedStat(perSeed('delta'));
   const dPlace = pairedStat(perSeed('place'));
   out.paired = { delta: dDelta, place: dPlace, perSeedDelta: Object.fromEntries(seedList.map((s, i) => [s, perSeed('delta')[i]])) };
-  lines.push(`配对差 ${la} − ${lb}（${seedList.length} 个种子聚类）：得失 ${dDelta.mean.toFixed(0)}±${uncertainty(dDelta.se)}，95%CI [${uncertainty(dDelta.lo)}, ${uncertainty(dDelta.hi)}]；顺位 ${dPlace.mean.toFixed(3)}±${uncertainty(dPlace.se, 3)}，95%CI [${uncertainty(dPlace.lo, 3)}, ${uncertainty(dPlace.hi, 3)}]`);
+  lines.push(`paired diff ${la} − ${lb} (${seedList.length} seed clusters): score delta ${dDelta.mean.toFixed(0)}±${uncertainty(dDelta.se)}, 95%CI [${uncertainty(dDelta.lo)}, ${uncertainty(dDelta.hi)}]; place ${dPlace.mean.toFixed(3)}±${uncertainty(dPlace.se, 3)}, 95%CI [${uncertainty(dPlace.lo, 3)}, ${uncertainty(dPlace.hi, 3)}]`);
   return { lines, out, samples };
 }
 
@@ -283,11 +283,11 @@ if (flags.merge) {
   const seen = new Set();
   for (const part of parts) {
     for (const key of ['schema', 'labels', 'players', 'length', 'layouts']) {
-      if (JSON.stringify(part.meta[key]) !== JSON.stringify(reference[key])) throw new Error(`不能合并不同 ${key} 的结果`);
+      if (JSON.stringify(part.meta[key]) !== JSON.stringify(reference[key])) throw new Error(`cannot merge results with different ${key}`);
     }
     for (const game of part.games) {
       const key = `${game.seed}:${game.rot}`;
-      if (seen.has(key)) throw new Error(`重复对局 ${key}`);
+      if (seen.has(key)) throw new Error(`duplicate match ${key}`);
       seen.add(key);
     }
   }
@@ -307,8 +307,8 @@ if (flags.merge) {
 }
 const { lines, out, samples } = summarize(raw.meta, raw.games, raw.timings);
 for (const line of lines) console.log(line);
-console.log(`耗时 ${((performance.now() - t0) / 1000).toFixed(1)}s`);
-console.log(`原始结果：${writeRaw(raw, samples, out)}.{json,csv}`);
+console.log(`elapsed ${((performance.now() - t0) / 1000).toFixed(1)}s`);
+console.log(`raw results: ${writeRaw(raw, samples, out)}.{json,csv}`);
 }
 
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) await main();

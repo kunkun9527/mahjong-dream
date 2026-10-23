@@ -26,7 +26,7 @@ function route(gameType, subtype) {
   session.matchTimer = null;
 }
 
-test('原模式页的匹配请求决定三/四麻与东风/半庄', () => {
+test('the matchmaking request from the original mode page decides 3p/4p and east-only/hanchan', () => {
   mock.config.playersExplicit = false;
   mock.config.matchLengthExplicit = false;
   route(4002, 1);
@@ -38,7 +38,7 @@ test('原模式页的匹配请求决定三/四麻与东风/半庄', () => {
   assert.equal(mock.config.matchLength, 'east');
 });
 
-test('显式 URL 模式参数优先于原模式页请求', () => {
+test('an explicit URL mode parameter takes priority over the original mode page request', () => {
   mock.config.players = 4;
   mock.config.matchLength = 'east';
   mock.config.playersExplicit = true;
@@ -51,7 +51,7 @@ test('显式 URL 模式参数优先于原模式页请求', () => {
   mock.config.matchLengthExplicit = false;
 });
 
-test('未实现请求返回明确失败而不是空成功', () => {
+test('unimplemented requests return an explicit failure instead of an empty success', () => {
   const session = mock.createSession();
   const frames = mock.dispatch(session, P.W().v(2, 199998).v(11, 42).s(3, new Uint8Array(0)).bytes());
   assert.equal(frames.length, 1);
@@ -61,7 +61,7 @@ test('未实现请求返回明确失败而不是空成功', () => {
   assert.equal(P.dict(wrapper[3])[1], 1);
 });
 
-test('固定种子同时固定牌桌标识与 AI 外观', async () => {
+test('a fixed seed fixes both the table ID and the AI appearance', async () => {
   const oldSeed = mock.config.seed;
   const oldMatchDelay = mock.config.matchDelay;
   const oldEngineStartDelay = mock.config.engineStartDelay;
@@ -90,7 +90,7 @@ test('固定种子同时固定牌桌标识与 AI 外观', async () => {
 });
 
 
-test('组桌完成后取消匹配不会被延迟任务幽灵开局', async () => {
+test('cancelling matchmaking after the table is formed does not start a ghost game from a delayed task', async () => {
   const oldMatchDelay = mock.config.matchDelay;
   const oldEngineStartDelay = mock.config.engineStartDelay;
   mock.config.matchDelay = 0;
@@ -113,7 +113,7 @@ test('组桌完成后取消匹配不会被延迟任务幽灵开局', async () =>
   }
 });
 
-test('短时连续资料查询正常响应，不得通过断线重置正在进行的牌局', () => {
+test('brief consecutive profile queries respond normally and must not reset an ongoing game by disconnecting', () => {
   const session = mock.createSession();
   const closed = [];
   session.socket = { readyState: 1, close(...args) { closed.push(args); } };

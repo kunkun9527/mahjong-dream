@@ -176,7 +176,7 @@ function chooseDiscard(concealedIds, melds, opts = {}) {
     counts[idx]++;
     legalOptions.push({ idx, shanten });
   }
-  if (!legalOptions.length) throw new Error("没有合法的可打牌");
+  if (!legalOptions.length) throw new Error("No legal discard");
   const bestShanten = Math.min(...legalOptions.map((option) => option.shanten));
   const options = legalOptions.filter((option) => option.shanten <= bestShanten + maxShantenLoss);
 
@@ -205,7 +205,7 @@ function chooseDiscard(concealedIds, melds, opts = {}) {
   if (!best) {
     const allowed = concealedIds.filter((id) => !forbiddenKinds?.has(kindOf(id)));
     const id = drawnTile != null && allowed.includes(drawnTile) ? drawnTile : allowed[allowed.length - 1];
-    if (id == null) throw new Error("没有合法的可打牌");
+    if (id == null) throw new Error("No legal discard");
     return { discardId: id, shanten: bestShanten, ukeire: 0, score: 0, waits: [] };
   }
   return best;

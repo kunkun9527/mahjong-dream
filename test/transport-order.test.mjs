@@ -21,7 +21,7 @@ function ping(session, socket, seq) {
   for (const frame of mock.dispatch(session, request)) socket._deliver(frame);
 }
 
-test('异步牌局通知与即时心跳交错时，下行序号按实际发送顺序递增', (t) => {
+test('when async match notifications interleave with immediate heartbeats, downstream sequence numbers increase in actual send order', (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const session = mock.createSession();
   const received = [];
@@ -29,16 +29,16 @@ test('异步牌局通知与即时心跳交错时，下行序号按实际发送�
   const payload = mock.encodeKRiichi(1005, new Uint8Array());
   session.push(20018, payload, 1, null, null);
   ping(session, session.socket, 27);
-  assert.equal(received.length, 1, '牌局推送仍须异步，避免虚拟连接同步重入');
+  assert.equal(received.length, 1, 'match pushes must still be async, to avoid synchronous re-entry on the virtual connection');
   t.mock.timers.tick(1);
   assert.deepEqual(received.map((frame) => frame[2]), [20019, 20018]);
   assert.deepEqual(received.map((frame) => frame[27]), [1, 2]);
-  assert.equal(received[0][11], 27, '心跳回显原请求序号');
-  assert.equal(received[1][11], undefined, '通知不能带 RPC 序号');
+  assert.equal(received[0][11], 27, 'heartbeat echoes the original request sequence number');
+  assert.equal(received[1][11], undefined, 'notifications must not carry an RPC sequence number');
   assert.deepEqual(received[1][3], payload);
 });
 
-test('多个通知和动作应答保持入队顺序，心跳不抢占它们的下行序号', (t) => {
+test('multiple notifications and action replies keep queue order, and heartbeats do not take their downstream sequence numbers', (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const session = mock.createSession();
   const received = [];
@@ -53,7 +53,7 @@ test('多个通知和动作应答保持入队顺序，心跳不抢占它们的�
   assert.deepEqual(received.map((frame) => frame[11]), [51, 50, undefined, undefined]);
 });
 
-test('断开后未投递的旧通知不消耗序号，也不泄漏到新连接', (t) => {
+test('old undelivered notifications after a disconnect consume no sequence number and do not leak into the new connection', (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const session = mock.createSession();
   const oldReceived = [], received = [];

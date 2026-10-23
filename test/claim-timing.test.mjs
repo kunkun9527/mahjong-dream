@@ -20,7 +20,7 @@ function claimWindow(timeBank) {
 }
 
 for (const bank of [0, 20]) {
-  test(`鸣牌延长时间剩余 ${bank} 秒时，完整等完基础 5 秒加 3 秒服务端宽限再自动过`, async (t) => {
+  test(`with ${bank} seconds of claim extension left, wait out the full 5-second base plus the 3-second server grace before auto-pass`, async (t) => {
     t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
     const { engine, done, nextDraws } = claimWindow(bank);
     const duration = (8 + bank) * 1_000;
@@ -28,7 +28,7 @@ for (const bank of [0, 20]) {
     await Promise.resolve();
     assert.ok(engine._expectedClaim);
     assert.ok(engine._pending);
-    assert.equal(nextDraws(), 0, '鸣牌窗口到期前不允许下一家摸牌');
+    assert.equal(nextDraws(), 0, 'the next player cannot draw before the claim window expires');
     t.mock.timers.tick(1);
     await done;
     assert.equal(nextDraws(), 1);
@@ -38,23 +38,23 @@ for (const bank of [0, 20]) {
   });
 }
 
-test('真实断线：计时暂停、不自动过牌也不扣备用时间，恢复同步后续时', async (t) => {
+test('real disconnect: the clock pauses, no auto-pass and no bank deduction, and the remaining time resumes after sync', async (t) => {
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
   const { engine, done, nextDraws } = claimWindow(20);
   await Promise.resolve();
   engine.setHumanPresent(false);
-  assert.equal(engine._pending.timer, null, '断线时真人计时器必须暂停');
+  assert.equal(engine._pending.timer, null, 'the human timer must pause on disconnect');
   t.mock.timers.tick(10 * 60_000);
-  assert.ok(engine._pending, '断线期间保留等待，不能被当成超时');
+  assert.ok(engine._pending, 'the wait is kept during the disconnect and must not be treated as a timeout');
   assert.equal(nextDraws(), 0);
-  assert.equal(engine.players[0].timeBank, 20, '断线期间不扣备用时间');
+  assert.equal(engine.players[0].timeBank, 20, 'no bank time is deducted during the disconnect');
   engine.setHumanPresent(true);
-  assert.ok(engine._pending.timer, '同步恢复后继续剩余倒计时');
+  assert.ok(engine._pending.timer, 'the remaining countdown continues after sync recovery');
   assert.equal(engine.submitClaim({ action: PlayAction.Peng, otherCards: [451, 452] }), Result.Succ);
   await done;
 });
 
-test('延长时间耗尽后，基础时间最后一毫秒仍能提交碰牌', async (t) => {
+test('after the extension time is exhausted, a pon can still be submitted in the last millisecond of the base time', async (t) => {
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
   const { engine, done, nextDraws } = claimWindow(0);
   let claim;
@@ -68,20 +68,20 @@ test('延长时间耗尽后，基础时间最后一毫秒仍能提交碰牌', as
   assert.equal(engine.players[0].timeBank, 0);
 });
 
-test('客户端自己倒计时结束前后提交的碰仍被受理，服务端宽限不额外扣备用时间', async (t) => {
+test('a pon submitted before or after the client countdown ends is still accepted, and the server grace does not deduct extra bank time', async (t) => {
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
   const { engine, done } = claimWindow(0);
   let claim;
   engine.executeClaim = async (...args) => { claim = args; return Result.Succ; };
-  // 客户端显示的基础时间是 5 秒：最后一眼点下去的请求会晚到一点，服务端必须还在等。
+  // The client shows a 5-second base time: a request tapped at the last glance arrives a little late, so the server must still be waiting.
   t.mock.timers.tick(5_400);
   assert.equal(engine.submitClaim({ action: PlayAction.Peng, otherCards: [451, 452] }), Result.Succ);
   await done;
   assert.deepEqual(claim, [0, PlayAction.Peng, 453, 1, [451, 452]]);
-  assert.equal(engine.players[0].timeBank, 0, '宽限是往返容差，不算玩家的思考时间');
+  assert.equal(engine.players[0].timeBank, 0, 'the grace is round-trip tolerance, not thinking time');
 });
 
-test('鸣牌者二次校验没通过时：不卡住牌桌，按空窗口收尾并轮到下一家', async (t) => {
+test('when the second validation of the claim fails: do not stall the table, close it as an empty window and move to the next player', async (t) => {
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
   const { engine, done, nextDraws } = claimWindow(0);
   const frames = [];
@@ -90,12 +90,12 @@ test('鸣牌者二次校验没通过时：不卡住牌桌，按空窗口收尾�
   engine.executeClaim = async () => Result.Fail_InvalidSequence;
   assert.equal(engine.submitClaim({ action: PlayAction.Peng, otherCards: [451, 452] }), Result.Succ);
   await done;
-  assert.equal(nextDraws(), 1, '鸣牌没落地时必须把牌局交给下一家');
+  assert.equal(nextDraws(), 1, 'if the claim does not land, the hand must pass to the next player');
   assert.equal(frames.filter((frame) => frame.ev === RiichiMsg.ENtfQiangCardEnd).at(-1).payload.seats.length, 0);
   assert.deepEqual(frames.filter((frame) => frame.ev === RiichiMsg.ENtfQiangCard).at(-1).payload.seat, 0);
 });
 
-test('鸣牌基础时间内手动过不扣延长时间，且不会残留超时任务', async (t) => {
+test('a manual pass within the base claim time does not deduct extension time and leaves no stale timeout task', async (t) => {
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
   const { engine, done, nextDraws } = claimWindow(20);
   t.mock.timers.tick(4_000);
@@ -107,7 +107,7 @@ test('鸣牌基础时间内手动过不扣延长时间，且不会残留超时�
   assert.equal(nextDraws(), 1);
 });
 
-test('途中流局丢弃残留的真人窗口，备用时间不会被下一局扣掉', async (t) => {
+test('a draw mid-hand discards the leftover human window, so the bank is not deducted in the next hand', async (t) => {
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
   const { engine } = claimWindow(20);
   t.mock.timers.tick(3_000);
@@ -117,13 +117,13 @@ test('途中流局丢弃残留的真人窗口，备用时间不会被下一局�
   engine.doraIndicators = [];
   engine.players = engine.players.map((p) => ({ melds: [], waits: [], riichi: false, score: 25_000, drawnTile: null, ...p }));
   await engine.endHand({ type: 'draw', liuJuType: LiuJuType.JiuZhongJiuPai, tenpai: [false, false, false], noPenalty: true });
-  assert.equal(engine._pending, null, '流局后不能留下会触发的窗口计时');
+  assert.equal(engine._pending, null, 'no window timer that could fire may remain after the draw');
   assert.equal(engine._expectedClaim, null);
   t.mock.timers.tick(60_000);
-  assert.equal(engine.players[0].timeBank, 20, '玩家没用完的备用时间不应该被残留计时扣走');
+  assert.equal(engine.players[0].timeBank, 20, 'unused bank time should not be deducted by a leftover timer');
 });
 
-test('鸣牌使用延长时间只扣本次超出基础 5 秒的部分', async (t) => {
+test('claim uses extension time: only the part beyond the 5-second base for this claim is deducted', async (t) => {
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
   const { engine, done } = claimWindow(20);
   t.mock.timers.tick(8_000);
@@ -132,12 +132,12 @@ test('鸣牌使用延长时间只扣本次超出基础 5 秒的部分', async (t
   assert.equal(engine.players[0].timeBank, 17);
 });
 
-test('服务端超时跳过后，迟到的 Pass 只回成功：不再推进、不扣时、不记录；迟到的碰仍失败', async (t) => {
+test('after a server-side timeout skip, a late Pass only returns success: no further progress, no time deducted, not recorded; a late pon still fails', async (t) => {
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
   const { engine, done, nextDraws } = claimWindow(0);
   t.mock.timers.tick(7_999);
   await Promise.resolve();
-  assert.ok(engine._expectedClaim, '客户端倒计时结束后时还要等满服务端宽限');
+  assert.ok(engine._expectedClaim, 'after the client countdown ends, still wait out the full server grace');
   t.mock.timers.tick(1);
   await done;
   assert.equal(nextDraws(), 1);
@@ -155,7 +155,7 @@ test('服务端超时跳过后，迟到的 Pass 只回成功：不再推进、�
   assert.equal(engine._timedOut, null);
 });
 
-test('玩家自己提交的 Pass 不产生回执，重复包仍被拒', async (t) => {
+test('a Pass the player submits produces no receipt, and duplicate packets are still rejected', async (t) => {
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
   const { engine, done } = claimWindow(0);
   t.mock.timers.tick(1_000);
@@ -164,7 +164,7 @@ test('玩家自己提交的 Pass 不产生回执，重复包仍被拒', async (t
   assert.equal(engine.submitClaim({ action: PlayAction.Guo }), Result.Fail_InvalidSequence);
 });
 
-test('服务端超时摸切后，迟到的同一张摸切只回成功，打别的牌仍失败', async (t) => {
+test('after a server-side timeout tsumogiri, a late tsumogiri of the same tile only returns success; discarding a different tile still fails', async (t) => {
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
   const drawn = 191;
   const engine = new GameEngine({ players: 3, speed: 0 });
@@ -184,7 +184,7 @@ test('服务端超时摸切后，迟到的同一张摸切只回成功，打别�
   assert.equal(engine._bufferedDraw, null);
 });
 
-test('窗口已关闭时才到达的鸣牌请求：回失败，并补发过牌与结束通知，客户端不会卡在鸣牌态', async () => {
+test('a claim request that arrives after the window has closed: returns failure, re-sends the pass and end notifications, and the client does not get stuck in the claim state', async () => {
   const engine = new GameEngine({ players: 3, speed: 0 });
   engine.players = [0, 1, 2].map((seat) => ({ seat, isHuman: seat === 0, timeBank: 0, hand: [451, 452, 411] }));
   const frames = [];

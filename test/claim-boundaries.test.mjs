@@ -45,7 +45,7 @@ function gameState(engine) {
     processing: engine._processing, kanCount: engine.kanCount });
 }
 
-test('吃牌后无合法弃牌时不提供吃动作，拒绝请求且不修改牌局', async () => {
+test('after a chi with no legal discard, no chi action is offered, the request is rejected and the match is not modified', async () => {
   const engine = fixture([121, 131, 141, 142]);
   const p = engine.players[0];
   assert.deepEqual(engine.chiOptions(p, 111), []);
@@ -56,7 +56,7 @@ test('吃牌后无合法弃牌时不提供吃动作，拒绝请求且不修改�
   assert.deepEqual(gameState(engine), before);
 });
 
-test('即使动作列表含吃，也必须按提交的实体牌检查鸣牌后能否弃牌', () => {
+test('even if the action list contains chi, the submitted physical tiles must be used to check whether a discard is possible after the call', () => {
   const engine = fixture([121, 131, 141, 142]);
   const expected = { seat: 0, discarderSeat: 3, card: 111, actions: [PlayAction.Chi, PlayAction.Guo] };
   const before = gameState(engine);
@@ -64,7 +64,7 @@ test('即使动作列表含吃，也必须按提交的实体牌检查鸣牌后�
   assert.deepEqual(gameState(engine), before);
 });
 
-test('合法吃牌仍能进入弃牌窗口并保留实体牌与食替限制', async () => {
+test('a legal chi still enters the discard window and keeps the physical tiles and kuikae restriction', async () => {
   const engine = fixture([121, 131, 141, 441]);
   let turn;
   engine.awaitTurn = async (seat, drew) => { turn = { seat, drew }; };
@@ -76,7 +76,7 @@ test('合法吃牌仍能进入弃牌窗口并保留实体牌与食替限制', as
   assert.equal(engine.players[3].discards.length, 0);
 });
 
-test('有荣和机会却选择吃或碰，必须记录同巡振听', async () => {
+test('when a ron opportunity exists but chi or pon is chosen, same-turn furiten must be recorded', async () => {
   for (const scenario of [
     { hand: [121, 131, 441, 442], card: 111, action: PlayAction.Chi, used: [121, 131] },
     { hand: [111, 112, 441, 442], card: 113, action: PlayAction.Peng, used: [111, 112] },
@@ -93,7 +93,7 @@ test('有荣和机会却选择吃或碰，必须记录同巡振听', async () =>
   }
 });
 
-test('自己的副露与暗手凑齐四张等待牌，不得算听第五张的形式听牌', () => {
+test('when own melds and concealed tiles together make four copies of a wait, it must not count as formal tenpai on a fifth tile', () => {
   const engine = fixture([114]);
   const melds = [{ type: 'pon', tiles: [111, 112, 113], from: 1 }, ...openMelds];
   assert.equal(engine.isFormalTenpaiHand([114], melds), false);

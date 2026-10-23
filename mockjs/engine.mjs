@@ -6,7 +6,7 @@ import { Result, RiichiMsg, PlayAction, ManType, YiType, LiuJuType } from './pro
 import { mapYaku, manTypeFromResult } from './yaku_map.mjs';
 
 var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-var WIND_NAME = { 1: "东", 2: "南", 3: "西", 4: "北" };
+var WIND_NAME = { 1: "E", 2: "S", 3: "W", 4: "N" };
 /** Extra seconds the server waits past the player's own clock (base + bank). The client counts `defaultMinTimeout +
  *  leftTimer` and then sends its own timeout; without this allowance the server discards (or passes) at the same instant
  *  the client's clock ends, so a click at the visible deadline always arrives after the window closed.
@@ -110,7 +110,7 @@ var GameEngine = class {
     if (!this.replaying) return null;
     const next = this._replay?.[0];
     if (next && next[0] === kind) return this._replay.shift();
-    if (next) this.log && this.log(`[riichi] 记录重演分叉：期望 ${next[0]}，实际 ${kind}，按当前局面继续`);
+    if (next) this.log && this.log(`[riichi] record replay diverged: expected ${next[0]}, got ${kind}, continuing from current state`);
     this.replaying = false;
     this._replay = null;
     this.speed = this._liveSpeed;
@@ -246,11 +246,11 @@ var GameEngine = class {
     return card ? tileName(card) : "-";
   }
   claimName(action) {
-    if (action === PlayAction.Guo) return "过";
-    return action === PlayAction.Hu ? "荣和" : action === PlayAction.MingGang ? "明杠" : action === PlayAction.Peng ? "碰" : action === PlayAction.Chi ? "吃" : "动作" + action;
+    if (action === PlayAction.Guo) return "pass";
+    return action === PlayAction.Hu ? "ron" : action === PlayAction.MingGang ? "open kan" : action === PlayAction.Peng ? "pon" : action === PlayAction.Chi ? "chi" : "action" + action;
   }
   winText(win) {
-    return win ? `${win.han || 0}番${win.fu || 0}符${win.name ? " " + win.name : ""}` : "?";
+    return win ? `${win.han || 0}han ${win.fu || 0}fu${win.name ? " " + win.name : ""}` : "?";
   }
   async start() {
     await this._d(400);
@@ -331,7 +331,7 @@ var GameEngine = class {
     }
     await prepared;
     if (this.finished) return;
-    this.note("hand", `开局 庄家P${this.dealerSeat} 分数[${players.map((p) => p.score).join(",")}] 立直棒${this.riichiSticks} 宝牌${this.cardName(this.doraIndicators[0])} 牌山${this.remain}`);
+    this.note("hand", `hand start, dealer P${this.dealerSeat} scores[${players.map((p) => p.score).join(",")}] riichi sticks ${this.riichiSticks} dora ${this.cardName(this.doraIndicators[0])} wall ${this.remain}`);
     this.emit(RiichiMsg.ENtfPrepare, { seat: 0, userInfos: emptyInfos });
     await this._d(this.T.step);
     const dealer = players[this.dealerSeat];
@@ -406,7 +406,7 @@ var GameEngine = class {
     p.drawnTile = tile;
     p.rinshan = false;
     this.xunNum++;
-    this.note("draw", `P${seat} 摸${this.cardName(tile)} 牌山${this.remain}`, true);
+    this.note("draw", `P${seat} draw ${this.cardName(tile)} wall ${this.remain}`, true);
     await this.awaitTurn(seat, true);
   }
   // Rinshan draw (after a kan)
@@ -424,7 +424,7 @@ var GameEngine = class {
     p.drawnTile = tile;
     p.rinshan = true;
     this.xunNum++;
-    this.note("draw", `P${seat} 杠后补${this.cardName(tile)} 牌山${this.remain}`, true);
+    this.note("draw", `P${seat} rinshan draw ${this.cardName(tile)} wall ${this.remain}`, true);
     return true;
   }
   async doBaBei(seat, tile) {
@@ -500,7 +500,7 @@ var GameEngine = class {
     if (this._timedOut?.kind === "claim") this._timedOut = null;
     this._expectedClaim = { seat, discarderSeat, card, actions: actions.slice() };
     this._openHumanClock("claim");
-    this.note("claim", `打开鸣牌窗口 P${seat} 可鸣[${actions.map((act) => this.claimName(act)).join("/")}] 来自P${discarderSeat}的${this.cardName(card)}`);
+    this.note("claim", `open call window P${seat} can call[${actions.map((act) => this.claimName(act)).join("/")}] from P${discarderSeat}'s ${this.cardName(card)}`);
   }
   validateClaimPayload(payload, expected = this._expectedClaim) {
     if (!expected || !this.players?.[expected.seat]) return Result.Fail_InvalidSequence;
@@ -576,7 +576,7 @@ var GameEngine = class {
       await this._d(this.T.think);
     }
     const result = await this.processTurnAction(seat, action, card, drew, cantPlays);
-    if (result !== Result.Succ) throw new Error(`非法内部动作 seat=${seat} action=${action} result=${result}`);
+    if (result !== Result.Succ) throw new Error(`invalid internal action seat=${seat} action=${action} result=${result}`);
   }
   // Optional actions with 14 tiles in hand
   turnActions(seat, drew) {
@@ -910,7 +910,7 @@ var GameEngine = class {
       p.ippatsu = true;
       p.score -= 1e3;
       this.riichiSticks += 1;
-      this.note("riichi", `P${seat} 立直${p.doubleRiichi ? "(双立直)" : ""} 打${this.cardName(card)} 分数${p.score}`);
+      this.note("riichi", `P${seat} riichi${p.doubleRiichi ? "(double riichi)" : ""} discard ${this.cardName(card)} score ${p.score}`);
     }
     const idx = p.hand.lastIndexOf(card);
     p.hand.splice(idx, 1);
@@ -934,8 +934,8 @@ var GameEngine = class {
     p.rinshan = false;
     this.flushDeferredKanDora();
     const canQiang = this.players.map((q) => q.seat === seat ? [] : this.claimActions(q.seat, seat, card));
-    const canText = canQiang.map((acts, s) => acts.filter((act) => act !== PlayAction.Guo).length ? `P${s}:${acts.filter((act) => act !== PlayAction.Guo).map((act) => this.claimName(act)).join("/")}` : null).filter(Boolean).join(" ") || "无";
-    this.note("discard", `P${seat} 打${this.cardName(card)}${isMoQie ? "(摸切)" : ""}${action === PlayAction.Riichi ? "(立直)" : ""} 牌山${this.remain} 可鸣 ${canText}`);
+    const canText = canQiang.map((acts, s) => acts.filter((act) => act !== PlayAction.Guo).length ? `P${s}:${acts.filter((act) => act !== PlayAction.Guo).map((act) => this.claimName(act)).join("/")}` : null).filter(Boolean).join(" ") || "none";
+    this.note("discard", `P${seat} discard ${this.cardName(card)}${isMoQie ? "(tsumogiri)" : ""}${action === PlayAction.Riichi ? "(riichi)" : ""} wall ${this.remain} can call ${canText}`);
     this.expectClaim(0, seat, card, canQiang[0] || []);
     this.emit(RiichiMsg.ENtfPlayCard, this.buildPlayCard(seat, card, action, isMoQie, canQiang));
     await this._d(this.T.claim);
@@ -1043,7 +1043,7 @@ var GameEngine = class {
       const claim = this.aiClaim(seat, discarderSeat, card, canQiang[seat]);
       if (claim) all.push({ seat, ...claim });
     }
-    this.note("claim", `P${discarderSeat}打${this.cardName(card)} 候选 ${all.map((c) => `P${c.seat}:${this.claimName(c.action)}`).join(" ") || "无"}`);
+    this.note("claim", `P${discarderSeat} discard ${this.cardName(card)} candidates ${all.map((c) => `P${c.seat}:${this.claimName(c.action)}`).join(" ") || "none"}`);
     // Missed-win furiten is judged by whether the hand forms a complete shape, not by whether a ron button with yaku was sent (no-yaku low-han hands count too).
     for (const p of this.players) {
       if (p.seat !== discarderSeat && (canQiang[p.seat]?.includes(PlayAction.Hu) || p.waits?.includes(kindOf2(card)))
@@ -1092,7 +1092,7 @@ var GameEngine = class {
     await this._d(this.T.claim);
   }
   async continueAfterNoClaim(discarderSeat) {
-    this.note("claim", "无人鸣牌，窗口收尾并轮到下一家");
+    this.note("claim", "no one called, window closed, turn passes to next player");
     await this.closeEmptyClaimWindow();
     this.confirmRiichiDeclaration(this.players[discarderSeat]);
     if (this.playersN === 4 && this.players.every((player) => player.riichi)) {
@@ -1120,7 +1120,7 @@ var GameEngine = class {
     }
   }
   // A ron that completes the set: the discarder of the winning tile is the liability. Money is unchanged on purpose
-  // (the ron branch only splits when the liability is somebody other than the discarder), but the 包 marker must be right.
+  // (the ron branch only splits when the liability is somebody other than the discarder), but the pao marker must be right.
   recordPaoOnRon(player, discarderSeat, win) {
     const names = Object.keys(win.yaku || {});
     player.pao ||= {};
@@ -1149,7 +1149,7 @@ var GameEngine = class {
     if (validation !== Result.Succ) return validation;
     this._processing = true; // During a call: packets arriving in this window are treated as duplicates and dropped
     this._bufferedDraw = null; this._bufferedClaim = null; // Clear the leftover buffer of the previous action (prevents duplicate-packet replay)
-    this.note("meld", `P${seat} ${this.claimName(action)} P${discarderSeat}的${this.cardName(card)} 手牌[${otherCards.map((tile) => this.cardName(tile)).join(" ")}]`);
+    this.note("meld", `P${seat} ${this.claimName(action)} P${discarderSeat}'s ${this.cardName(card)} hand[${otherCards.map((tile) => this.cardName(tile)).join(" ")}]`);
     const donor = this.players[discarderSeat];
     if (action === PlayAction.Hu) {
       await this.winRon(seat, discarderSeat, card);
@@ -1265,7 +1265,7 @@ var GameEngine = class {
     this.kanCount++;
     for (const player of this.players) player.ippatsu = false;
     this.firstGoAround = false;
-    this.note("kan", `P${seat} ${kind === "ankan" ? "暗杠" : "加杠"}${this.cardName(card)} 杠数${this.kanCount + 1}`);
+    this.note("kan", `P${seat} ${kind === "ankan" ? "closed kan" : "added kan"} ${this.cardName(card)} kan count ${this.kanCount + 1}`);
     if (kind === "ankan") this.revealKanDora();
     else this._deferredKanDora++;
     if (!await this.drawReplacement(seat)) return;
@@ -1363,7 +1363,7 @@ var GameEngine = class {
   async winTsumo(seat) {
     const p = this.players[seat];
     const w = calcWin(p.hand, p.melds, this.akaSet, this.winOpts(p, false));
-    this.note("win", `P${seat} 自摸${this.cardName(p.drawnTile)} ${this.winText(w)}`);
+    this.note("win", `P${seat} tsumo ${this.cardName(p.drawnTile)} ${this.winText(w)}`);
     await this.endHand({ type: "tsumo", winner: seat, loser: null, card: p.drawnTile, win: w });
   }
   async winRon(seat, loser, card, extra = {}) {
@@ -1372,7 +1372,7 @@ var GameEngine = class {
   async winRons(seats, loser, card, extra = {}, { robbed = false } = {}) {
     const donor = this.players[loser];
     const robbedIndex = robbed ? donor.hand.indexOf(card) : -1;
-    if (robbed && robbedIndex < 0) throw new Error(`被抢牌不在手中 seat=${loser} card=${card}`);
+    if (robbed && robbedIndex < 0) throw new Error(`robbed tile not in hand seat=${loser} card=${card}`);
     const wins = new Map();
     for (const seat of seats) {
       const p = this.players[seat];
@@ -1382,7 +1382,7 @@ var GameEngine = class {
         this.akaSet,
         { ...this.winOpts(p, true, card), ...extra }
       );
-      if (!win.isAgari || !win.hasYaku) throw new Error(`非法荣和 seat=${seat}`);
+      if (!win.isAgari || !win.hasYaku) throw new Error(`invalid ron seat=${seat}`);
       wins.set(seat, win);
     }
     // Commit pao as well as the tile/declaration only after every winner has passed validation.
@@ -1393,7 +1393,7 @@ var GameEngine = class {
       donor.drawnTile = null;
       this.updateWaits(donor);
     }
-    this.note("win", `P${seats.join("/")} 荣和 P${loser}的${this.cardName(card)}${robbed ? "(抢杠)" : ""} ${[...wins].map(([seat, win]) => `P${seat}:${this.winText(win)}`).join(" ")}`);
+    this.note("win", `P${seats.join("/")} ron P${loser}'s ${this.cardName(card)}${robbed ? "(chankan)" : ""} ${[...wins].map(([seat, win]) => `P${seat}:${this.winText(win)}`).join(" ")}`);
     // A ron is a claim too, and the client starts the win sequence from the Hu claim notice and leaves the claim
     // phase only on NtfQiangCardEnd (it hides its own buttons only on its own Hu notice). Announcing just the final
     // NtfGameStop leaves the hand frozen on screen with no win animation.
@@ -1410,11 +1410,11 @@ var GameEngine = class {
       }))
       .map((player) => player.seat);
     const tenpai = this.players.map((player) => this.isTenpai(player));
-    this.note("draw", `荒牌流局 听牌[${tenpai.map((t, s) => t ? `P${s}` : null).filter(Boolean).join(" ") || "无"}] 牌山${this.remain}`);
+    this.note("draw", `exhaustive draw tenpai[${tenpai.map((t, s) => t ? `P${s}` : null).filter(Boolean).join(" ") || "none"}] wall ${this.remain}`);
     await this.endHand({ type: "draw", liuJuType: LiuJuType.HuangPai, tenpai, nagashiWinners });
   }
   async abortiveDraw(liuJuType, seat) {
-    this.note("draw", `途中流局 type=${liuJuType} P${seat}`);
+    this.note("draw", `abortive draw type=${liuJuType} P${seat}`);
     await this.endHand({
       type: "draw",
       liuJuType,
@@ -1427,7 +1427,7 @@ var GameEngine = class {
   async endHand(res) {
     if (this.handEnded) return;
     this.handEnded = true;
-    // An abort (九种九牌/四杠散了/…) can end the hand while the human's window is still armed. Drop that wait silently:
+    // An abort (nine-terminal draw / four-kan abort / …) can end the hand while the human's window is still armed. Drop that wait silently:
     // its timer must not fire into the next hand, or it would charge the bank for time the player never got to use.
     if (this._pending?.timer) clearTimeout(this._pending.timer);
     if (this._humanClock) this.note("clock", JSON.stringify({ event: "hand-end", ...this.humanTime() }));
@@ -1789,7 +1789,7 @@ var GameEngine = class {
         this.roundWind += 1;
       }
     }
-    this.note("hand", `结束 分数[${scores.join(",")}]${gameOver ? " 对局结束" : ""} 下一局${WIND_NAME[this.roundWind]}${this.juNum + 1}-${this.honba} 庄家P${this.dealerSeat}`);
+    this.note("hand", `end scores[${scores.join(",")}]${gameOver ? " match over" : ""} next hand ${WIND_NAME[this.roundWind]}${this.juNum + 1}-${this.honba} dealer P${this.dealerSeat}`);
     if (gameOver) {
       this.matchOver = true;
       this.finished = true;
@@ -1834,11 +1834,11 @@ var GameEngine = class {
     if (can.includes(PlayAction.Riichi)) {
       const decision = riichiPolicy(this, seat, this.formalTenpaiDiscards(p), level, budget);
       if (decision?.action === "riichi") {
-        this.note("ai", `P${seat} 立直 打${this.cardName(decision.card)}`);
+        this.note("ai", `P${seat} riichi discard ${this.cardName(decision.card)}`);
         return { action: PlayAction.Riichi, card: decision.card };
       }
       if (decision?.action === "dama") {
-        this.note("ai", `P${seat} 默听 打${this.cardName(decision.card)}`);
+        this.note("ai", `P${seat} dama discard ${this.cardName(decision.card)}`);
         return { action: PlayAction.Normal, card: decision.card };
       }
     }
@@ -1853,14 +1853,14 @@ var GameEngine = class {
     const forbiddenKinds = new Set(cantPlays.map((value) => Math.floor(value / 10)));
     if (p.riichi && p.riichiTurn !== this.xunNum) {
       const forced = this.bestDiscard(p, { forbiddenKinds, forced: p.drawnTile }).discardId;
-      this.note("ai", `P${seat} 立直摸切 ${this.cardName(forced)}`);
+      this.note("ai", `P${seat} riichi tsumogiri ${this.cardName(forced)}`);
       return { action: PlayAction.Normal, card: forced };
     }
     const best = chooseDiscardByPolicy(this, seat, { forbiddenKinds, level, budget });
-    this.note("ai", `P${seat} 打${this.cardName(best.discardId)} ${this.currentShanten(p)}向听->${best.shanten}向听` +
-      ` 进张${best.ukeire} EV${best.ev >= 0 ? "+" : ""}${best.ev.toFixed(1)}${best.fold ? " 转守" : ""}` +
-      (best.searched ? ` 搜索${best.searched} 计算${best.budget?.calcUsed || 0}` : "") +
-      (best.budget?.exhausted ? " 预算用尽" : ""));
+    this.note("ai", `P${seat} discard ${this.cardName(best.discardId)} ${this.currentShanten(p)}-shanten->${best.shanten}-shanten` +
+      ` ukeire ${best.ukeire} EV${best.ev >= 0 ? "+" : ""}${best.ev.toFixed(1)}${best.fold ? " fold" : ""}` +
+      (best.searched ? ` search ${best.searched} calc ${best.budget?.calcUsed || 0}` : "") +
+      (best.budget?.exhausted ? " budget exhausted" : ""));
     return { action: PlayAction.Normal, card: best.discardId };
   }
   dangerKinds(seat) {
@@ -1945,10 +1945,10 @@ var GameEngine = class {
     }
     const choice = claimPolicy(this, seat, card, options, level, createDecisionBudget());
     if (!choice) {
-      this.note("ai", `P${seat} 看到${this.cardName(card)} 不鸣（可选${options.length}种）`);
+      this.note("ai", `P${seat} saw ${this.cardName(card)} no call (${options.length} options)`);
     } else {
       this.note("ai", `P${seat} ${this.claimName(choice.action)} ${this.cardName(card)}` +
-        (choice.used?.length ? ` 用${choice.used.map((tile) => this.cardName(tile)).join("")}` : ""));
+        (choice.used?.length ? ` using ${choice.used.map((tile) => this.cardName(tile)).join("")}` : ""));
     }
     return choice ? { action: choice.action, otherCards: choice.used } : null;
   }
@@ -2097,9 +2097,9 @@ var GameEngine = class {
     this._pending = null;
     const applied = {};
     for (const key of ["action", "card", "otherCards"]) if (payload?.[key] != null) applied[key] = payload[key];
-    const act = pending.kind === "claim" ? (applied.action === PlayAction.Guo ? "过牌" : this.claimName(applied.action)) : "出牌";
+    const act = pending.kind === "claim" ? (applied.action === PlayAction.Guo ? "pass" : this.claimName(applied.action)) : "discard";
     const cards = [applied.card, ...(applied.otherCards || [])].filter((value) => value != null).map((value) => this.cardName(value)).join(" ");
-    this.note("human", act + (cards ? " " + cards : "") + " 用时" + (time.elapsedMs / 1000).toFixed(1) + "s 备用" + Math.round(player.timeBank * 10) / 10 + "s");
+    this.note("human", act + (cards ? " " + cards : "") + " time used " + (time.elapsedMs / 1000).toFixed(1) + "s time bank " + Math.round(player.timeBank * 10) / 10 + "s");
     this._record([pending.kind === "draw" ? "d" : "c", applied, player.timeBank]);
     pending.resolve(payload || {});
   }
@@ -2110,7 +2110,7 @@ var GameEngine = class {
     pending.timer = setTimeout(() => {
       if (this._pending !== pending || !this.humanPresent) return;
       const payload = this.timeoutHumanAction(pending.kind);
-      this.note("timeout", "窗口#" + time.id + " 服务端超时，执行默认动作");
+      this.note("timeout", "window#" + time.id + " server timeout, executing default action");
       this.resolveHumanPending(pending, payload, "server-timeout");
       this._timedOut = { kind: pending.kind, payload, id: time.id };
     }, time.timeoutMs);

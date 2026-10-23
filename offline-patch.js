@@ -48,7 +48,7 @@
     inproc: false,
     server: null,
     // Manual trigger for the reconnect banner: __mjmock.reconnect.show('...') / .hide()
-    reconnect: { show: function (t) { rcShow(t || '断线重连中…'); rc.stage = 'sync'; rc.openedAt = Date.now(); }, hide: rcHide, root: function () { return rc.root; } },
+    reconnect: { show: function (t) { rcShow(t || 'Reconnecting…'); rc.stage = 'sync'; rc.openedAt = Date.now(); }, hide: rcHide, root: function () { return rc.root; } },
     exportLogs: function () { return window.__mjHost.downloadLogs(); },
     dump: function (n) { return stats.frames.slice(-(n || 20)); }
   };
@@ -80,9 +80,9 @@
     box.appendChild(rc.textEl);
     box.appendChild(rc.secEl);
     var exportButton = document.createElement("button");
-    exportButton.textContent = "导出诊断日志";
+    exportButton.textContent = "Export diagnostics";
     exportButton.style.cssText = "pointer-events:auto;margin-top:12px;padding:5px 12px;cursor:pointer";
-    exportButton.onclick = function () { window.__mjHost.downloadLogs().catch(function (error) { console.error("[offline] 日志导出失败", error); }); };
+    exportButton.onclick = function () { window.__mjHost.downloadLogs().catch(function (error) { console.error("[offline] log export failed", error); }); };
     box.appendChild(exportButton);
     root.appendChild(box);
     (document.body || document.documentElement).appendChild(root);
@@ -97,7 +97,7 @@
     if (!rc.clockTimer) {
       rc.clockTimer = setInterval(function () {
         var s = Math.round((Date.now() - rc.since) / 1000);
-        rc.secEl.textContent = s >= 1 ? '已等待 ' + s + ' 秒' : '';
+        rc.secEl.textContent = s >= 1 ? 'Waited ' + s + ' seconds' : '';
       }, 500);
     }
   }
@@ -122,18 +122,18 @@
       opened = true;
       if (rc.stage !== 'down') return;
       rc.stage = 'sync'; rc.openedAt = Date.now(); rc.lastMsg = 0; rc.burst = 0;
-      rcShow('已重新连接，正在恢复牌局…');
+      rcShow('Reconnected, restoring match…');
       rcLater(4000);   // no replay frames at all (the hand already ended): hide once the handshake has surely passed
     });
     ws.addEventListener('close', function () {
       if (!opened) return;
       opened = false;
       rc.stage = 'down';
-      rcShow('连接中断，正在重连…');
+      rcShow('Connection lost, reconnecting…');
       if (rc.hideTimer) clearTimeout(rc.hideTimer);
       rc.hideTimer = setTimeout(function () {
         rc.hideTimer = null;
-        if (rc.stage === "down") { rc.textEl.textContent = "仍未连接，正在重试；可导出日志排查"; console.warn("[offline] 断线超过20秒"); }
+        if (rc.stage === "down") { rc.textEl.textContent = "Still not connected, retrying; export diagnostics to investigate"; console.warn("[offline] disconnected for over 20 seconds"); }
       }, 20000);
     });
     ws.addEventListener('message', function () {
@@ -157,11 +157,11 @@
     var orig = url;
     var isGame = /riichiproxy|mahjongproxy|riichi_proxy/i.test(String(url));
     var target = isGame ? LOCAL_WS : url;
-    if (!isGame && !localUrl(url)) throw new Error('离线模式阻止外部 WebSocket: ' + url);
+    if (!isGame && !localUrl(url)) throw new Error('Offline mode blocked external WebSocket: ' + url);
     var InPage = isGame && window.__mjHostMode !== 'node' && window.__mj && window.__mj.server && window.__mj.server.FakeWebSocket;
     var Socket = InPage || NativeWS;
     var ws = protocols === undefined ? new Socket(target) : new Socket(target, protocols);
-    if (isGame) console.log(InPage ? '[offline] 游戏 WS 交给页内后端' : '[offline] 游戏 WS 接到本机服务:', target);
+    if (isGame) console.log(InPage ? '[offline] game WS handed to in-page backend' : '[offline] game WS connected to local server:', target);
     ws.binaryType = 'arraybuffer';
     var _send = ws.send.bind(ws);
     ws.send = function (d) {
@@ -190,12 +190,12 @@
     });
     ws.addEventListener('open', function () {
       if (isGame) ws.send(JSON.stringify({ mjClientId: clientInstance }));
-      console.log('[offline] WS 已连接', url);
+      console.log('[offline] WS connected', url);
     });
-    ws.addEventListener('error', function (e) { console.warn('[offline] WS 错误', e.message || 'transport-error'); });
+    ws.addEventListener('error', function (e) { console.warn('[offline] WS error', e.message || 'transport-error'); });
     ws.addEventListener('close', function (e) {
       if (window.__mjClock) window.__mjClock.disconnect(ws);
-      console.log('[offline] WS 关闭', JSON.stringify({ code: e.code, reason: e.reason, wasClean: e.wasClean, sent: stats.sent, recv: stats.recv }));
+      console.log('[offline] WS closed', JSON.stringify({ code: e.code, reason: e.reason, wasClean: e.wasClean, sent: stats.sent, recv: stats.recv }));
     });
     if (isGame) {
       gameSocket = ws;
@@ -226,7 +226,7 @@
       var assetUrl = localAssetUrl(url);
       if (assetUrl) return nativeFetch(assetUrl, init);
       if (!localUrl(url)) {
-        if (DEBUG) console.log('[offline] 拦截外部 fetch:', url);
+        if (DEBUG) console.log('[offline] intercepted external fetch:', url);
         return emptyResponse();
       }
       return nativeFetch(input, init);
@@ -244,7 +244,7 @@
     if (assetUrl) {
       args[1] = assetUrl;
     } else if (this._mjOfflineBlocked) {
-      if (DEBUG) console.log('[offline] 拦截外部 XHR:', u);
+      if (DEBUG) console.log('[offline] intercepted external XHR:', u);
       args[1] = BASE + 'mock/empty.json';
     }
     return open.apply(this, args);
@@ -263,7 +263,7 @@
   var setAttr = Element.prototype.setAttribute;
   Element.prototype.setAttribute = function (k, v) {
     if (this.tagName === 'SCRIPT' && k === 'src' && !localUrl(v)) {
-      if (DEBUG) console.log('[offline] 拦截 script:', v);
+      if (DEBUG) console.log('[offline] intercepted script:', v);
       return;
     }
     return setAttr.apply(this, arguments);
@@ -274,7 +274,7 @@
       get: srcDesc.get,
       set: function (v) {
         if (!localUrl(v)) {
-          if (DEBUG) console.log('[offline] 拦截 script.src:', v);
+          if (DEBUG) console.log('[offline] intercepted script.src:', v);
           return;
         }
         srcDesc.set.call(this, v);
@@ -283,7 +283,7 @@
     });
   }
 
-  if (DEBUG) console.log('[offline] 补丁已加载');
+  if (DEBUG) console.log('[offline] patch loaded');
 
   // ---------------- Safe override of webGLPluginHelper.getUrlParams ----------------
   // framework.js's implementation does split('?')[1] when the URL has no '?', getting undefined, and then split('&') blows up;
@@ -303,7 +303,7 @@
       }
       return obj;
     } catch (e) {
-      console.warn('[offline] safeGetUrlParams 失败', e);
+      console.warn('[offline] safeGetUrlParams failed', e);
       return {};
     }
   }
@@ -312,7 +312,7 @@
     if (helper.__patched) return true;
     helper.__patched = true;
     helper.getUrlParams = safeGetUrlParams;
-    if (DEBUG) console.log('[offline] 已 patch webGLPluginHelper.getUrlParams');
+    if (DEBUG) console.log('[offline] patched webGLPluginHelper.getUrlParams');
     return true;
   }
   // Polling: framework.js loads asynchronously, so wait until Module/webGLPluginHelper appears

@@ -29,8 +29,8 @@
       if ((b & 0x80) === 0) return [numberIfSafe(result), pos];
       shift += 7n;
     }
-    if (count >= 10) throw new Error('varint 过长');
-    throw new Error('varint 截断');
+    if (count >= 10) throw new Error('varint too long');
+    throw new Error('varint truncated');
   }
 
   /** Parse a protobuf buffer, returning [[fn, wt, value], ...]; throws on failure. */
@@ -41,11 +41,11 @@
     while (pos < buf.length) {
       var r = readVarint(buf, pos);
       var key = r[0];
-      if (typeof key === 'bigint') throw new Error('字段号过大');
+      if (typeof key === 'bigint') throw new Error('field number too large');
       pos = r[1];
       var fn = Math.floor(key / 8);
       var wt = key & 7;
-      if (fn === 0) throw new Error('字段号 0');
+      if (fn === 0) throw new Error('field number 0');
       if (wt === 0) {
         r = readVarint(buf, pos);
         out.push([fn, 0, r[0]]);
@@ -53,24 +53,24 @@
       } else if (wt === 2) {
         r = readVarint(buf, pos);
         var len = r[0];
-        if (typeof len === 'bigint') throw new Error('长度过大');
+        if (typeof len === 'bigint') throw new Error('length too large');
         pos = r[1];
-        if (pos + len > buf.length) throw new Error('长度越界');
+        if (pos + len > buf.length) throw new Error('length out of bounds');
         out.push([fn, 2, buf.subarray(pos, pos + len)]);
         pos += len;
       } else if (wt === 5) {
-        if (pos + 4 > buf.length) throw new Error('fixed32 越界');
+        if (pos + 4 > buf.length) throw new Error('fixed32 out of bounds');
         out.push([fn, 5, (buf[pos] | (buf[pos + 1] << 8) |
                           (buf[pos + 2] << 16) | (buf[pos + 3] << 24)) >>> 0]);
         pos += 4;
       } else if (wt === 1) {
-        if (pos + 8 > buf.length) throw new Error('fixed64 越界');
+        if (pos + 8 > buf.length) throw new Error('fixed64 out of bounds');
         var fixed = 0n;
         for (var j = 0; j < 8; j++) fixed |= BigInt(buf[pos + j]) << BigInt(j * 8);
         out.push([fn, 1, numberIfSafe(fixed)]);
         pos += 8;
       } else {
-        throw new Error('不支持的 wire type ' + wt);
+        throw new Error('unsupported wire type ' + wt);
       }
     }
     return out;
@@ -182,7 +182,7 @@
     if (wt === 2) return w.s(fn, val);
     if (wt === 5) return w.f32(fn, val);
     if (wt === 1) return w.f64(fn, val);
-    throw new Error('不支持的 wire type ' + wt);
+    throw new Error('unsupported wire type ' + wt);
   }
 
   /** Change the varint value of field fn in blob to value (keeping field order); append it if absent. */

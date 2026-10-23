@@ -86,7 +86,7 @@ function load(clock, mode = 'node') {
 }
 
 for (const mode of ['node', 'browser']) {
-  test(`${mode}宿主失焦和切后台不汇报暂停、不关闭连接，返回不显示重连`, async () => {
+  test(`${mode} host focus loss and backgrounding do not report a pause or close the connection; returning shows no reconnect`, async () => {
     const app = load(undefined, mode);
     app.socket.emit('open');
     app.focus(false);
@@ -98,14 +98,14 @@ for (const mode of ['node', 'browser']) {
     app.focus(true);
     app.advance(5_000);
     await Promise.resolve();
-    assert.equal(app.socket.closed, undefined, '返回前台不得主动关闭游戏连接');
-    assert.deepEqual(app.fetches, [], '不发送页面可见性心跳或暂停请求');
-    assert.deepEqual(app.visibilityCalls, [], '静态宿主同样不能因隐藏或恢复暂停牌桌');
+    assert.equal(app.socket.closed, undefined, 'returning to the foreground must not actively close the game connection');
+    assert.deepEqual(app.fetches, [], 'no page-visibility heartbeat or pause request is sent');
+    assert.deepEqual(app.visibilityCalls, [], 'the static host likewise cannot pause the table on hide or resume');
     assert.equal(app.banner(), null);
   });
 }
 
-test('Node计时侧带被宿主吞掉，Unity只收到原二进制；断线冻结镜像', () => {
+test('the host swallows the Node clock side-band, Unity receives only the original binary; disconnect freezes the mirror', () => {
   const samples = [];
   let frozen = 0, unityFrames = 0;
   const controls = [];
@@ -119,27 +119,27 @@ test('Node计时侧带被宿主吞掉，Unity只收到原二进制；断线冻�
   app.socket.emit('message', { data: JSON.stringify({ mjSync: { phase: 'end', id: 'batch', counter: 7 } }) });
   assert.equal(controls.length, 1);
   assert.equal(controls[0].socket, app.socket);
-  assert.equal(unityFrames, 0, '恢复确认侧带同样不能进入Unity协议解析器');
+  assert.equal(unityFrames, 0, 'the recovery-confirmation side-band likewise must not enter the Unity protocol parser');
   app.socket.emit('message', { data: new ArrayBuffer(8) });
   assert.equal(unityFrames, 1);
   app.socket.emit('close', { code: 1006 });
   assert.equal(frozen, 1);
 });
 
-test('掉线后显示重连提示，重连后显示恢复提示，重放结束自动收起', () => {
+test('after a disconnect show the reconnect banner, after reconnecting show the restore banner, and collapse it when replay ends', () => {
   const app = load();
-  assert.equal(app.banner(), null, '首帧未掉线时不应出现提示');
+  assert.equal(app.banner(), null, 'no banner should appear when the first frame is not a disconnect');
   app.socket.emit('open');
-  assert.equal(app.banner(), null, '首次连接不提示');
+  assert.equal(app.banner(), null, 'no banner on the first connection');
 
   app.socket.emit('close', { type: 'close', code: 1006, wasClean: false });
-  assert.deepEqual([app.banner().visible, app.banner().text], [true, '连接中断，正在重连…']);
+  assert.deepEqual([app.banner().visible, app.banner().text], [true, 'Connection lost, reconnecting…']);
 
   app.advance(1200);
-  assert.equal(app.banner().seconds, '已等待 1 秒', '提示里显示已等待时长');
+  assert.equal(app.banner().seconds, 'Waited 1 seconds', 'the banner shows the elapsed wait time');
 
   app.socket.emit('open');
-  assert.deepEqual([app.banner().visible, app.banner().text], [true, '已重新连接，正在恢复牌局…']);
+  assert.deepEqual([app.banner().visible, app.banner().text], [true, 'Reconnected, restoring match…']);
 
   // Server replay: frames back to back, then silence.
   app.socket.emit('message', { type: 'message', data: new ArrayBuffer(8) });
@@ -148,12 +148,12 @@ test('掉线后显示重连提示，重连后显示恢复提示，重放结束�
   app.advance(6);
   app.socket.emit('message', { type: 'message', data: new ArrayBuffer(8) });
   app.advance(300);
-  assert.equal(app.banner().visible, true, '重放期间保持提示');
+  assert.equal(app.banner().visible, true, 'the banner stays during replay');
   app.advance(1000);
-  assert.equal(app.banner().visible, false, '重放结束后收起');
+  assert.equal(app.banner().visible, false, 'collapsed after replay ends');
 });
 
-test('重连后没有重放帧（牌局已结束）时，稍后自动收起', () => {
+test('after reconnecting with no replay frames (the match has ended), collapse automatically a moment later', () => {
   const app = load();
   app.socket.emit('open');
   app.socket.emit('close', { type: 'close' });
@@ -162,15 +162,15 @@ test('重连后没有重放帧（牌局已结束）时，稍后自动收起', ()
   assert.equal(app.banner().visible, false);
 });
 
-test('一直连不回来时提示保留并显示等待时长', () => {
+test('if the connection never comes back, the banner stays and shows the elapsed wait time', () => {
   const app = load();
   app.socket.emit('open');
   app.socket.emit('close', { type: 'close' });
   app.advance(5000);
   assert.equal(app.banner().visible, true);
-  assert.equal(app.banner().seconds, '已等待 5 秒');
+  assert.equal(app.banner().seconds, 'Waited 5 seconds');
   app.advance(16_000);
-  assert.equal(app.banner().visible, true, '20秒后仍应保持断线提示');
-  assert.match(app.banner().text, /仍未连接/);
-  assert.equal(app.banner().seconds, '已等待 21 秒');
+  assert.equal(app.banner().visible, true, 'after 20 seconds the disconnect banner should still stay');
+  assert.match(app.banner().text, /Still not connected/);
+  assert.equal(app.banner().seconds, 'Waited 21 seconds');
 });

@@ -147,9 +147,9 @@ start-game.bat --players=3 --length=hanchan
 | `[human]` / `[clock]` / `[timeout]` | 默认保留真人决策、用时/备用结算、断线暂停/恢复及超时；窗口 open/arm/wait/consume-buffer 仅调试模式 |
 | `[ai]` | 仅调试模式：非真人席每一巡的取舍：立直/默听、立直摸切、弃牌（向听变化、进张数、EV、是否转守）、鸣牌或放过。高级档另外带搜索采样数、计算量与预算是否用尽，其余档没有搜索字段 |
 
-会话层（`mockjs/browser_entry.mjs`）默认保留 `[client] <-` / `[claim] <-`（客户端请求与返回码）、`[reload]`（重连快照）、`[riichi]`（新对局、重演摘要、异常栈）。重复的 `[claim] ->` 和 `[game] ->` 协议通知仅调试输出；`[clock-request]` 仅失败或调试时输出完整计时上下文。外层 `[request]` 保留普通、未支持、异常请求结果，不写完整载荷；成功的 `20019` 心跳默认不记。Node 后端以 `MJ_DEBUG=1` 启用细节；静态后端及前端页面以 `?mjDebug=1` 启用。断线重连还有一组恢复计时：`[mock] 重连：会话已接管` 记录接管与暂停下推，`[resync]` 记录收到 `20162` 距 WS 恢复的耗时、重放起止帧数、重放耗时及等待同步 10 秒后的断线重试（保持冻结，不解除同步门禁），用来判断客户端等在哪一步。排查“按钮点了没反应”这类问题时，按 `[discard]` 里的可鸣列表、`[claim] 打开鸣牌窗口`、`[client] <- ReqQiangCard ... -> 返回码`、`[claim] -> NtfQiangCardEnd` 的顺序对照，就能判断是客户端没发包、服务端拒包，还是服务端没收尾窗口；排查“AI 打得怪”时看 `[ai]` 那一巡的 EV 与风险项。
+会话层（`mockjs/browser_entry.mjs`）默认保留 `[client] <-` / `[claim] <-`（客户端请求与返回码）、`[reload]`（重连快照）、`[riichi]`（新对局、重演摘要、异常栈）。重复的 `[claim] ->` 和 `[game] ->` 协议通知仅调试输出；`[clock-request]` 仅失败或调试时输出完整计时上下文。外层 `[request]` 保留普通、未支持、异常请求结果，不写完整载荷；成功的 `20019` 心跳默认不记。Node 后端以 `MJ_DEBUG=1` 启用细节；静态后端及前端页面以 `?mjDebug=1` 启用。断线重连还有一组恢复计时：`[mock] reconnect: session taken over` 记录接管与暂停下推，`[resync]` 记录收到 `20162` 距 WS 恢复的耗时、重放起止帧数、重放耗时及等待同步 10 秒后的断线重试（保持冻结，不解除同步门禁），用来判断客户端等在哪一步。排查“按钮点了没反应”这类问题时，按 `[discard]` 里的可鸣列表、`[claim] open call window`、`[claim] <- ReqQiangCard ... -> 返回码`、`[claim] -> NtfQiangCardEnd` 的顺序对照，就能判断是客户端没发包、服务端拒包，还是服务端没收尾窗口；排查“AI 打得怪”时看 `[ai]` 那一巡的 EV 与风险项。
 
-重连期间客户端会自己锁住界面等重放，所以页面上没有可点的东西。`offline-patch.js` 为此加了一个覆盖层横幅（`#mj-reconnect`，`pointer-events: none`，不拦截点击）：socket 断开时显示“连接中断，正在重连…”并计时，重连后改显示“已重新连接，正在恢复牌局…”，等服务端重放突发（连续 ≥3 帧后静默 900ms）自动收起；没有重放帧时 4 秒后收起。断线超过 20 秒时仍显示重试提示，不假装已经恢复。调试时可用 `__mjmock.reconnect.show()/hide()` 手动触发。横幅提供“导出诊断日志”，正常运行时也可在开发者控制台执行 `__mjmock.exportLogs()`。Node 的 `/api/diagnostics` 导出服务端最近 5000 行，并接收同源、有限大小的前端日志批次；静态宿主保留有界页内历史（sessionStorage 最近 1000 行）。两宿主捕获前端 error/unhandledrejection；默认只持久化项目关键标签及未知警告/错误，Unity/SDK 普通进度与已知 FS.syncfs 并发性能提示留在 DevTools，不写诊断文件，页面 `?mjDebug=1` 可恢复这些细节。外网拦截明细也仅调试输出，拦截本身不变。Node 导出不重复附加已在服务端落盘的页面行，尚未上传的异常仍会附加。日志只留本地，不序列化任意对象、完整存档或网络载荷。
+重连期间客户端会自己锁住界面等重放，所以页面上没有可点的东西。`offline-patch.js` 为此加了一个覆盖层横幅（`#mj-reconnect`，`pointer-events: none`，不拦截点击）：socket 断开时显示“Connection lost, reconnecting…”并计时，重连后改显示“Reconnected, restoring match…”，等服务端重放突发（连续 ≥3 帧后静默 900ms）自动收起；没有重放帧时 4 秒后收起。断线超过 20 秒时仍显示重试提示，不假装已经恢复。调试时可用 `__mjmock.reconnect.show()/hide()` 手动触发。横幅提供“Export diagnostics”按钮，正常运行时也可在开发者控制台执行 `__mjmock.exportLogs()`。Node 的 `/api/diagnostics` 导出服务端最近 5000 行，并接收同源、有限大小的前端日志批次；静态宿主保留有界页内历史（sessionStorage 最近 1000 行）。两宿主捕获前端 error/unhandledrejection；默认只持久化项目关键标签及未知警告/错误，Unity/SDK 普通进度与已知 FS.syncfs 并发性能提示留在 DevTools，不写诊断文件，页面 `?mjDebug=1` 可恢复这些细节。外网拦截明细也仅调试输出，拦截本身不变。Node 导出不重复附加已在服务端落盘的页面行，尚未上传的异常仍会附加。日志只留本地，不序列化任意对象、完整存档或网络载荷。
 
 ## 5. HTTP 静态资源服务
 
@@ -903,7 +903,7 @@ local/server.mjs
 
 ## 22. 非立直玩法
 
-项目只做单机立直麻将。`mock/server.js` 的 20403 只接受 `RIICHI_GAME_TYPES`（4001 四麻、4002 三麻）；四川（5021/5022/5023）、斗地主（4101）、掼蛋（4111）等其他 gameType 返回 20404 `f1=10`（CommandServiceNotAvailable），并推 20106 让客户端弹“离线模式下此功能不可用”，不组桌。大厅按钮属于 Unity 客户端，不修改。
+项目只做单机立直麻将。`mock/server.js` 的 20403 只接受 `RIICHI_GAME_TYPES`（4001 四麻、4002 三麻）；四川（5021/5022/5023）、斗地主（4101）、掼蛋（4111）等其他 gameType 返回 20404 `f1=10`（CommandServiceNotAvailable），并推 20106 让客户端弹“This feature is unavailable in offline mode”，不组桌。大厅按钮属于 Unity 客户端，不修改。
 
 四川后端曾完整实现（血战/血流/红中血流、换三张、定缺、协议投影与雀币结算），2026-10-18 按维护者决定删除；最后完整版本见提交 `a469df1`，规则依据见已废弃的 ADR 0004/0005。
 

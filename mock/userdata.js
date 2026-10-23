@@ -140,12 +140,12 @@
   /** Item quantities: items / gifts / materials share the { 1:id, 2:count } structure. */
   UserData.prototype.inventoryCount = function (dtype, id) {
     if (![6, 7, 8].includes(dtype) || !Number.isSafeInteger(id) || id <= 0) {
-      throw new RangeError('非法背包物品');
+      throw new RangeError('invalid bag item');
     }
     var row = this.row(dtype, id);
     var count = row ? (P.get(row, 2) || 0) : 0;
     if (!Number.isSafeInteger(count) || count < 0) {
-      throw new RangeError('非法背包数量');
+      throw new RangeError('invalid bag quantity');
     }
     return count;
   };
@@ -155,11 +155,11 @@
     var totals = new Map();
     for (var delta of deltas) {
       this.inventoryCount(delta.dtype, delta.id);
-      if (!Number.isSafeInteger(delta.count)) throw new RangeError('非法数量变化');
+      if (!Number.isSafeInteger(delta.count)) throw new RangeError('invalid quantity change');
       var key = delta.dtype + ':' + delta.id;
       var prior = totals.get(key);
       var total = (prior ? prior.count : 0) + delta.count;
-      if (!Number.isSafeInteger(total)) throw new RangeError('数量变化溢出');
+      if (!Number.isSafeInteger(total)) throw new RangeError('quantity change overflow');
       totals.set(key, { dtype: delta.dtype, id: delta.id, count: total });
     }
     var pending = [];
@@ -167,7 +167,7 @@
       if (!entry.count) continue;
       var count = this.inventoryCount(entry.dtype, entry.id) + entry.count;
       if (!Number.isSafeInteger(count) || count < 0) {
-        throw new RangeError('余额不足或背包数量溢出');
+        throw new RangeError('insufficient balance or bag quantity overflow');
       }
       var before = this.row(entry.dtype, entry.id) || P.W().v(1, entry.id).bytes();
       pending.push({ dtype: entry.dtype, id: entry.id, bytes: P.setVarint(before, 2, count) });

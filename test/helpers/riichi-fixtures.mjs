@@ -7,7 +7,7 @@ export function tiles(text) {
     [...digits].map((rank) => {
       const kind = ('mpsz'.indexOf(suit) + 1) * 10 + Number(rank);
       const copy = (copies.get(kind) || 0) + 1;
-      assert.ok(copy <= 4, `测试牌种超过四张：${kind}`);
+      assert.ok(copy <= 4, `Test tile kind exceeds four copies: ${kind}`);
       copies.set(kind, copy);
       return kind * 10 + copy;
     }));

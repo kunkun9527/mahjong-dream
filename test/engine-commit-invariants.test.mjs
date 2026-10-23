@@ -18,53 +18,53 @@ function completeFixture() {
   return engine;
 }
 
-test('不变量辅助自检：复制实体牌即使总数不变也必须报错', () => {
+test('invariant helper self-check: a duplicated physical tile must be reported even when the total is unchanged', () => {
   const engine = completeFixture();
   assertInvariants(engine);
   engine.wall[1] = engine.wall[0];
-  assert.throws(() => assertInvariants(engine), /实体牌重复/);
+  assert.throws(() => assertInvariants(engine), /Duplicate physical tile/);
 });
 
-test('不变量辅助自检：同时打开摸打和鸣牌窗口必须报错', () => {
+test('invariant helper self-check: an open draw window and claim window at the same time must be reported', () => {
   const engine = completeFixture();
   engine._expectedDraw = { seat: 0, actions: [PlayAction.Normal] };
   engine._expectedClaim = { seat: 0, discarderSeat: 1, actions: [PlayAction.Guo] };
-  assert.throws(() => assertInvariants(engine), /动作窗口并存/);
+  assert.throws(() => assertInvariants(engine), /Action windows overlap/);
 });
 
-test('不变量辅助自检：两个可弃牌座位或动作执行座位错误必须报错', () => {
+test('invariant helper self-check: two discardable seats, or an action executed from the wrong seat, must be reported', () => {
   const engine = completeFixture();
   engine.players[0].hand = engine.wall.splice(0, 14);
   assertInvariants(engine, { expectedActor: 0 });
-  assert.throws(() => assertInvariants(engine, { expectedActor: 1 }), /当前行动者错误/);
+  assert.throws(() => assertInvariants(engine, { expectedActor: 1 }), /Wrong current actor/);
   engine.players[1].hand = engine.wall.splice(0, 14);
-  assert.throws(() => assertInvariants(engine), /当前行动者不唯一/);
+  assert.throws(() => assertInvariants(engine), /Multiple current actors/);
 });
 
-test('不变量辅助自检：非法动作返回错误却只提交一半必须报错', () => {
+test('invariant helper self-check: an illegal action that returns an error but commits half its changes must be reported', () => {
   const engine = completeFixture();
   // Deliberately simulates an old implementation that changed the hand before returning an error; the helper must recognize partial commits.
   engine.submitDraw = () => {
     engine.players[0].hand.push(engine.wall.shift());
     return Result.Fail_CardNotInHand;
   };
-  assert.throws(() => assertRejectedUnchanged(engine, 'submitDraw', { card: 999 }), /非法动作部分提交/);
+  assert.throws(() => assertRejectedUnchanged(engine, 'submitDraw', { card: 999 }), /partially committed an illegal action/);
 });
 
-test('不变量辅助自检：宝牌区、封存尾牌和点数也在检查范围内', () => {
+test('invariant helper self-check: the dead wall, sealed tail tiles and scores are also within the checked scope', () => {
   const engine = completeFixture();
   engine.deadWall[5] = engine.wall[0];
-  assert.throws(() => assertInvariants(engine), /实体牌重复/);
+  assert.throws(() => assertInvariants(engine), /Duplicate physical tile/);
   const scores = completeFixture();
   scores.players[0].score--;
-  assert.throws(() => assertInvariants(scores), /点数加供托/);
+  assert.throws(() => assertInvariants(scores), /Points plus riichi sticks/);
   const missing = completeFixture();
   missing.wall.pop();
-  assert.throws(() => assertInvariants(missing), /实体牌总数/);
+  assert.throws(() => assertInvariants(missing), /Physical tile count mismatch/);
 });
 
 for (const players of [3, 4]) for (const matchLength of ['east', 'hanchan']) {
-  test(`${players}人${matchLength === 'east' ? '东风' : '半庄'}多种子自战逐提交检查全局不变量与非法输入不变性`, async () => {
+  test(`${players}-player ${matchLength === 'east' ? 'east-only' : 'hanchan'} multi-seed self-play: check global invariants on every commit and immutability on illegal input`, async () => {
     for (const seed of [31, 32, 33]) {
       const engine = new GameEngine({
         players, matchLength, seed, startScore: players === 3 ? 35_000 : 25_000,
@@ -108,17 +108,17 @@ for (const players of [3, 4]) for (const matchLength of ['east', 'hanchan']) {
       };
       await engine.start();
       observer.check();
-      assert.ok(engine.matchOver && engine.handIndex < 64, '必须按正式规则结束');
+      assert.ok(engine.matchOver && engine.handIndex < 64, 'must end under the official rules');
       assert.ok(draws > 0 && claims > 0);
-      for (const boundary of ['discard:入口提交', 'expectDraw:返回提交', 'submitDraw:返回提交',
-        'submitClaim:返回提交', 'prepareFinalResult:入口提交', 'finishHand:入口提交']) {
-        assert.ok(observer.counts.get(boundary) > 0, `未检查 ${boundary}`);
+      for (const boundary of ['discard:entry commit', 'expectDraw:return commit', 'submitDraw:return commit',
+        'submitClaim:return commit', 'prepareFinalResult:entry commit', 'finishHand:entry commit']) {
+        assert.ok(observer.counts.get(boundary) > 0, `not checked ${boundary}`);
       }
     }
   });
 }
 
-test('错误座位无法建立真人窗口，经两个提交入口均拒绝且状态不变', () => {
+test('a wrong seat cannot open a human window; both submit entries reject it and the state is unchanged', () => {
   const engine = completeFixture();
   // ReqPlayCard / ReqQiangCard protocols have no client seat; the seat comes from the trusted window.
   for (const seat of [1, 2, 3, -1, 4]) {

@@ -10,7 +10,7 @@ function giveHand(engine, seat, text) {
     .concat(engine.replacements));
   engine.players[seat].hand = tiles(text).map((tile) => {
     while (reserved.has(tile)) tile++;
-    assert.ok(tile % 10 <= 4, '测试暗手与副露不得持有第五张同种牌');
+    assert.ok(tile % 10 <= 4, 'test concealed hand and melds must not hold a fifth copy of the same tile');
     reserved.add(tile);
     return tile;
   });
@@ -45,8 +45,8 @@ function fourthKan(players, kind, samePlayer = false) {
 }
 
 for (const players of [3, 4]) {
-  for (const [kind, label] of [['ankan', '暗杠'], ['kakan', '加杠'], ['minkan', '明杠']]) {
-    test(`${players}麻第四${label}仍摸岭上，弃牌无人荣和才四杠散了并按时翻表里宝`, async () => {
+  for (const [kind, label] of [['ankan', 'closed kan'], ['kakan', 'added kan'], ['minkan', 'open kan']]) {
+    test(`${players}-player fourth ${label}: still draws from the rinshan; if no one rons the discard, the four-kan abort applies and omote/ura dora flip on time`, async () => {
       const { engine, frames, p, declare } = fourthKan(players, kind);
       await declare();
       assert.equal(engine.handEnded, false);
@@ -59,7 +59,7 @@ for (const players of [3, 4]) {
       const emit = engine.emit;
       engine.emit = (event, payload) => {
         if (event === RiichiMsg.ENtfPlayCard && payload.action === A.Normal) {
-          assert.equal(engine.doraIndicators.length, 5, '弃牌鸣牌窗口开始前必须翻杠宝');
+          assert.equal(engine.doraIndicators.length, 5, 'dora must be flipped before the discard claim window opens');
           assert.equal(engine.uraIndicators.length, 5);
           assert.equal(engine.handEnded, false);
         }
@@ -75,7 +75,7 @@ for (const players of [3, 4]) {
       assert.equal(engine.dealerSeat, 0);
     });
 
-    test(`${players}麻第四${label}的岭上自摸优先四杠流局，明加杠自摸不翻最后杠宝`, async () => {
+    test(`${players}-player fourth ${label}: rinshan tsumo takes priority over the four-kan abort, and tsumo after an open or added kan does not flip the last kan dora`, async () => {
       const { engine, frames, p, declare } = fourthKan(players, kind);
       await declare();
       assert.equal(engine.canTsumo(p), true);
@@ -86,7 +86,7 @@ for (const players of [3, 4]) {
       assert.equal(engine.uraIndicators.length, kind === 'ankan' ? 5 : 4);
     });
 
-    test(`${players}麻第四${label}后弃牌的真实荣和优先四杠流局`, async () => {
+    test(`${players}-player after the fourth ${label}: a real ron on the discard takes priority over the four-kan abort`, async () => {
       const { engine, frames, declare } = fourthKan(players, kind);
       const winner = engine.players[2];
       giveHand(engine, 2, '567p456s678s666z7z');
@@ -99,7 +99,7 @@ for (const players of [3, 4]) {
     });
   }
 
-  test(`${players}麻第四杠后弃牌无人和时即使有人碰也先四杠散了`, async () => {
+  test(`${players}-player: after the fourth kan, if no one rons the discard, the four-kan abort happens first even when someone can pon`, async () => {
     const { engine, frames, declare } = fourthKan(players, 'ankan');
     await declare();
     const claimant = engine.players[2];
@@ -109,13 +109,13 @@ for (const players of [3, 4]) {
     assert.ok(actions.includes(A.Peng));
     assert.equal(actions.includes(A.Hu), false);
     engine.aiClaim = () => ({ action: A.Peng, otherCards: claimant.hand.filter((tile) => Math.floor(tile / 10) === 47) });
-    engine.executeClaim = async () => { assert.fail('第四杠弃牌不能再碰'); };
+    engine.executeClaim = async () => { assert.fail('the fourth-kan discard cannot be ponned'); };
     assert.equal(await engine.processTurnAction(0, A.Normal, 472, true), R.Succ);
     assert.equal(frames.find((f) => f.event === RiichiMsg.ENtfGameStop).payload.liuJuType, LiuJuType.SiGang);
   });
 
   for (const kind of ['ankan', 'kakan']) {
-    test(`${players}麻第四${kind === 'ankan' ? '暗杠被国士抢' : '加杠被抢'}不成立杠也不翻第四杠宝`, async () => {
+    test(`${players}-player fourth ${kind === 'ankan' ? 'closed kan robbed by kokushi' : 'added kan robbed'}: the kan is not completed and the fourth-kan dora is not flipped`, async () => {
       const { engine, frames, p, declare } = fourthKan(players, kind);
       const winner = engine.players[2];
       giveHand(engine, 2, kind === 'ankan' ? '19m11p19s1234567z' : '456s678s666z78p11z');
@@ -132,13 +132,13 @@ for (const players of [3, 4]) {
     });
   }
 
-  test(`${players}麻同一人四杠不流局，可继续弃牌及四杠子自摸，第五暗加明杠均不下发且提交不变`, async () => {
+  test(`${players}-player: the same player's four kans do not end the hand; discarding and rinshan tsumo are still allowed; no fifth closed, added or open kan is offered and rejected submissions leave state unchanged`, async () => {
     const { engine, frames, p, declare } = fourthKan(players, 'ankan', true);
     // Four waits after a kan on a single-tile green dragon wait: the rinshan draw did not pair; after discarding, still waiting on Chun.
     p.hand = [...tiles('9999p'), 461];
     await declare();
     assert.equal(engine.handEnded, false);
-    assert.equal(engine.canTsumo(p), false, '两张不同字牌尚未成对');
+    assert.equal(engine.canTsumo(p), false, 'two different honor tiles have not formed a pair yet');
     engine.turnDraw = async () => {};
     assert.equal(await engine.processTurnAction(0, A.Normal, 461, true), R.Succ);
     assert.equal(engine.handEnded, false);
@@ -185,7 +185,7 @@ function waiting(players, { noYaku = false, riichi = false } = {}) {
 }
 
 for (const players of [3, 4]) {
-  test(`${players}麻无役低目未荣和也形成同巡振听，摸牌前禁止另一有役高目`, async () => {
+  test(`${players}-player: passing a no-yaku ron still forms same-turn furiten, which blocks the other, yaku-bearing ron until the next draw`, async () => {
     const { engine, p } = waiting(players, { noYaku: true });
     assert.deepEqual(p.waits, [38, 45]);
     assert.equal(engine.canRon(p, 383), false);
@@ -198,7 +198,7 @@ for (const players of [3, 4]) {
     assert.equal(engine.canRon(p, 453), false);
   });
 
-  test(`${players}麻无役见逃没有任何可鸣动作也须记录振听，非等待牌不误记`, async () => {
+  test(`${players}-player: passing with no yaku and no claim action still records furiten; non-waiting tiles are not recorded by mistake`, async () => {
     const { engine } = engineFixture({ players });
     const p = engine.players[0];
     p.hand = tiles('456p789s2z');
@@ -213,18 +213,18 @@ for (const players of [3, 4]) {
     assert.equal(p.tempFuriten, true);
   });
 
-  for (const mode of ['手动过', '超时', '托管自动过', '不鸣自动过']) {
+  for (const mode of ['manual pass', 'timeout', 'autoplay pass', 'no-claim auto-pass']) {
     for (const riichi of [false, true]) {
-      test(`${players}麻${riichi ? '立直' : '未立直'}有役见逃${mode}，到真实摸牌时仅清同巡振听`, async (t) => {
+      test(`${players}-player ${riichi ? 'riichi' : 'non-riichi'} yaku-bearing pass (${mode}): only same-turn furiten is cleared at the real draw`, async (t) => {
         t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100_000 });
         const { engine, p } = waiting(players, { riichi });
         const can = engine.players.map((q) => q.seat === 1 ? [] : engine.claimActions(q.seat, 1, 472));
         assert.ok(can[0].includes(A.Hu));
-        if (mode === '不鸣自动过') engine.setInternalState({ 2: true });
+        if (mode === 'no-claim auto-pass') engine.setInternalState({ 2: true });
         const done = engine.resolveClaims(1, 472, can);
-        if (mode === '手动过') assert.equal(engine.submitClaim({ action: A.Guo }), R.Succ);
-        else if (mode === '超时') t.mock.timers.tick(28_000);  // 基础 5 + 备用 20 + 服务端冗余 3
-        else if (mode === '托管自动过') engine.setHumanAutoplay(true);
+        if (mode === 'manual pass') assert.equal(engine.submitClaim({ action: A.Guo }), R.Succ);
+        else if (mode === 'timeout') t.mock.timers.tick(28_000);  // base 5 + spare 20 + server redundancy 3
+        else if (mode === 'autoplay pass') engine.setHumanAutoplay(true);
         await done;
         assert.equal(p.tempFuriten, !riichi);
         assert.equal(p.riichiFuriten, riichi);
@@ -242,7 +242,7 @@ for (const players of [3, 4]) {
     }
   }
 
-  test(`${players}麻能荣和却碰后未摸牌，弃牌不清同巡振听；岭上补牌才清除`, async () => {
+  test(`${players}-player: can ron but pons before drawing; discarding does not clear same-turn furiten, only the rinshan replacement draw does`, async () => {
     const { engine, p } = waiting(players);
     p.melds = [1, 2].map((n) => ({ type: 'pon', tiles: tiles(`${n}${n}${n}p`), from: 1 }));
     p.menzen = false;
@@ -257,7 +257,7 @@ for (const players of [3, 4]) {
     await done;
     assert.equal(p.tempFuriten, true);
     assert.equal(await engine.processTurnAction(0, A.Normal, 311, false), R.Succ);
-    assert.equal(p.tempFuriten, true, '鸣牌弃牌没有真实摸牌，不得结束同巡振听');
+    assert.equal(p.tempFuriten, true, 'a discard after a claim is not a real draw and must not end same-turn furiten');
     engine.replacements = [312];
     engine.wall = [411, 421];
     engine.remain = 2;
@@ -265,7 +265,7 @@ for (const players of [3, 4]) {
     assert.equal(p.tempFuriten, false);
   });
 
-  test(`${players}麻多人同时可荣和时一人过，其他赢家不受其振听影响`, async () => {
+  test(`${players}-player: when several players can ron and one passes, the other winners are not affected by that player's furiten`, async () => {
     const { engine, p } = waiting(players);
     const winner = engine.players[2];
     giveHand(engine, 2, '456p456s678s666z7z');
@@ -283,7 +283,7 @@ for (const players of [3, 4]) {
     assert.equal(winner.tempFuriten, false);
   });
 
-  test(`${players}麻国士可抢暗杠但选择过，也记录同巡振听`, async () => {
+  test(`${players}-player: kokushi can rob an ankan but chooses to pass; same-turn furiten is still recorded`, async () => {
     const { engine, p } = waiting(players);
     p.hand = tiles('19m11p19s1234567z');
     engine.updateWaits(p);
@@ -296,7 +296,7 @@ for (const players of [3, 4]) {
     assert.equal(engine.canRon(p, 292), false);
   });
 
-  test(`${players}麻能荣和却明杠先记见逃，实际摸岭上后结束同巡振听`, async () => {
+  test(`${players}-player: can ron but open-kans first, which records furiten; same-turn furiten ends only after the actual rinshan draw`, async () => {
     const { engine, p } = waiting(players);
     p.hand = tiles('33345p77z');
     p.melds = [5, 6].map((n) => ({ type: 'pon', tiles: tiles(`${n}${n}${n}z`), from: 1 }));
@@ -309,7 +309,7 @@ for (const players of [3, 4]) {
     engine.remain = 2;
     const original = engine.drawReplacement;
     engine.drawReplacement = async function (seat) {
-      assert.equal(p.tempFuriten, true, '提交鸣牌不能当作摸牌提前清除');
+      assert.equal(p.tempFuriten, true, 'submitting a claim cannot be treated as a draw and clear furiten early');
       return original.call(this, seat);
     };
     const can = engine.players.map((q) => q.seat === 1 ? [] : engine.claimActions(q.seat, 1, 234));
@@ -321,7 +321,7 @@ for (const players of [3, 4]) {
   });
 
   for (const riichi of [false, true]) {
-    test(`${players}麻抢加杠见逃${riichi ? '记永久' : '记同巡'}振听并禁止下一张荣和`, async () => {
+    test(`${players}-player: passing on a robbed added kan records ${riichi ? 'permanent' : 'same-turn'} furiten and forbids ron on the next tile`, async () => {
       const { engine, p } = waiting(players, { riichi });
       engine.expectClaim(0, 1, 472, engine.kanRobActions(1, 472, 'kakan')[0]);
       const done = engine.resolveKanRob(1, 472, engine.kanRobActions(1, 472, 'kakan'));
@@ -335,7 +335,7 @@ for (const players of [3, 4]) {
 }
 
 for (const riichi of [false, true]) {
-  test(`三麻抢北见逃${riichi ? '永久' : '同巡'}振听，多家抢北其中一家过不阻止另一家`, async () => {
+  test(`3-player: passing on a nukidora robbery records ${riichi ? 'permanent' : 'same-turn'} furiten; one of several robbers passing does not stop the other`, async () => {
     const { engine, p } = waiting(3, { riichi });
     p.hand = tiles('123p123s789s555z4z');
     const winner = engine.players[2];
@@ -355,7 +355,7 @@ for (const riichi of [false, true]) {
   });
 }
 
-test('三麻无役抢北牌形完成也记同巡振听，但不能抢的普通暗杠不记见逃', async () => {
+test('3-player: a no-yaku nukidora robbery that completes the shape still records same-turn furiten, but an ankan that cannot be robbed does not record furiten', async () => {
   const { engine, p } = waiting(3, { noYaku: true });
   p.hand = tiles('123s4z');
   p.melds.push({ type: 'pon', tiles: tiles('222p'), from: 1 });

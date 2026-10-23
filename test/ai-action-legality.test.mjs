@@ -47,7 +47,7 @@ function engineWith(players, opts = {}) {
   return engine;
 }
 
-test('AI 明杠提交三张实体牌并可通过 resolveClaims 执行', async () => {
+test('AI open kan submits three physical tiles and can be executed via resolveClaims', async () => {
   const players = [
     player(0),
     player(1, [111, 112, 113, 211, 221, 231, 361, 371, 351, 352]),
@@ -81,7 +81,7 @@ test('AI 明杠提交三张实体牌并可通过 resolveClaims 执行', async ()
   assert.equal(players[0].discards.length, 0);
 });
 
-test('三麻立直拔北只允许新摸的实体北牌', () => {
+test('sanma riichi nukidora only allows the newly drawn physical north tile', () => {
   const hand = [211, 221, 231, 241, 251, 261, 311, 321, 331, 351, 352, 441, 442, 291];
   const p = player(0, hand);
   p.riichi = true;
@@ -106,7 +106,7 @@ test('三麻立直拔北只允许新摸的实体北牌', () => {
   assert.equal(engine.northInHand(p), 441);
 });
 
-test('筋食替只禁止所吃牌及对应的另一端', () => {
+test('suji kuikae only forbids the called tile and its corresponding other end', () => {
   const p = player(1, [111, 121, 131, 141, 151, 161]);
   const engine = engineWith([player(0), p, player(2), player(3)]);
   const cases = [
@@ -122,7 +122,7 @@ test('筋食替只禁止所吃牌及对应的另一端', () => {
   }
 });
 
-test('鸣牌后向听计算复用实际食替规则', () => {
+test('after a call, shanten calculation reuses the actual kuikae rules', () => {
   const p = player(1, [121, 141, 151, 211, 221, 231, 311, 321, 331, 411, 412, 451, 461]);
   const engine = engineWith([player(0), p, player(2), player(3)]);
   const claimed = 131;
@@ -143,7 +143,7 @@ test('鸣牌后向听计算复用实际食替规则', () => {
   assert.deepEqual(helperArgs, [PlayAction.Chi, meld.tiles, claimed]);
 });
 
-test('弃牌选择在合法候选中计算准确的向听、受入与等待', () => {
+test('discard selection computes accurate shanten, ukeire and waits among legal candidates', () => {
   const hand = [141, 371, 142, 441, 161, 241, 381, 191, 431, 351, 111, 131, 171, 341];
   const legal = 371;
   const forbiddenKinds = new Set(hand.filter((tile) => tile !== legal).map(kindOf));

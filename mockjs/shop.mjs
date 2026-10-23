@@ -31,7 +31,7 @@ function stockFor(user, now, refreshCount) {
   return C.coinSlots.map((slot) => {
     const pool = (slot.type === 7 ? C.gifts : C.materials)
       .filter((item) => item.price > 0 && (!slot.rarity || item.rarity === slot.rarity) && !used.has(item.id));
-    if (!pool.length) throw new Error('雀币商店配置不足以生成商品');
+    if (!pool.length) throw new Error('coin shop config is not sufficient to generate products');
     seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
     const item = pool[(seed >>> 0) % pool.length];
     used.add(item.id);
