@@ -1,34 +1,25 @@
-import { createWriteStream, mkdirSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fork, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
-// Everything the game server prints also lands here, so a single match can be inspected afterwards.
+// The game server writes this file itself (MJ_LOG_FILE): teeing the child's stdout from here stopped writing whenever
+// the console paused, so a match played while the window sat idle left no log at all.
 const logDirectory = path.join(directory, '..', 'logs');
 const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*/, '').replace('T', '-');
 const logPath = path.join(logDirectory, `game-${stamp}.log`);
-// The launcher test runs this file in a bare vm context without a file system; keep the console-only path alive there.
-let logStream = null;
-if (typeof mkdirSync === 'function' && typeof createWriteStream === 'function') {
-  mkdirSync(logDirectory, { recursive: true });
-  logStream = createWriteStream(logPath, { flags: 'a' });
-  console.log(`[local] 本次日志：${logPath}`);
-}
+console.log(`[local] 本次日志：${logPath}`);
 function tee(stream, target) {
   // A forked child under the launcher test is a bare mock without stdio pipes.
   if (!stream || typeof stream.setEncoding !== 'function') return;
   stream.setEncoding('utf8');
-  stream.on('data', (chunk) => {
-    target.write(chunk);
-    if (logStream) logStream.write(chunk);
-  });
+  stream.on('data', (chunk) => target.write(chunk));
 }
 const child = fork(path.join(directory, 'server.mjs'), {
   stdio: ['inherit', 'pipe', 'pipe', 'ipc'],
   // A stable origin keeps Unity's IndexedDB language/preferences across normal launches.
-  env: { ...process.env, MJ_PORT: process.env.MJ_PORT || '8765' },
+  env: { ...process.env, MJ_PORT: process.env.MJ_PORT || '8765', MJ_LOG_FILE: logPath },
 });
 tee(child.stdout, process.stdout);
 tee(child.stderr, process.stderr);
@@ -108,7 +99,6 @@ child.on('error', (error) => {
 });
 child.on('exit', (code) => {
   clearTimeout(startupTimer);
-  if (logStream) logStream.end();
   if (!opened && code) console.error(`[local] 本地服务已退出（代码 ${code}），请根据上方信息修复后重试。`);
   process.exit(code ?? 0);
 });

@@ -58,7 +58,7 @@ Prefer to play without a browser tab pointing at a website? Run the game locally
 
 The offline version saves to `userdata/profile.json`; copy that file to back it up. Use the Save Editor's Export and Import to move a save between the browser and offline versions.
 
-Every launch also writes a timestamped log to `logs/game-<time>.log` (dealt tiles, draws, discards, calls, win settlement, and every client request with its result code), which is what to attach when reporting a stuck or misbehaving hand.
+Every launch also writes a timestamped log to `logs/game-<time>.log` (dealt tiles, draws, discards, calls, win settlement, and every client request with its result code), which is what to attach when reporting a stuck or misbehaving hand. The game server process writes the file itself, so the log keeps growing even if the console window is paused or selected.
 
 Optional shortcuts that open a specific match directly:
 

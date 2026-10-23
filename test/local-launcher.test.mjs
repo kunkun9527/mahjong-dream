@@ -17,7 +17,7 @@ async function launch({ env = {}, args = [] } = {}) {
     entryUrl: entry.href, path, fileURLToPath, URL,
     fs: { access: async () => {} },
     process: { env: { 'ProgramFiles(x86)': 'C:/Applications', ...env }, argv: ['node', entry.pathname, ...args], platform: 'win32', once() {} },
-    console: { error: assert.fail },
+    console: { log() {}, error: assert.fail },
     setTimeout: () => 1, clearTimeout() {},
     fork(_file, options) { forkOptions = options; return child; },
     spawn(command, args, options) {

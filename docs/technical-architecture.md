@@ -131,7 +131,7 @@ start-game.bat --players=3 --length=hanchan
 
 ### 4.4 运行日志
 
-`local/launcher.mjs` 把服务子进程的 stdout/stderr 同时转发到控制台，并追加写入 `logs/game-<启动时间>.log`（`logs/` 已在 `.gitignore` 内）。`mock/server.js` 创建 `RiichiSession` 时传入 `log` 回调，给每行加上 `[时:分:秒.毫秒]` 前缀，所以一局结束后可以完整回看那手牌发生了什么。
+`local/launcher.mjs` 启动服务子进程时把日志路径经 `MJ_LOG_FILE` 传下去，`local/server.mjs` 自己把控制台输出（`console.log/warn/error`）追加写入 `logs/game-<启动时间>.log`（`logs/` 已在 `.gitignore` 内），同时仍打印到控制台。日志由产生日志的进程直接落盘，而不是靠启动器转发子进程 stdout：Windows 控制台一旦被点选（QuickEdit）就会暂停输出，转发链路会静默卡死，整局日志就空了（2026-10-23 实测：文件停在“游戏页面已连接”，进程仍在服务）。`mock/server.js` 创建 `RiichiSession` 时传入 `log` 回调，给每行加上 `[时:分:秒.毫秒]` 前缀，所以一局结束后可以完整回看那手牌发生了什么。
 
 引擎（`mockjs/engine.mjs`）每行一条，`note(tag, ...)` 输出，`第N-本场` 前缀标明手数；没有传入 `log` 时（单元测试）全部静默：
 

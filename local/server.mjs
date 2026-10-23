@@ -3,12 +3,28 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { format } from 'node:util';
 import { WebSocketServer, WebSocket } from 'ws';
 
 import { loadProfile, saveProfile } from './profile.mjs';
 import { createProfileHost, AWAY_LIMIT_MS } from '../mockjs/profile_host.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// The launcher passes the log path in MJ_LOG_FILE and this process writes it, instead of the launcher teeing our stdout:
+// clicking into the Windows console pauses console output, and a stalled tee used to cut a match's log off mid-hand.
+if (process.env.MJ_LOG_FILE) {
+  const logPath = path.resolve(process.env.MJ_LOG_FILE);
+  fs.mkdirSync(path.dirname(logPath), { recursive: true });
+  const logStream = fs.createWriteStream(logPath, { flags: 'a' });
+  logStream.on('error', (error) => console.error('[local] 日志写入失败：' + error.message));
+  for (const name of ['log', 'warn', 'error']) {
+    const original = console[name].bind(console);
+    console[name] = (...args) => {
+      logStream.write(format(...args) + '\n');
+      original(...args);
+    };
+  }
+}
 const requiredResources = ['index.html', 'game.html', 'Build_intl/mj-h5.loader.js',
   'Build_intl/mj-h5.data.unityweb', 'Build_intl/mj-h5.framework.js.unityweb', 'Build_intl/mj-h5.wasm.unityweb'];
 for (const resource of requiredResources) {
