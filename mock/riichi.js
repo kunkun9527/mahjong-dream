@@ -14099,7 +14099,9 @@
       this.honba = 0;
       this.renchanCount = 0;
       this.riichiSticks = 0;
-      this.dealerSeat = 0;
+      const startDealer = Number(opts.startDealer);
+      this.startDealer = Number.isInteger(startDealer) && startDealer >= 0 && startDealer < players ? startDealer : 0;
+      this.dealerSeat = this.startDealer;
       this.scores = null;
       this.xunNum = 0;
       this._pending = null;
@@ -14417,6 +14419,10 @@
     }
     nextSeat(s) {
       return (s + 1) % this.playersN;
+    }
+    /** Seat order counted from the first dealer (0 = chiicha); breaks score ties. */
+    startOrder(seat) {
+      return (seat - this.startDealer + this.playersN) % this.playersN;
     }
     seatWindOf(seat) {
       return ((seat - this.dealerSeat) % this.playersN + this.playersN) % this.playersN + 1;
@@ -15460,7 +15466,7 @@
         const gameOver2 = this.decideGameOver(dealerContinues, scores, { drawNoPenalty: !!res.noPenalty });
         this.renchanCount = dealerContinues ? this.renchanCount + 1 : 0;
         if (gameOver2 && this.riichiSticks > 0) {
-          const topSeat = this.players.map((_, seat) => seat).sort((left, right) => scores[right] - scores[left] || left - right)[0];
+          const topSeat = this.players.map((_, seat) => seat).sort((left, right) => scores[right] - scores[left] || this.startOrder(left) - this.startOrder(right))[0];
           scores[topSeat] += this.riichiSticks * 1e3;
           this.riichiSticks = 0;
         }
@@ -15672,7 +15678,7 @@
     }
     buildStopUserInfos(scores, winner, detail, tenpai, isFinal, huDelta) {
       const out = [];
-      const order = this.players.map((_, seat) => seat).sort((left, right) => scores[right] - scores[left] || left - right);
+      const order = this.players.map((_, seat) => seat).sort((left, right) => scores[right] - scores[left] || this.startOrder(left) - this.startOrder(right));
       const rankOf = [];
       order.forEach((seat, index) => {
         rankOf[seat] = index + 1;
@@ -15745,7 +15751,7 @@
       if (this.handIndex + 1 >= this.maxHands) return true;
       if (drawNoPenalty) return false;
       const necessary = this.playersN === 3 ? 4e4 : 3e4;
-      const order = this.players.map((_, seat) => seat).sort((left, right) => scores[right] - scores[left] || left - right);
+      const order = this.players.map((_, seat) => seat).sort((left, right) => scores[right] - scores[left] || this.startOrder(left) - this.startOrder(right));
       const topSeat = order[0];
       const topMeets = scores[topSeat] >= necessary;
       const lastSeat = this.juNum === this.playersN - 1;
@@ -15792,7 +15798,7 @@
       this.roundWind = 1;
       this.honba = 0;
       this.renchanCount = 0;
-      this.dealerSeat = 0;
+      this.dealerSeat = this.startDealer;
     }
     // ================= AI =================
     aiLevelOf(seat) {
@@ -19624,10 +19630,10 @@
     }
     stats.maxRenchan = Math.max(stats.maxRenchan, Number(matchStats.maxRenchan) || 0);
   }
-  function recordMatch(profile, { players, matchLength, scores, matchStats = null, roomId = null }) {
+  function recordMatch(profile, { players, matchLength, scores, matchStats = null, roomId = null, startDealer = 0 }) {
     const key = players === 3 ? "sanma" : "yonma";
     const stats = profile.stats[key];
-    const order = scores.map((score, seat) => ({ score, seat })).sort((left, right) => right.score - left.score || left.seat - right.seat);
+    const order = scores.map((score, seat) => ({ score, seat })).sort((left, right) => right.score - left.score || (left.seat - startDealer + players) % players - (right.seat - startDealer + players) % players);
     const placement = order.findIndex((entry) => entry.seat === 0) + 1;
     const length = matchLength === "hanchan" ? "hanchan" : "east";
     stats[`${length}Games`] += 1;
@@ -19732,7 +19738,8 @@
           matchLength: engine.matchLength,
           scores,
           matchStats: engine.matchStats,
-          roomId: sess.rankRoomId
+          roomId: sess.rankRoomId,
+          startDealer: engine.startDealer
         });
         result.changes = [
           mock.userdata.changeInventory([{ dtype: 6, id: ECONOMY_CATALOG.defaults.coinId, count: result.coins }]),
@@ -20002,6 +20009,8 @@
         // AI thinking-delay multiplier. 0 = instant (for self-tests), 1 = normal feel
         speed: opts.speed != null ? opts.speed : 1,
         seed: opts.seed,
+        // First dealer seat (drawn per match by the server; default 0)
+        startDealer: opts.startDealer,
         baseTime: opts.baseTime != null ? opts.baseTime : 5,
         extraTime: opts.extraTime != null ? opts.extraTime : 20,
         internalState: { ...opts.internalState || {} },
@@ -20089,6 +20098,7 @@
         maxHands: o.maxHands,
         speed: o.speed,
         seed,
+        startDealer: o.startDealer,
         baseTime: o.baseTime,
         extraTime: o.extraTime,
         debug: o.debug,

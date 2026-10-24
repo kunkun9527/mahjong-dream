@@ -47,6 +47,8 @@ var RiichiSession = class {
       // AI thinking-delay multiplier. 0 = instant (for self-tests), 1 = normal feel
       speed: opts.speed != null ? opts.speed : 1,
       seed: opts.seed,
+      // First dealer seat (drawn per match by the server; default 0)
+      startDealer: opts.startDealer,
       baseTime: opts.baseTime != null ? opts.baseTime : 5,
       extraTime: opts.extraTime != null ? opts.extraTime : 20,
       internalState: { ...(opts.internalState || {}) },
@@ -135,6 +137,7 @@ var RiichiSession = class {
       maxHands: o.maxHands,
       speed: o.speed,
       seed,
+      startDealer: o.startDealer,
       baseTime: o.baseTime,
       extraTime: o.extraTime,
       debug: o.debug,

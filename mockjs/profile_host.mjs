@@ -93,6 +93,7 @@ export function createProfileHost(mock, profile, { persist, log = () => {} }) {
         scores,
         matchStats: engine.matchStats,
         roomId: sess.rankRoomId,
+        startDealer: engine.startDealer,
       });
       // Match-end coins are credited to the real wallet (inventory currency); rank, record and wallet changes are sent in the f24 of the leave-table reply,
       // otherwise the client's rank bar and balance on the room-select page stay at their old values.

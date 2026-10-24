@@ -4,6 +4,7 @@ import { RiichiMsg } from '../mockjs/proto_enum.mjs';
 import { applyRankResult, createDefaultProfile, recordMatch } from '../local/profile.mjs';
 import { ECONOMY_CATALOG as C } from '../mockjs/economy_catalog.mjs';
 import { engineFixture } from './helpers/riichi-fixtures.mjs';
+import { GameEngine } from '../mockjs/engine.mjs';
 
 for (const players of [3, 4]) for (const matchLength of ['east', 'hanchan']) {
   test(`${players}p ${matchLength === 'east' ? 'east-only' : 'hanchan'} final round without the required points goes to extension; the extension final round is capped and never enters the next wind`, async () => {
@@ -62,6 +63,45 @@ test('3p/4p final results break ties by starting seat, and placement points and 
     assert.deepEqual(infos.map((info) => info.jingSuanScore), jing);
     assert.deepEqual(infos.map((info) => info.jieBi), jing.map((value) => value * 100));
     assert.equal(infos.reduce((sum, info) => sum + info.jingSuanScore, 0), 0);
+  }
+});
+
+test('a non-zero first dealer: ties, win-stop, riichi sticks and placement all follow seat order from that dealer', async () => {
+  const { engine } = engineFixture({ players: 4 });
+  engine.startDealer = 2;
+  const tied = [30_000, 20_000, 20_000, 30_000];
+  // Order from chiicha seat 2: 2, 3, 0, 1.
+  assert.deepEqual(engine.buildStopUserInfos(tied, null, null, null, true).map((info) => info.rank), [2, 4, 3, 1]);
+  const allTied = new Array(4).fill(25_000);
+  assert.deepEqual(engine.buildStopUserInfos(allTied, null, null, null, true).map((info) => info.rank), [3, 4, 1, 2]);
+  engine.juNum = 3;
+  const top = [30_000, 30_000, 20_000, 20_000];
+  engine.dealerSeat = 1;
+  assert.equal(engine.decideGameOver(true, top), false, 'seat 0 is ahead of seat 1 in chiicha order, so dealer seat 1 is not first');
+  engine.dealerSeat = 0;
+  assert.equal(engine.decideGameOver(true, top), true);
+  const profile = createDefaultProfile();
+  assert.equal(recordMatch(profile, { players: 4, matchLength: 'east', roomId: 3, scores: allTied, startDealer: 2 }).placement, 3);
+  assert.equal(recordMatch(profile, { players: 4, matchLength: 'east', roomId: 3, scores: allTied, startDealer: 1 }).placement, 4);
+
+  const { engine: drawEngine } = engineFixture({ players: 4, maxHands: 1, scores: [25_000, 25_000, 25_000, 23_000] });
+  drawEngine.startDealer = 1;
+  drawEngine.dealerSeat = 1;
+  drawEngine.riichiSticks = 2;
+  let finalScores;
+  drawEngine.onFinalResult = (scores) => { finalScores = scores; return {}; };
+  await drawEngine.endHand({ type: 'draw', liuJuType: 0, noPenalty: true, tenpai: new Array(4).fill(false) });
+  assert.deepEqual(finalScores, [25_000, 27_000, 25_000, 23_000]);
+});
+
+test('the engine starts from the given first dealer and rejects out-of-range values', () => {
+  for (const [players, startDealer, expected] of [[4, 3, 3], [3, 2, 2], [4, 4, 0], [3, -1, 0], [4, undefined, 0]]) {
+    const engine = new GameEngine({ players, startDealer });
+    assert.equal(engine.startDealer, expected);
+    assert.equal(engine.dealerSeat, expected);
+    engine.dealerSeat = (expected + 1) % players;
+    engine.resetMatch();
+    assert.equal(engine.dealerSeat, expected);
   }
 });
 

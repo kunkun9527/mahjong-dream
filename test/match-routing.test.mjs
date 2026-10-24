@@ -90,6 +90,38 @@ test('a fixed seed fixes both the table ID and the AI appearance', async () => {
 });
 
 
+test('each table draws its first dealer from the match seed and the engine starts with that dealer', async () => {
+  const old = { ...mock.config };
+  Object.assign(mock.config, { matchDelay: 0, engineStartDelay: 0, speed: 0 });
+  async function startTable(seed) {
+    mock.config.seed = seed;
+    const session = mock.createSession();
+    session.resume({ readyState: 1, _deliver() {} });
+    mock.handlers[20403](session, request(4001, 0));
+    const end = Date.now() + 5_000;
+    while (!session.riichi?.engine) {
+      if (Date.now() > end) throw new Error('timed out waiting for the engine');
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    const dealers = { table: session.table.startDealer, engine: session.riichi.engine.startDealer, dealer: session.riichi.engine.dealerSeat };
+    session.destroy();
+    return dealers;
+  }
+  try {
+    const seen = new Set();
+    for (let seed = 1; seed <= 24; seed++) {
+      const { table, engine, dealer } = await startTable(seed);
+      assert.ok(Number.isInteger(table) && table >= 0 && table < 4, `seed ${seed}: startDealer ${table}`);
+      assert.equal(engine, table);
+      assert.equal(dealer, table);
+      seen.add(table);
+    }
+    assert.ok(seen.size > 1, 'the human seat must not always be the first dealer');
+  } finally {
+    for (const key of ['seed', 'matchDelay', 'engineStartDelay', 'speed']) mock.config[key] = old[key];
+  }
+});
+
 test('cancelling matchmaking after the table is formed does not start a ghost game from a delayed task', async () => {
   const oldMatchDelay = mock.config.matchDelay;
   const oldEngineStartDelay = mock.config.engineStartDelay;

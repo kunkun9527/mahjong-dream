@@ -839,6 +839,8 @@
       akaCount: CONFIG.akaCount,
       speed: CONFIG.speed,
       seed: sess.table && sess.table.seed != null ? sess.table.seed : CONFIG.seed,
+      // Records saved before the draw existed have no startDealer: they replay with seat 0 as before.
+      startDealer: sess.table ? sess.table.startDealer : undefined,
       uids: uids,
       autoHuman: CONFIG.autoHuman,
       // Ranked rooms: Qihang/Zhumeng basic, Chengfeng intermediate, Yulong advanced.
@@ -1313,6 +1315,8 @@
         sess.push(20164, P.W().v(1, r.uid).bytes(), 1, null);
         sess.push(20014, P.W().s(1, encTableUser(seat, r, true)).v(2, sess.table.roomType || 7).bytes(), 1, null);
       }
+      // Draw the first dealer like the seat-wind draw at a real table; drawn after the NPCs so a fixed seed keeps the same opponents.
+      sess.table.startDealer = Math.floor(matchRng() * (n + 1));
 
       // 3) Table ready, start the engine: it will actively push NtfToPrepare(1001)
       var engineStartDelay = CONFIG.engineStartDelay != null ? CONFIG.engineStartDelay : 200;

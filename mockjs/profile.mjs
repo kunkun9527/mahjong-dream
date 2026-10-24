@@ -156,11 +156,13 @@ function addMatchStats(stats, placement, score, matchStats) {
 }
 
 
-export function recordMatch(profile, { players, matchLength, scores, matchStats = null, roomId = null }) {
+export function recordMatch(profile, { players, matchLength, scores, matchStats = null, roomId = null, startDealer = 0 }) {
   const key = players === 3 ? 'sanma' : 'yonma';
   const stats = profile.stats[key];
   const order = scores.map((score, seat) => ({ score, seat }))
-    .sort((left, right) => right.score - left.score || left.seat - right.seat);
+    // Ties go to the seat closer to the first dealer (chiicha).
+    .sort((left, right) => right.score - left.score
+      || (left.seat - startDealer + players) % players - (right.seat - startDealer + players) % players);
   const placement = order.findIndex((entry) => entry.seat === 0) + 1;
   const length = matchLength === 'hanchan' ? 'hanchan' : 'east';
   stats[`${length}Games`] += 1;
