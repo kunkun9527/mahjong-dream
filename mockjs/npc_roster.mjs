@@ -72,6 +72,9 @@ function pickNpcs(rng, { count, humanWarrior, roomId = null, humanLevel = 1 }) {
       skin: npc.skin,
       level: lo + Math.floor(rng() * (hi - lo + 1)),
       pt: Math.floor(rng() * 60),
+      // Max affinity like the player's own characters: the client only voices a winner's yaku names from affinity Lv5
+      // (MjWTbWarriorAudio); below that it plays the silent NPCxx_000 cue (ADR 0011).
+      likability: 6,
     });
   }
   return picked;

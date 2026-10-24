@@ -6,7 +6,7 @@
 >
 > 2026-10-24：英文和牌结算的档位贴图原为直译 “Full Han / Jump Full Han / Double Full Han / Triple Full Han”，现由派生资源包改为 Mangan / Haneman / Baiman / Sanbaiman（ADR 0010，`tools/build_settlement_titles.py`）。原包、原清单和 `versions.json` 不动，`offline-patch.js` 改读 `versions.mj.json`。隔离无头 Edge 实测：静态宿主派生包一次加载成功，结算显示 Mangan/Haneman/Baiman/Sanbaiman；Node 宿主加载派生资源并进入牌桌菜单正常。全量 **510/510**。
 >
-> 2026-10-24：Kana/Toyone（NPC09）与 Toki/Sumire（NPC06）和牌时役种一次全部弹出，原因是它们的结算序列 `NPCxx_000` 丢了游戏自带静音片段 `Empty` 的引用；同一构建脚本派生了 4 个语音序列包补上（ADR 0011）。有界面 Edge 实测强制 Kana 自摸：修复前 5 条役种同帧出现且不播 `Empty`，修复后每条播一次 `Empty`、约 0.39 秒亮一条，与 Koromo 一致。未单独实测 NPC06。
+> 2026-10-24：Kana/Toyone（NPC09）与 Toki/Sumire（NPC06）和牌时役种一次全部弹出，原因是它们的结算序列 `NPCxx_000` 丢了游戏自带静音片段 `Empty` 的引用；同一构建脚本派生了 4 个语音序列包补上。另外查明役名语音要和牌者好感度达到 Lv5（`MjWTbWarriorAudio`），而 NPC 原先发的是好感度 0，所以 NPC 和牌只播静音片段；现在 `mockjs/npc_roster.mjs` 让 NPC 也按满好感 6 发送，NPC 和牌会念役名（ADR 0011）。有界面 Edge 实测强制 Kana 自摸：原状 5 条役种同帧出现；只修序列时每条播一次 `Empty`、逐条亮出；NPC 好感 6 时每条播对应役名语音。未单独实测 NPC06。
 >
 > **产品范围（2026-10-18 起）：只做单机立直麻将（四麻/三麻）。** 四川麻将后端已删除（最后完整版本见提交 `a469df1`），四川、斗地主、掼蛋及好友/抽卡/邮件等外围入口一律返回原生“This feature is unavailable in offline mode”提示。
 

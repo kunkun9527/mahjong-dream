@@ -40,6 +40,8 @@ test('seating does not collide with the player character, characters at a table 
     assert.ok(a.every((r) => r.warrior !== human));
     assert.equal(new Set(a.map((r) => r.warrior)).size, count);
     assert.ok(a.every((r) => r.uid === NPC_UID_BASE + r.npc && r.level >= 17 && r.level <= 22));
+    // Affinity Lv5+ unlocks the winner's yaku-name voice lines on the settlement panel.
+    assert.ok(a.every((r) => r.likability === 6));
   }
 });
 

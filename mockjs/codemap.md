@@ -15,7 +15,7 @@
 - `shop.mjs` — 杂货铺/雀币/招募/荣耀积分四类商店的购买、限购与刷新（DT 30）。
 - `one_round.mjs` — 一局战报名费与番数奖励。
 - `profile.mjs`、`economy.mjs`、`profile_host.mjs` — 档案规则、一次性经济补给、共享档案宿主（装载/会话回调/结算记账/存档修改器操作）。网页版经 bundle 的 `__mj.host` 使用，Node 版直接 import（ADR 0007）。
-- `npc_roster.mjs` — 19 位 NPC（固定角色/皮肤/头像、风格五轴与情景特性）与按种子抽人 `pickNpcs`；风格由 `riichi_ai_policy.mjs` 的 `resolveStyle` 应用，真人席保持中性（ADR 0008）。
+- `npc_roster.mjs` — 19 位 NPC（固定角色/皮肤/头像、风格五轴与情景特性）与按种子抽人 `pickNpcs`（NPC 一律满好感 6，客户端据此解锁和牌役名语音，ADR 0011）；风格由 `riichi_ai_policy.mjs` 的 `resolveStyle` 应用，真人席保持中性（ADR 0008）。
 - `process_shim.mjs` — 构建时注入的 `process` 替身；缺它时 bundle 在浏览器里报 `process is not defined`。
 - 生成数据：`economy_catalog.mjs`、`riichi_desc.mjs`，由 `tools/` 脚本生成，不要手改。
 
