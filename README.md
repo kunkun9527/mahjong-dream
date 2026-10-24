@@ -67,6 +67,10 @@ start-game.bat --players=4 --length=hanchan
 start-game.bat --players=3 --length=east
 ```
 
+### Settlement animation demo
+
+Want to see a specific win animation without waiting for it? Double-click **`demo-settlement.bat`** and pick Mangan, Haneman, Baiman, Sanbaiman, Yakuman or all of them in turn (or run `demo-settlement.bat baiman`). It opens a separate browser window with a throw-away profile, starts a 4-player match by itself and lets the AI play your seat; every win is then settled as the chosen level so its full animation plays. The match never ends: close the window to stop. The scores and yaku list are a canned example and do not match the hand on screen. Your save is never touched. Needs Node.js 22 and Edge or Chrome.
+
 ## Diagnostic Logs
 
 The reconnect banner has an **Export diagnostics** button. You can also run `__mjmock.exportLogs()` in the browser developer console. Logs stay local and include clock lifecycle, request results, reconnect/sync events and frontend errors; the browser history is bounded, so export soon after a problem. The offline launcher also keeps the server log under `logs/`. Default logs omit AI calculations, empty claim-window bookkeeping, historical replay details, Unity/SDK progress and duplicate exported page entries. Unknown warnings/errors remain recorded. For detailed diagnostics, set `MJ_DEBUG=1` for the Node backend and add `mjDebug=1` to the game URL for the page/static backend; no remote upload is used.

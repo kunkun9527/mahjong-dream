@@ -12,16 +12,16 @@
     "ui_settlement_img_sbm_en": "Sanbaiman"
   },
   "outputs": {
-    "StreamingAssets/Bundles/WebGL/mjab_jp_ui_ingame_153ee3f29285e1477538586aea86fdc1.bundle": {
-      "md5": "153ee3f29285e1477538586aea86fdc1",
-      "size": 1566238
+    "StreamingAssets/Bundles/WebGL/mjab_jp_ui_ingame_8085cacbce0c24b8a37e87920f58a8be.bundle": {
+      "md5": "8085cacbce0c24b8a37e87920f58a8be",
+      "size": 1549222
     },
-    "StreamingAssets/Bundles/arts_053407d4f262b61f3c9461e13c7f497a.json": {
-      "md5": "053407d4f262b61f3c9461e13c7f497a",
-      "size": 232173
+    "StreamingAssets/Bundles/arts_88e1ed4786394eebb266d2259aad48c2.json": {
+      "md5": "88e1ed4786394eebb266d2259aad48c2",
+      "size": 232166
     },
     "StreamingAssets/Bundles/versions.mj.json": {
-      "md5": "2fa6aec1ae1bae486349d9d05f9322b3",
+      "md5": "1f95d85b7e5d80f2fc905d83cc25d958",
       "size": 274
     }
   }

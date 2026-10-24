@@ -15557,7 +15557,9 @@
           redBaoFan: doraBreak.aka,
           baBeiFan: doraBreak.babei,
           fu: win.fu,
-          totalFan: win.han,
+          // The client picks the settlement title from manType=YiMan as: isYiMan ? 5 + totalFan : 5 (counted yakuman),
+          // with titles configured for 1x-6x; so a true yakuman sends its multiplier here, not the library's han 0.
+          totalFan: win.yakuman > 0 ? Math.min(win.yakuman, 6) : win.han,
           yakuman: win.yakuman || 0
         });
       }

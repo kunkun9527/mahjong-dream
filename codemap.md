@@ -6,6 +6,7 @@
 
 ## Entry points
 - `start-game.bat` / `local/launcher.mjs` — 启动服务并打开浏览器。
+- `demo-settlement.bat` / `tools/demo_settlement.mjs` — 结算动画演示（开发/展示用，不属于正式游戏，见 `tools/codemap.md`）。
 - `local/server.mjs` — HTTP + WebSocket 服务，装载 `mock/` 兼容层。
 - `host-mode.js` + `web-host.js` — 宿主判定；浏览器内加载后端与 `localStorage` 存档，或转发 Node 的 `/api/profile`。`modifier.js` — 右侧 ⚙ 存档修改器。
 - `clock-bridge.js` — 校验加载哈希固定的 v3 派生 WASM，投影权威时间、确认原生手牌可操作后起表，并在 Unity 消费/渲染/Reload 完成后确认当前连接的恢复批次（ADR 0009）。
@@ -16,11 +17,11 @@
 ## Commands
 | 目的 | 命令 |
 | --- | --- |
-| 启动 | `npm start` / `start-game.bat --players=3 --length=hanchan`（唯一 BAT，默认端口 8765） |
+| 启动 | `npm start` / `start-game.bat --players=3 --length=hanchan`（默认端口 8765） |
 | 网页版 | Cloudflare Pages 关联仓库发布根目录（`_headers` 声明 Brotli 编码与资源包长缓存）；任意静态服务器也可 |
 | 构建 bundle | `npm run build`（`mockjs/` → `mock/riichi.js`） |
 | 重新派生计时客户端 | `npm run build:clock`（仅 Unity 构建变化或钩子调整时；需临时 wabt + Python wasmtime/brotlicffi，见 ADR 0009） |
-| 重新派生结算档位贴图 | `python -B tools/build_settlement_titles.py`（需临时 UnityPy==1.25.4 + Pillow，见 ADR 0010） |
+| 重新派生结算档位贴图 | `python -B tools/build_settlement_titles.py`（需临时 UnityPy==1.25.4 + Pillow + numpy，见 ADR 0010） |
 | 语法检查 | `npm run check`（新增源码要加进 `package.json` 的 check 列表） |
 | 测试 | `npm test`；单个：`node --test test/engine-smoke.test.mjs` |
 | 调试 | `MJ_DEBUG=1 MJ_USERDATA_DIR=<临时目录> npm start`；URL 参数 `mjPlayers/mjLength/mjSeed/mjSpeed` |

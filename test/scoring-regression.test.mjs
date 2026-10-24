@@ -144,6 +144,24 @@ test('four- and three-player pao tsumo: all honba is paid by the liable player, 
   }
 });
 
+test('settlement title fields: a true yakuman sends its multiplier as totalFan, counted yakuman stays isYiMan=false', async () => {
+  // Client rule (GameEndView2.SetPlayerHuBrandInfo): manType 5 -> isYiMan ? 5 + totalFan : 5 ("Counted Yakuman").
+  const cases = [
+    { win: { ...paoWin(1, false, false), yaku: { '四暗刻': '役満' } }, totalFan: 1, isYiMan: true },
+    { win: { ...paoWin(2, false, false), yaku: { '四暗刻単騎待ち': 'ダブル役満' } }, totalFan: 2, isYiMan: true },
+    { win: { isAgari: true, hasYaku: true, han: 13, fu: 30, ten: 32_000, yakuman: 0, name: '数え役満',
+      yaku: { '立直': '1飜', '清一色': '6飜', 'ドラ': '6飜' }, oya: [48_000], ko: [32_000] }, totalFan: 13, isYiMan: false },
+  ];
+  for (const { win, totalFan, isYiMan } of cases) {
+    const { engine, frames } = fixture(4);
+    await engine.endHand({ type: 'ron', winners: [1], loser: 0, card: 111, wins: new Map([[1, win]]) });
+    const info = stopped(frames).userInfos.find((user) => user.seat === 1);
+    assert.equal(info.manType, 5);
+    assert.equal(info.isYiMan, isYiMan, win.name);
+    assert.equal(info.totalFan, totalFan, win.name);
+  }
+});
+
 test('pao ron honba is borne by the liable player, and the same liable discarder is not charged twice', async () => {
   for (const n of [3, 4]) for (const loser of [0, 2]) for (const units of [1, 2]) {
     const { engine } = fixture(n);
