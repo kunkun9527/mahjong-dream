@@ -98,7 +98,7 @@ npm run build   # 由 mockjs/ 重新生成 mock/riichi.js
 
 - 网页版与离线版共用同一后端：[ADR 0007](docs/adr/0007-browser-and-node-hosts.md)
 - 架构：[`docs/technical-architecture.md`](docs/technical-architecture.md) · 代码地图：[`codemap.md`](codemap.md)
-- 规则基线：[ADR 0002](docs/adr/0002-use-mahjong-soul-ranked-rules.md) · AI 分级：[ADR 0006](docs/adr/0006-riichi-ai-levels.md) · NPC 与对局恢复：[ADR 0008](docs/adr/0008-npc-roster-and-match-recovery.md) · 倒计时桥接（哈希固定的派生 Unity WASM）：[ADR 0009](docs/adr/0009-derived-unity-clock-client.md) · 英文结算档位贴图（派生资源包）：[ADR 0010](docs/adr/0010-derived-settlement-titles.md)
+- 规则基线：[ADR 0002](docs/adr/0002-use-mahjong-soul-ranked-rules.md) · AI 分级：[ADR 0006](docs/adr/0006-riichi-ai-levels.md) · NPC 与对局恢复：[ADR 0008](docs/adr/0008-npc-roster-and-match-recovery.md) · 倒计时桥接（哈希固定的派生 Unity WASM）：[ADR 0009](docs/adr/0009-derived-unity-clock-client.md) · 英文结算档位贴图（派生资源包）：[ADR 0010](docs/adr/0010-derived-settlement-titles.md) · 两名角色结算役种逐条显示（派生资源包）：[ADR 0011](docs/adr/0011-silent-yaku-reveal-cue.md)
 - 历史记录：[`docs/handoff.md`](docs/handoff.md)、[`docs/repair-backlog.md`](docs/repair-backlog.md)
 
 <details>

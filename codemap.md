@@ -21,7 +21,7 @@
 | 网页版 | Cloudflare Pages 关联仓库发布根目录（`_headers` 声明 Brotli 编码与资源包长缓存）；任意静态服务器也可 |
 | 构建 bundle | `npm run build`（`mockjs/` → `mock/riichi.js`） |
 | 重新派生计时客户端 | `npm run build:clock`（仅 Unity 构建变化或钩子调整时；需临时 wabt + Python wasmtime/brotlicffi，见 ADR 0009） |
-| 重新派生结算档位贴图 | `python -B tools/build_settlement_titles.py`（需临时 UnityPy==1.25.4 + Pillow + numpy，见 ADR 0010） |
+| 重新派生结算资源包 | `python -B tools/build_settlement_titles.py`（档位贴图 + NPC06/NPC09 役种静音提示音；需临时 UnityPy==1.25.4 + Pillow + numpy，见 ADR 0010/0011） |
 | 语法检查 | `npm run check`（新增源码要加进 `package.json` 的 check 列表） |
 | 测试 | `npm test`；单个：`node --test test/engine-smoke.test.mjs` |
 | 调试 | `MJ_DEBUG=1 MJ_USERDATA_DIR=<临时目录> npm start`；URL 参数 `mjPlayers/mjLength/mjSeed/mjSpeed` |
@@ -43,6 +43,6 @@
 - 不重新接入生产域名、远端 WSS 或任何联网流程。
 - 浏览器状态不是牌局真相；AI 不得读对手暗牌、未来牌山。
 - 协议字段名、消息名、枚举值沿用原协议；改协议同时查 `mockjs/riichi_desc.mjs`、编解码调用方、`mock/server.js` 和测试。
-- 规则基线：立直 ADR 0002（雀魂段位战）；存档 ADR 0001、双宿主 ADR 0007（档案规则只改 `mockjs/profile*.mjs`，两边自动同步）；商店经济 ADR 0003；立直 AI 分级 ADR 0006；NPC 名单/风格与对局记录恢复 ADR 0008；派生计时客户端 ADR 0009；派生结算档位贴图 ADR 0010。
+- 规则基线：立直 ADR 0002（雀魂段位战）；存档 ADR 0001、双宿主 ADR 0007（档案规则只改 `mockjs/profile*.mjs`，两边自动同步）；商店经济 ADR 0003；立直 AI 分级 ADR 0006；NPC 名单/风格与对局记录恢复 ADR 0008；派生计时客户端 ADR 0009；派生结算档位贴图 ADR 0010；派生结算役种静音提示音 ADR 0011。
 - 规则、协议、存档、服务行为的改动必须带回归测试；不提交 `.tmp-*`、截图等调试文件。
 - 提交信息用 Conventional Commits（中文描述），例如 `fix(engine): 修正三麻拔北抢和`。

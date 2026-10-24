@@ -166,7 +166,7 @@ start-game.bat --players=3 --length=hanchan
 - 对 URL 解码后执行 `path.resolve`，拒绝逃逸项目根目录的路径；
 - 为 HTML、JS、CSS、JSON、WASM、图片、音频、bundle 和 `.unityweb` 设置 MIME；
 - 原 Unity 的 `*.unityweb` 不加 `Content-Encoding`，由 Unity loader 自行解压；唯一例外是哈希固定的派生计时客户端 `mj-h5.clock-*.wasm.unityweb`，以 `br` + `application/wasm` 交给浏览器原生解压（ADR 0009）；
-- 派生结算档位资源（ADR 0010）：`offline-patch.js` 把 `StreamingAssets/Bundles/versions.json` 改指向 `versions.mj.json`，其清单引用哈希命名的派生 `mjab_jp_ui_ingame` 包；原件不动，两种宿主相同；
+- 派生结算资源（ADR 0010、0011）：`offline-patch.js` 把 `StreamingAssets/Bundles/versions.json` 改指向 `versions.mj.json`，其清单引用哈希命名的派生 `mjab_jp_ui_ingame` 包与 `npc06/npc09_aud_{jp,cn}` 包；原件不动，两种宿主相同；
 - `/host-mode.js` 返回 `window.__mjHostMode = 'node'`，让页面改用 `/ws` 和 `/api/profile`；
 - `POST /api/profile` 只接受同源 `application/json` 请求（其他方法 405，跨源或非 JSON 403），转给共享档案宿主处理存档修改器操作；
 - 支持普通、前缀和后缀 byte Range；非法或越界 Range 返回 416；

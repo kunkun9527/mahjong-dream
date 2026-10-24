@@ -1,9 +1,13 @@
-"""Build the derived settlement-title bundle: replace the mistranslated English han-level art (ADR 0010).
+"""Build the derived settlement bundles: English han-level art (ADR 0010) and the silent yaku-reveal cue (ADR 0011).
 
 The original English textures read "Full Han / Jump Full Han / Double Full Han / Triple Full Han"; the standard
 terms are Mangan / Haneman / Baiman / Sanbaiman. Only those four Texture2D objects change. The original bundle,
 asset manifest and versions.json stay untouched; the build writes hash-named copies next to them plus
 StreamingAssets/Bundles/versions.mj.json, which offline-patch.js serves in place of versions.json.
+
+Each yaku line on the win settlement is paced by the winner's voice sequence NPCxx_000_{JP,CN}, which plays the
+game's silent Empty clip. NPC06's and NPC09's copies lost that clip reference, so their yaku all appeared at once;
+the build gives them NPC04's sequence (identical layout, same clip) under their own name.
 
 Bundle format (verified on this snapshot): 33-byte header = b" " + md5(UnityFS body) in hex; the file name hash is
 md5(whole file). The client checks each download against the hash/size in arts_<md5>.json and retries forever
@@ -30,6 +34,14 @@ BUNDLE_NAME = 'mjab_jp_ui_ingame.bundle'
 SOURCE_BUNDLE = 'mjab_jp_ui_ingame_bae168ce5cac36fd332ea44d80071cb5.bundle'
 SOURCE_VERSIONS_MD5 = '875c11cdce11b14d9fc0bffc8596f87d'
 SOURCE_ARTS_MD5 = 'a9ec274b1600e9ab96079f8d586b0c99'
+# Voice-sequence bundles whose NPCxx_000 sequence lacks the Empty clip -> the working template (same layout).
+VOICE_FIXES = {
+    'npc06_aud_jp_82b771859873d7a69d26e27bfea8d0e8.bundle': 'npc04_aud_jp_56ecbde7093277670c3eddbab42d2487.bundle',
+    'npc06_aud_cn_f75bd77d57309770433708b6ab818957.bundle': 'npc04_aud_cn_912e398c6b0945c3a01806842ce1f876.bundle',
+    'npc09_aud_jp_e7492e5a86c984545d54349b0bff2d82.bundle': 'npc04_aud_jp_56ecbde7093277670c3eddbab42d2487.bundle',
+    'npc09_aud_cn_dba7f3629010eabf87e3cbea1678bb94.bundle': 'npc04_aud_cn_912e398c6b0945c3a01806842ce1f876.bundle',
+}
+EMPTY_CLIP = b'Assets/ArtAB/globbyab/co/aud/common_01/Empty_s.asset'
 TITLES = {
     'ui_settlement_img_mg_en': 'Mangan',
     'ui_settlement_img_tm_en': 'Haneman',
@@ -264,7 +276,45 @@ def build_bundle():
     return data
 
 
-def build_manifest(bundle):
+def bundle_name(file_name):
+    """npc09_aud_jp_<md5>.bundle -> npc09_aud_jp.bundle (the manifest key)."""
+    return file_name[:-40] + '.bundle'
+
+
+def sequence_000(env, npc, lang):
+    name = f'{npc.upper()}_000_{lang.upper()}'
+    found = [obj for obj in env.objects if obj.type.name == 'TextAsset' and obj.peek_name() == name]
+    assert len(found) == 1, f'{name}: expected one sequence, found {len(found)}'
+    tree = found[0].read_typetree()
+    return found[0], tree, tree['m_Script'].encode('utf-8', 'surrogateescape')
+
+
+def build_voice_bundle(source_name, template_name):
+    npc, _, lang = source_name.split('_')[:3]
+    template_npc = template_name.split('_')[0]
+    _, _, template = sequence_000(UnityPy.load(pinned(BUNDLES / 'WebGL' / template_name, template_name[-39:-7])[33:]),
+                                  template_npc, lang)
+    assert EMPTY_CLIP in template and template.count(template_npc.upper().encode()) == 1, f'{template_name}: unexpected template'
+    source = pinned(BUNDLES / 'WebGL' / source_name, source_name[-39:-7])
+    assert source[:1] == b' ' and source[1:33].decode() == md5(source[33:]), 'unexpected bundle header'
+    before = raw_objects(UnityPy.load(source[33:]))
+    env = UnityPy.load(source[33:])
+    obj, tree, script = sequence_000(env, npc, lang)
+    assert EMPTY_CLIP not in script, f'{source_name}: the sequence already plays the Empty clip; re-audit'
+    fixed = template.replace(template_npc.upper().encode(), npc.upper().encode())
+    tree['m_Script'] = fixed.decode('utf-8', 'surrogateescape')
+    obj.save_typetree(tree)
+    body = env.file.save(packer='original')
+    after = raw_objects(UnityPy.load(body))
+    assert before.keys() == after.keys()
+    drift = [path for path in before if (before[path] != after[path]) != (path == obj.path_id)]
+    assert not drift, f'objects changed unexpectedly: {drift}'
+    assert sequence_000(UnityPy.load(body), npc, lang)[2] == fixed
+    return b' ' + md5(body).encode() + body
+
+
+def build_manifest(derived):
+    """derived: manifest bundle name -> (source file name, derived bytes)."""
     versions_bytes = pinned(BUNDLES / 'versions.json', SOURCE_VERSIONS_MD5)
     versions = json.loads(versions_bytes)
     arts = next(item for item in versions['data'] if item['name'] == 'Arts')
@@ -275,9 +325,10 @@ def build_manifest(bundle):
         if obj.type.name != 'MonoBehaviour':
             continue
         tree = obj.read_typetree()
-        entries = [entry for entry in tree['bundles'] if entry['name'] == BUNDLE_NAME]
-        assert len(entries) == 1 and entries[0]['hash'] == SOURCE_BUNDLE[-39:-7]
-        entries[0]['hash'], entries[0]['size'] = md5(bundle), len(bundle)
+        for name, (source_name, data) in derived.items():
+            entries = [entry for entry in tree['bundles'] if entry['name'] == name]
+            assert len(entries) == 1 and entries[0]['hash'] == source_name[-39:-7], name
+            entries[0]['hash'], entries[0]['size'] = md5(data), len(data)
         obj.save_typetree(tree)
         edited += 1
     assert edited == 1
@@ -291,22 +342,27 @@ def build_manifest(bundle):
 def main():
     if sys.argv[1:2] == ['--render']:
         redraw()
-    bundle = build_bundle()
-    manifest, versions = build_manifest(bundle)
-    outputs = {
-        BUNDLES / 'WebGL' / f'mjab_jp_ui_ingame_{md5(bundle)}.bundle': bundle,
+    derived = {BUNDLE_NAME: (SOURCE_BUNDLE, build_bundle())}
+    for source_name, template_name in VOICE_FIXES.items():
+        derived[bundle_name(source_name)] = (source_name, build_voice_bundle(source_name, template_name))
+    manifest, versions = build_manifest(derived)
+    outputs = {BUNDLES / 'WebGL' / f'{name[:-7]}_{md5(data)}.bundle': data for name, (_, data) in derived.items()}
+    outputs.update({
         BUNDLES / f'arts_{md5(manifest)}.json': manifest,
         BUNDLES / 'versions.mj.json': versions,
-    }
+    })
     record = {
-        'adr': 'docs/adr/0010-derived-settlement-titles.md',
-        'source': {'bundle': SOURCE_BUNDLE, 'arts': f'arts_{SOURCE_ARTS_MD5}.json', 'versionsMd5': SOURCE_VERSIONS_MD5},
+        'adr': ['docs/adr/0010-derived-settlement-titles.md', 'docs/adr/0011-silent-yaku-reveal-cue.md'],
+        'source': {'bundle': SOURCE_BUNDLE, 'arts': f'arts_{SOURCE_ARTS_MD5}.json', 'versionsMd5': SOURCE_VERSIONS_MD5,
+                   'voiceBundles': VOICE_FIXES},
         'titles': TITLES,
         'outputs': {str(path.relative_to(ROOT)).replace('\\', '/'): {'md5': md5(data), 'size': len(data)}
                     for path, data in outputs.items()},
     }
+    sources = {source for source, _ in derived.values()}
     stale = [path for path in BUNDLES.glob('arts_*.json') if path.name != f'arts_{SOURCE_ARTS_MD5}.json'] + \
-            [path for path in (BUNDLES / 'WebGL').glob('mjab_jp_ui_ingame_*.bundle') if path.name != SOURCE_BUNDLE]
+            [path for name in derived for path in (BUNDLES / 'WebGL').glob(f'{name[:-7]}_*.bundle')
+             if path.name not in sources]
     for path in stale:
         if path not in outputs:
             path.unlink()

@@ -1,5 +1,6 @@
-// Derived settlement-title art (ADR 0010): the English han-level textures are corrected in a hash-named copy of the
-// bundle; the page swaps in a derived versions.json so the asset manifest points the client at it.
+// Derived settlement bundles (ADR 0010, ADR 0011): the English han-level textures and the NPC06/NPC09 silent yaku-reveal
+// cue are corrected in hash-named copies of their bundles; the page swaps in a derived versions.json so the asset
+// manifest points the client at them.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
@@ -12,7 +13,9 @@ const md5 = (data) => crypto.createHash('md5').update(data).digest('hex');
 const record = JSON.parse(read('tools/settlement-titles/manifest.json'));
 
 test('original Unity files are untouched; the derived files match the build record', () => {
-  assert.equal(md5(read(`StreamingAssets/Bundles/WebGL/${record.source.bundle}`)), record.source.bundle.slice(-39, -7));
+  for (const name of [record.source.bundle, ...Object.keys(record.source.voiceBundles), ...Object.values(record.source.voiceBundles)]) {
+    assert.equal(md5(read(`StreamingAssets/Bundles/WebGL/${name}`)), name.slice(-39, -7), name);
+  }
   assert.equal(md5(read(`StreamingAssets/Bundles/${record.source.arts}`)), record.source.arts.slice(5, 37));
   assert.equal(md5(read('StreamingAssets/Bundles/versions.json')), record.source.versionsMd5);
   for (const [path, { md5: digest, size }] of Object.entries(record.outputs)) {
@@ -22,14 +25,17 @@ test('original Unity files are untouched; the derived files match the build reco
   }
 });
 
-test('the derived bundle keeps the client header format and its name is the file hash', () => {
-  const [path] = Object.keys(record.outputs).filter((p) => p.endsWith('.bundle'));
-  const data = read(path);
-  assert.match(path, /\/mjab_jp_ui_ingame_([0-9a-f]{32})\.bundle$/);
-  assert.equal(path.slice(-39, -7), md5(data));
-  assert.equal(data.subarray(0, 1).toString(), ' ');
-  assert.equal(data.subarray(1, 33).toString(), md5(data.subarray(33)), 'header is md5 of the UnityFS body');
-  assert.equal(data.subarray(33, 41).toString('latin1'), 'UnityFS\0');
+test('derived bundles keep the client header format and their names are the file hash', () => {
+  const paths = Object.keys(record.outputs).filter((p) => p.endsWith('.bundle'));
+  const names = paths.map((path) => path.match(/\/([a-z0-9_]+)_[0-9a-f]{32}\.bundle$/)[1]).sort();
+  assert.deepEqual(names, ['mjab_jp_ui_ingame', 'npc06_aud_cn', 'npc06_aud_jp', 'npc09_aud_cn', 'npc09_aud_jp']);
+  for (const path of paths) {
+    const data = read(path);
+    assert.equal(path.slice(-39, -7), md5(data), path);
+    assert.equal(data.subarray(0, 1).toString(), ' ');
+    assert.equal(data.subarray(1, 33).toString(), md5(data.subarray(33)), 'header is md5 of the UnityFS body');
+    assert.equal(data.subarray(33, 41).toString('latin1'), 'UnityFS\0');
+  }
 });
 
 test('versions.mj.json differs from the original only in the Arts manifest hash and size', () => {

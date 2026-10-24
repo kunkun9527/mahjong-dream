@@ -1,9 +1,18 @@
 {
-  "adr": "docs/adr/0010-derived-settlement-titles.md",
+  "adr": [
+    "docs/adr/0010-derived-settlement-titles.md",
+    "docs/adr/0011-silent-yaku-reveal-cue.md"
+  ],
   "source": {
     "bundle": "mjab_jp_ui_ingame_bae168ce5cac36fd332ea44d80071cb5.bundle",
     "arts": "arts_a9ec274b1600e9ab96079f8d586b0c99.json",
-    "versionsMd5": "875c11cdce11b14d9fc0bffc8596f87d"
+    "versionsMd5": "875c11cdce11b14d9fc0bffc8596f87d",
+    "voiceBundles": {
+      "npc06_aud_jp_82b771859873d7a69d26e27bfea8d0e8.bundle": "npc04_aud_jp_56ecbde7093277670c3eddbab42d2487.bundle",
+      "npc06_aud_cn_f75bd77d57309770433708b6ab818957.bundle": "npc04_aud_cn_912e398c6b0945c3a01806842ce1f876.bundle",
+      "npc09_aud_jp_e7492e5a86c984545d54349b0bff2d82.bundle": "npc04_aud_jp_56ecbde7093277670c3eddbab42d2487.bundle",
+      "npc09_aud_cn_dba7f3629010eabf87e3cbea1678bb94.bundle": "npc04_aud_cn_912e398c6b0945c3a01806842ce1f876.bundle"
+    }
   },
   "titles": {
     "ui_settlement_img_mg_en": "Mangan",
@@ -16,12 +25,28 @@
       "md5": "8085cacbce0c24b8a37e87920f58a8be",
       "size": 1549222
     },
-    "StreamingAssets/Bundles/arts_88e1ed4786394eebb266d2259aad48c2.json": {
-      "md5": "88e1ed4786394eebb266d2259aad48c2",
-      "size": 232166
+    "StreamingAssets/Bundles/WebGL/npc06_aud_jp_dbb52ee7367e453ced539ebcbfe46039.bundle": {
+      "md5": "dbb52ee7367e453ced539ebcbfe46039",
+      "size": 34877
+    },
+    "StreamingAssets/Bundles/WebGL/npc06_aud_cn_8730ba8b85b678b098c0cf3e7f86947f.bundle": {
+      "md5": "8730ba8b85b678b098c0cf3e7f86947f",
+      "size": 37502
+    },
+    "StreamingAssets/Bundles/WebGL/npc09_aud_jp_7a054d3684492a6bf19b0583494efd84.bundle": {
+      "md5": "7a054d3684492a6bf19b0583494efd84",
+      "size": 34953
+    },
+    "StreamingAssets/Bundles/WebGL/npc09_aud_cn_51f1a59268594a2f0a9325d5d9207c91.bundle": {
+      "md5": "51f1a59268594a2f0a9325d5d9207c91",
+      "size": 35540
+    },
+    "StreamingAssets/Bundles/arts_4be5cabe11208eed6bcef818892e7e36.json": {
+      "md5": "4be5cabe11208eed6bcef818892e7e36",
+      "size": 232168
     },
     "StreamingAssets/Bundles/versions.mj.json": {
-      "md5": "1f95d85b7e5d80f2fc905d83cc25d958",
+      "md5": "85165f29e99e5ebae3a5e2856ff8e1e4",
       "size": 274
     }
   }
